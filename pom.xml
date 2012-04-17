@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+   <modelVersion>4.0.0</modelVersion>
+
+   <groupId>com.nokia.dempsy</groupId>
+   <artifactId>dempsy-parent</artifactId>
+   <version>0.6-SNAPSHOT</version>
+   <packaging>pom</packaging>
+   <name>Distributed Elastic Message Processing - Master Build</name>
+
+   <properties>
+      <spring.version>3.0.6.RELEASE</spring.version>
+      <guice.version>3.0</guice.version>
+      <metrics.version>2.0.2</metrics.version>
+      <mockito-core.version>1.8.5</mockito-core.version>
+      <powermock-api-mockito.version>1.4.9</powermock-api-mockito.version>
+   </properties>
+
+   <modules>
+      <module>lib-dempsyapi</module>
+      <module>lib-dempsycore</module>
+      <module>lib-dempsyimpl</module>
+      <module>lib-dempsyspring</module> 
+      <!-- The sign on the door says: Out Of Order -->
+      <!--      <module>lib-dempsyguice</module> -->
+   </modules>
+
+   <!--  Default dependencies that all Dempsy modules use -->
+   <dependencies>
+      <dependency>
+         <groupId>org.slf4j</groupId>
+         <artifactId>slf4j-api</artifactId>
+      </dependency>
+      <dependency>
+         <groupId>org.slf4j</groupId>
+         <artifactId>slf4j-log4j12</artifactId>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>junit</groupId>
+         <artifactId>junit</artifactId>
+         <scope>test</scope>
+      </dependency>
+   </dependencies>
+
+   <!-- Put in all of the dependencies here WITHOUT VERSIONS.
+        The versions should be defined in the parent "product" pom -->
+   <dependencyManagement>
+      <dependencies>
+         <dependency>
+            <groupId>com.nokia.dempsy</groupId>
+            <artifactId>lib-dempsyimpl</artifactId>
+            <type>test-jar</type>
+            <version>${project.version}</version>
+         </dependency>
+
+         <!-- Project -->
+         <dependency>
+            <groupId>com.nokia.dempsy</groupId>
+            <artifactId>lib-dempsyapi</artifactId>
+            <version>${project.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.nokia.dempsy</groupId>
+            <artifactId>lib-dempsycore</artifactId>
+            <version>${project.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.nokia.dempsy</groupId>
+            <artifactId>lib-dempsyimpl</artifactId>
+            <version>${project.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.nokia.dempsy</groupId>
+            <artifactId>lib-dempsyspring</artifactId>
+            <version>${project.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.nokia.dempsy</groupId>
+            <artifactId>lib-dempsyguice</artifactId>
+            <version>${project.version}</version>
+         </dependency>
+
+         <!-- Third party -->
+         <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.6.4</version>
+         </dependency>
+         <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>1.6.4</version>
+         </dependency>
+         <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.4</version>
+            <scope>test</scope>
+         </dependency>
+         <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito-core.version}</version>
+            <scope>test</scope>
+         </dependency>
+         <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-api-mockito</artifactId>
+            <version>${powermock-api-mockito.version}</version>
+            <scope>test</scope>
+         </dependency>
+         <dependency>
+            <groupId>org.powermock</groupId>
+            <artifactId>powermock-module-junit4</artifactId>
+            <version>${powermock-api-mockito.version}</version>
+            <scope>test</scope>
+         </dependency>
+         <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>1.4</version>
+         </dependency>
+         <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+            <version>3.3.3</version>
+         </dependency>
+         <dependency>
+            <groupId>javax.inject</groupId>
+            <artifactId>javax.inject</artifactId>
+            <version>1</version>
+         </dependency>
+
+         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId>
+            <version>${spring.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+            <version>${guice.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.yammer.metrics</groupId>
+            <artifactId>metrics-core</artifactId>
+            <version>${metrics.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.yammer.metrics</groupId>
+            <artifactId>metrics-graphite</artifactId>
+            <version>${metrics.version}</version>
+         </dependency>
+         <dependency>
+            <groupId>com.yammer.metrics</groupId>
+            <artifactId>metrics-ganglia</artifactId>
+            <version>${metrics.version}</version>
+         </dependency>
+      </dependencies>
+   </dependencyManagement>
+
+   <build>
+      <resources>
+         <resource>
+            <directory>src/generated/java</directory>
+            <excludes>
+               <exclude>None</exclude>
+            </excludes>
+         </resource>
+         <resource>
+            <directory>src/main/java</directory>
+         </resource>
+         <resource>
+            <directory>src/main/resources</directory>
+         </resource>
+         <resource>
+            <directory>src/generated/resources</directory>
+         </resource>
+      </resources>
+      <testResources>
+         <testResource>
+            <directory>src/test/java</directory>
+         </testResource>
+         <testResource>
+            <directory>src/test/resources</directory>
+         </testResource>
+      </testResources>
+      <pluginManagement>
+         <plugins>
+            <plugin>
+               <groupId>org.codehaus.mojo</groupId>
+               <artifactId>rpm-maven-plugin</artifactId>
+               <version>2.1-alpha-1</version>
+            </plugin>
+            <plugin>
+               <groupId>org.apache.maven.plugins</groupId>
+               <artifactId>maven-compiler-plugin</artifactId>
+               <version>2.3.2</version>
+            </plugin>
+            <plugin>
+               <groupId>org.apache.maven.plugins</groupId>
+               <artifactId>maven-jar-plugin</artifactId>
+               <version>2.3.1</version>
+            </plugin>
+            <plugin>
+               <groupId>org.apache.maven.plugins</groupId>
+               <artifactId>maven-clean-plugin</artifactId>
+               <version>2.4.1</version>
+            </plugin>
+         </plugins>
+      </pluginManagement>
+      <plugins>
+         <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+               <source>1.6</source>
+               <target>1.6</target>
+               <debug>true</debug>
+            </configuration>
+         </plugin>
+         <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <configuration>
+               <archive>
+                  <manifest>
+                     <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                  </manifest>
+               </archive>
+            </configuration>
+         </plugin>
+      </plugins>
+   </build>
+   
+   <repositories>
+     <repository>
+       <id>navteqInternal</id>
+       <url>http://hq-rd-release:8081/artifactory/repo</url>
+       <snapshots>
+         <enabled>true</enabled>
+       </snapshots>
+     </repository>
+   </repositories>
+   <distributionManagement>
+      <repository>
+         <uniqueVersion>false</uniqueVersion>
+         <id>navteqInternal</id>
+         <name>Internal Repository</name>
+         <url>http://hq-rd-release:8081/artifactory/libs-releases-local</url>
+      </repository>
+      <snapshotRepository>
+         <uniqueVersion>false</uniqueVersion>
+         <id>navteqInternal</id>
+         <name>Internal Repository</name>
+         <url>http://hq-rd-release:8081/artifactory/libs-snapshots-local</url>
+      </snapshotRepository>
+   </distributionManagement>
+   
+</project>

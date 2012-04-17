@@ -1,0 +1,66 @@
+/*
+ * Copyright 2012 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.nokia.dempsy.messagetransport.tcp;
+
+import java.io.Serializable;
+import java.net.InetAddress;
+
+import com.nokia.dempsy.messagetransport.Destination;
+
+public class TcpDestination implements Destination, Serializable
+{
+   private static final long serialVersionUID = 1L;
+   
+   protected InetAddress inetAddress;
+   protected int port;
+   
+   protected TcpDestination(InetAddress inetAddress, int port)
+   {
+      this.inetAddress = inetAddress;
+      this.port = port;
+   }
+   
+   protected boolean isEphemeral() { return port <= 0; } 
+   
+   @Override
+   public String toString()
+   {
+      return "(" + inetAddress.getHostAddress() + ":" + port + ")";
+   }
+   
+   @Override
+   public boolean equals(Object other)
+   {
+      TcpDestination otherTcpDestination = (TcpDestination)other;
+      return inetAddress.equals(otherTcpDestination.inetAddress ) && (port == otherTcpDestination.port);
+   }
+   
+   @Override
+   public int hashCode()
+   {
+      return inetAddress.hashCode() ^ port;
+   }
+   
+   /**
+    * Get the IP address we are listening to.
+    * Called by StatsCollectorFactory to make pretty names for nodes.
+    * @return the InternetAddress of teh listner.
+    */
+   public InetAddress getInetenetAddress() {
+      return inetAddress;
+   }
+}

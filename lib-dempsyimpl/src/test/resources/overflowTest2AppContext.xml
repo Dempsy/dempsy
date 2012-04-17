@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:tx="http://www.springframework.org/schema/tx" xmlns:util="http://www.springframework.org/schema/util" xmlns:p="http://www.springframework.org/schema/p"
+  xmlns:aop="http://www.springframework.org/schema/aop" xmlns:context="http://www.springframework.org/schema/context"
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/util 
+           http://www.springframework.org/schema/util/spring-util-2.5.xsd
+           http://www.springframework.org/schema/tx 
+           http://www.springframework.org/schema/tx/spring-tx.xsd
+           http://www.springframework.org/schema/aop
+           http://www.springframework.org/schema/aop/spring-aop-2.0.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context-2.5.xsd">
+
+  <context:annotation-config />
+
+  <!-- This will trigger processing of @PostConstruct and @PreDestroy -->
+  <bean class="org.springframework.context.annotation.CommonAnnotationBeanPostProcessor" />
+
+  <!--  wire up a blocking queue -->
+  <bean id="transportBlockingQueue" class="java.util.concurrent.LinkedBlockingQueue" >
+    <constructor-arg type="int" value="1" />
+  </bean>
+
+  <!--  wire up a blocking queue -->
+  <bean id="receiveBlockingQueue" class="java.util.concurrent.LinkedBlockingQueue" >
+    <constructor-arg type="int" value="1" />
+  </bean>
+
+  <bean id="receiver" class="com.nokia.dempsy.messagetransport.util.QueuingReceiver">
+     <property name="queue" ref="receiveBlockingQueue" />
+  </bean>
+   
+  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor">
+     <property name="queue" ref="transportBlockingQueue" />
+     <property name="listener" ref="receiver" />
+     <property name="overflowHandler" ref="testOverflowHandler" />
+  </bean>
+   
+  <bean id="testPojo" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyPojo">
+   <property name="queue" ref="receiveBlockingQueue" />
+  </bean>
+  
+  <bean id="testOverflowHandler" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyOverflowHandler" />
+    
+  <bean id="sender" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueSender" >
+     <property name="queue" ref="transportBlockingQueue" />
+     <property name="overflowHandler" ref="testOverflowHandler" />
+  </bean>
+    
+</beans>

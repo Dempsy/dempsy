@@ -1,0 +1,21 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+   <modelVersion>4.0.0</modelVersion>
+
+   <parent>
+      <groupId>com.nokia.dempsy</groupId>
+      <artifactId>dempsy-parent</artifactId>
+      <version>01.01-SNAPSHOT</version>
+   </parent>
+
+   <artifactId>lib-dempsycore</artifactId>
+   <name>Distributed Message Processing Framework - Core Internal Api</name>
+
+   <dependencies>
+     <dependency>
+       <groupId>com.nokia.dempsy</groupId>
+       <artifactId>lib-dempsyapi</artifactId>
+     </dependency>
+   </dependencies>
+
+</project>
