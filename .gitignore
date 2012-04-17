@@ -1,0 +1,8 @@
+# global patterns
+target
+*.class
+bin
+.project
+.settings
+.classpath
+
