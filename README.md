@@ -5,16 +5,18 @@
 In a nutshell, Dempsy is a framework that provides for the easy implementation Stream-based, Real-time, BigData applications.
 
 Dempsy is the Nokia's "Distributed Elastic Message Processing System."
+
 * Dempsy is _Distributed_. That is to say a dempsy application can run on multiple JVMs on multiple physical machines.
 * Dempsy is _Elastic_. That is, it is relatively simple to scale an application to more (or fewer) nodes. This does not require code or configuration changes but allows the dynamic insertion and removal of processing nodes.
 * Dempsy is _Message Processing_. Dempsy fundamentally works by message passing. It moves messages between Message processors, which act on the messages to perform simple atomic operations such as enrichment, transformation, or other processing. Generally an application is intended to be broken down into more smaller simpler processors rather than fewer large complex processors.
-* Dempsy is a _Framework_. It is not an application container like a J2EE container, nor a simple library. Instead, like the [Spring Framework|http://www.springsource.org] it is a collection of patterns, the libraries to enable those patterns, and the interfaces one must implement to use those libraries to implement the patterns.
+* Dempsy is a _Framework_. It is not an application container like a J2EE container, nor a simple library. Instead, like the [Spring Framework](http://www.springsource.org) it is a collection of patterns, the libraries to enable those patterns, and the interfaces one must implement to use those libraries to implement the patterns.
 
 ## What Problem is Dempsy solving?
 
 Dempsy is not designed to be a general purpose framework, but is intended to solve a certain class of problems while encouraging the use of the best software development practices.
 
 Dempsy is meant to solve the problem of processing large amounts of "near real time" stream data with the lowest lag possible; problems where latency is more important that "guaranteed delivery." This class of problems includes use cases such as:
+
 * Real time monitoring of large distributed systems
 * Processing complete rich streams of social networking data
 * Real time analytics on log information generated from widely distributed systems
