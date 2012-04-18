@@ -29,6 +29,18 @@ It is meant to provide developers with a tool that allows them to solve these pr
 
 In short Dempsy is a framework to enable decomposing a large class of message processing applications into flows of messages to relatively simple processing units implemented as [POJOs](http://en.wikipedia.org/wiki/Plain_Old_Java_Object)
 
+### Features
+
+Important features of Dempsy include:
+
+* Built to support an “inversion of control” programming paradigm, making it extremely easy to use, and resulting in smaller and easier to test application codebases, reducing the total cost of ownership of applications that employ Dempsy.
+* Fine grained message processing allows the developer to decompose complex analytics into simple small steps. 
+* Invisible Scalability. While Dempsy is completely horizontally scalable and multithreaded, the development paradigm supported by Dempsy removes all scalability and threading concerns from the application developer. 
+* Dynamic topologies. There is no need to hard wire application stages into a configuration or into the code. Topologies (by default) are discovered at run-time.
+* Full elasticity (for May). Dempsy can handle the dynamic provisioning and decommissioning of computational resources.
+
+Dempsy is intentionally not an “Application Server” and runs in a completely distributed manner relying on Apache ZooKeeper for coordination. In sticking with one of the development teams guiding principles, it doesn’t try to solve problems well solved in other parts of the industry. As DevOps tools become the norm in cloud computing environments, where it’s “easier to re-provision that to repair,” Dempsy defers to such systems the management of computational resources, however, being fully elastic (May 2012), it cooperates to produce true dynamic fault tolerance.
+
 ### What is a Distributed Actor Framework?
 
 Dempsy has been described as a distributed actor framework. While not strictly speaking an [actor](http://en.wikipedia.org/wiki/Actor_model) framework in the sense of [Erlang](http://www.erlang.org) or [Akka](http://akka.io) actors, in that actors typically direct messages directly to other actors, the Message Processors in Dempsy are "actor like POJOs" similar to Processor Elements in [S4](http://s4.io) and less so like Bolts in [Storm](https://github.com/nathanmarz/storm). Message processors are similar to actors in that Message processors act on a single message at a time, and need not deal with concurrency directly. Unlike actors, Message Processors also are relieved of the the need to know the destination(s) for their output messages, as this is handled inside the Dempsy Distributor.
