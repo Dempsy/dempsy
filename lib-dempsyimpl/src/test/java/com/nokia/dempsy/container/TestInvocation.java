@@ -164,7 +164,7 @@ public class TestInvocation
       assertNotSame("instantiation failed; returned prototype", prototype, instance);
 
       assertFalse("instance activated before activation method called", instance.isActivated);
-      invoker.activate(instance, "ABC".getBytes());
+      invoker.activate(instance, null, "ABC".getBytes());
       assertTrue("instance was not activated", instance.isActivated);
       assertEquals("ABC", instance.activationValue);
 
