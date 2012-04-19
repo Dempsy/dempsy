@@ -114,6 +114,20 @@ public class LifeCycleHelperTest
       Assert.assertNull(ret);
    }
 
+   @Test
+   public void testMethodHandleNoKey() throws Throwable
+   {
+      LifecycleHelper helper = new LifecycleHelper(new TestMpNoKey());
+      TestMpNoKey mp = (TestMpNoKey)helper.newInstance();
+      Assert.assertFalse(mp.isActivated());
+      helper.activate(mp, "activate", null);
+      Assert.assertFalse(mp.isActivated());
+      Assert.assertFalse(mp.ispassivateCalled());
+      Object ret = helper.passivate(mp);
+      Assert.assertFalse(mp.ispassivateCalled());
+      Assert.assertNull(ret);
+   }
+
    @SuppressWarnings("unused")
    @MessageProcessor
    private class TestMp implements Cloneable
@@ -274,4 +288,30 @@ public class LifeCycleHelperTest
       
    }
 
+   @SuppressWarnings("unused")
+   private class MessgeNoKey
+   {
+      private String key;
+      public MessgeNoKey(String key){ this.key = key;}
+      
+      public String getKey(){return this.key;}
+      
+   }
+
+   @SuppressWarnings(value="unused")
+   @MessageProcessor
+   private class TestMpNoKey implements Cloneable
+   {
+      private boolean activated = false;
+      private boolean passivateCalled = false;
+      
+      @MessageHandler
+      public void handleMsg(MessgeNoKey val){}
+      
+      @Override
+      public Object clone() throws CloneNotSupportedException{return super.clone();}
+      
+      public boolean isActivated(){ return this.activated;}
+      public boolean ispassivateCalled(){ return this.passivateCalled;}
+   }
 }

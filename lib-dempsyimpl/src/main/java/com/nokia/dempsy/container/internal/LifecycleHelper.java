@@ -67,7 +67,9 @@ public class LifecycleHelper
       Set<Class<?>> keys = invocationMethods.getMethods().keySet();
       for(Class<?> key: keys)
       {
-         activationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Activation.class), AnnotatedMethodInvoker.introspectAnnotationSingle(key, MessageKey.class).getReturnType());
+         Method messageKey = AnnotatedMethodInvoker.introspectAnnotationSingle(key, MessageKey.class);
+         activationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Activation.class), 
+               (messageKey == null)?null:messageKey.getReturnType());
       }
       passivationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Passivation.class));
       outputMethod = AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Output.class);
