@@ -469,7 +469,7 @@ public class MpContainer implements Listener
 
         try
         {
-           prototype.activate(instance, data);
+           prototype.activate(instance, key, data);
         }
         catch(IllegalArgumentException e)
         {

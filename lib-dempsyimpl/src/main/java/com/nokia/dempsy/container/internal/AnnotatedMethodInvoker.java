@@ -244,4 +244,9 @@ public class AnnotatedMethodInvoker
 
       return method;
    }
+   
+   public Map<Class<?>,Method> getMethods()
+   {
+      return this.methods;
+   }
 }
