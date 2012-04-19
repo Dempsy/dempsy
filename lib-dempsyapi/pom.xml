@@ -5,7 +5,7 @@
    <parent>
       <groupId>com.nokia.dempsy</groupId>
       <artifactId>dempsy-parent</artifactId>
-      <version>01.01-SNAPSHOT</version>
+      <version>0.6-SNAPSHOT</version>
    </parent>
 
    <artifactId>lib-dempsyapi</artifactId>
