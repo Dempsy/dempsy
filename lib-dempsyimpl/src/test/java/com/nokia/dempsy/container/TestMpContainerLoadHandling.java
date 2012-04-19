@@ -75,15 +75,18 @@ public class TestMpContainerLoadHandling
    private CountDownLatch finishOutputLatch;
    private volatile boolean forceOutputException = false;
    
+   private int sequence = 0;
+   
    @Before
    public void setUp() throws Exception 
    {
+      ClusterId cid = new ClusterId("TestMpContainerLoadHandling", "test" + sequence++);
       dispatcher = new MockDispatcher();
 
-      stats = new StatsCollectorCoda(new ClusterId("test", "test"));
+      stats = new StatsCollectorCoda(cid);
       JavaSerializer<Object> serializer = new JavaSerializer<Object>();
 
-      container = new MpContainer(new ClusterId("test","test"));
+      container = new MpContainer(cid);
       container.setDispatcher(dispatcher);
       container.setStatCollector(stats);
       container.setSerializer(serializer);
