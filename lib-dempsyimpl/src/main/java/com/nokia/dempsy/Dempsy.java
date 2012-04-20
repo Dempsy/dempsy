@@ -115,12 +115,10 @@ public class Dempsy
                   if (serializer != null)
                      container.setSerializer(serializer);
                   
-                  // there is only a reciever if we have an Mp (that is, we aren't an adaptor) and
-                  // we actually accept messages
+                  // there is only a reciever if we have an Mp (that is, we aren't an adaptor) 
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                   {
                      receiver = transport.createInbound();
-                     receiver.setListener(container);
                   }
 
                   StatsCollectorFactory statsFactory = (StatsCollectorFactory)clusterDefinition.getStatsCollectorFactory();
@@ -160,6 +158,10 @@ public class Dempsy
                   if (adaptor != null)
                      adaptor.setDispatcher(router);
                   
+                  
+                  // start accepting message in the container.
+                  if(receiver != null)
+                        receiver.setListener(container);
                   // now we want to set the Node as the watcher.
                   if (strategyInbound != null && receiver != null)
                   {
