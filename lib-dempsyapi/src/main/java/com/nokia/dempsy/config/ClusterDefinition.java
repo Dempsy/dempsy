@@ -20,6 +20,7 @@ import java.lang.reflect.Method;
 
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.DempsyException;
+import com.nokia.dempsy.KeyStore;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Start;
@@ -47,6 +48,7 @@ public class ClusterDefinition
    private Object statsCollectorFactory = null;
    private OutputSchedule outputScheduler = null;
    private boolean adaptorIsDaemon = false;
+   private KeyStore<?> keyStore = null;
    
    private ApplicationDefinition parent;
    
@@ -152,6 +154,8 @@ public class ClusterDefinition
    public ClusterDefinition setAdaptor(Adaptor adaptor) { this.adaptor = adaptor; return this; }
    public boolean isAdaptorDaemon() { return adaptorIsDaemon; }
    public ClusterDefinition setAdaptorDaemon(boolean isAdaptorDaemon) { this.adaptorIsDaemon = isAdaptorDaemon; return this; }
+   public KeyStore<?> getKeyStore(){ return keyStore; }
+   public ClusterDefinition setKeyStore(KeyStore<?> keyStore){ this.keyStore = keyStore; return this; }
    
    @Override
    public String toString()
@@ -220,5 +224,4 @@ public class ClusterDefinition
                   + SafeString.valueOf(messageProcessorPrototype) + "\" is identified as a Start method. Please annotate at most one method using @Start.");
       }
    }
-   
 }

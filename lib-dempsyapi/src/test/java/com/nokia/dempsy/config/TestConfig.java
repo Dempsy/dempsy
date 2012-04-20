@@ -30,6 +30,7 @@ import org.junit.Test;
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.Dispatcher;
+import com.nokia.dempsy.KeyStore;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
@@ -253,5 +254,19 @@ public class TestConfig
                new ClusterDefinition("bad-mp").setMessageProcessorPrototype(new MultiStartTestMp()));
       app.validate();
    }
-   
+
+   @Test
+   public void testSimpleConfigWithKeyStore() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      cd.setMessageProcessorPrototype(new GoodTestMp());
+      cd.setKeyStore(new KeyStore<Object>()
+      {
+         @Override
+         public Iterable<Object> getAllPossibleKeys(){ return null; }
+      });
+      app.add(cd);
+      app.initialize();
+   }
 }
