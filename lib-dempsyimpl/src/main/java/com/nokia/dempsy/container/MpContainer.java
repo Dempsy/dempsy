@@ -319,7 +319,7 @@ public class MpContainer implements Listener
     *  necessary. Will append the message to the instance's work queue (which
     *  may also contain an activation invocation).
     */
-   public InstanceWrapper getInstanceForDispatch(Object message) throws ContainerException
+   protected InstanceWrapper getInstanceForDispatch(Object message) throws ContainerException
    {
       if (message == null)
          throw new ContainerException("the container for " + clusterId + " attempted to dispatch null message.");
@@ -329,7 +329,7 @@ public class MpContainer implements Listener
                " that does not handle messages of class " + SafeString.valueOfClass(message));
 
       Object key = getKeyFromMessage(message);
-      InstanceWrapper wrapper = getInstanceForKey(key, statCollector);
+      InstanceWrapper wrapper = getInstanceForKey(key);
       return wrapper;
    }
    
@@ -407,13 +407,13 @@ public class MpContainer implements Listener
               SafeString.objectDescription(message));
      return key;
   }
-
+  
   /**
    * This is required to return non null or throw a ContainerException
  * @throws IllegalAccessException 
  * @throws InvocationTargetException 
    */
-  private InstanceWrapper getInstanceForKey(Object key, StatsCollector statCollector) throws ContainerException
+  public InstanceWrapper getInstanceForKey(Object key) throws ContainerException
   {
      // common case has "no" contention
      InstanceWrapper wrapper = instances.get(key);

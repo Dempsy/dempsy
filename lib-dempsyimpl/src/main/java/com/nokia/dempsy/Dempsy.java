@@ -158,6 +158,18 @@ public class Dempsy
                   if (adaptor != null)
                      adaptor.setDispatcher(router);
                   
+                  KeyStore<?> keyStore = clusterDefinition.getKeyStore();
+                  if(keyStore != null)
+                  {
+                     Iterable<?> iterable = keyStore.getAllPossibleKeys();
+                     for(Object key: iterable)
+                     {
+                        if(strategyInbound.doesMessageKeyBelongToCluster(key))
+                        {
+                           container.getInstanceForKey(key);
+                        }
+                     }
+                  }
                   
                   // start accepting message in the container.
                   if(receiver != null)
