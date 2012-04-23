@@ -1,6 +1,25 @@
 
 If you prefer, you can go straight to "[Getting Started](https://github.com/Dempsy/Dempsy/wiki/Getting-Started)"
 
+Dempsy recognizes three types of developers and the api documentation is organized accordingly.
+
+<table>
+<tr>
+<th> Developer </th><th> Description </th><th>Api Documentation</th>
+</tr>
+<tr>
+<td>Application Developer</td><td>Developer that are going to build real-time stream based analytics fall into this category.</td><td><a href="http://dempsy.net/appdev-apidocs/">Application Developer Api Documentation</a></td>
+</tr>
+<tr>
+<td>Framework Developer</td><td>Dempsy is built on a set of abstractions that allow it to be extended with new transports, routing strategies, monitoring techniques, as well as others. Developers interested in adding new implementations or techniques fall into this category. This Api extends the Applicaiton Developer Api above.</td><td><a href="http://dempsy.net/core-apidocs/">Framework Developer Api Documentation</a></td>
+</tr>
+<tr>
+<td>Dempsy Contributors</td><td>Any developer changing the existing framework or any of the default implementations of the core abstractions will need the complete Api documentation for the entire codebase.</td><td><a href="http://dempsy.net/all-apidocs/">Framework Developer Api Documentation</a></td>
+</tr>
+</table>
+
+This Api documentation is currently for the 0.6-SNAPSHOT revision.
+
 # Overview
 
 ## What is Dempsy?
