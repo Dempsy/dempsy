@@ -168,17 +168,27 @@ public class Dempsy
                         @Override
                         public void run()
                         {
-                           Iterable<?> iterable = keyStore.getAllPossibleKeys();
-                           for(Object key: iterable)
-                           {
-                              if(strategyInbound.doesMessageKeyBelongToCluster(key))
+                           try{
+                              statsCollector.preInstantiationStarted();
+                              Iterable<?> iterable = keyStore.getAllPossibleKeys();
+                              for(Object key: iterable)
                               {
                                  try
                                  {
-                                    container.getInstanceForKey(key);
+                                    if(strategyInbound.doesMessageKeyBelongToCluster(key))
+                                    {
+                                          container.getInstanceForKey(key);
+                                    }
                                  }
-                                 catch(ContainerException e){ }
+                                 catch(ContainerException e)
+                                 {
+                                    logger.error("Failed to instantiate MP for Key "+key, e);
+                                 }
                               }
+                           }
+                           finally
+                           {
+                              statsCollector.preInstantiationCompleted();
                            }
                         }
                      }, "Pre-Instantation Thread");

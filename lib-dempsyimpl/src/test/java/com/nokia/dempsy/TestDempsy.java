@@ -32,16 +32,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import junit.framework.Assert;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
+import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
@@ -557,6 +559,13 @@ public class TestDempsy
                         endTime > System.currentTimeMillis() && mp.cloneCalls.get()<3;)
                      Thread.sleep(1);
                   assertEquals(3, mp.cloneCalls.get());
+                  List<Node> nodes = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes();
+                  Assert.assertNotNull(nodes);
+                  Assert.assertTrue(nodes.size()>0);
+                  Node node = nodes.get(0);
+                  Assert.assertNotNull(node);
+                  double duration = node.getStatsCollector().getPreInstantiationDuration();
+                  Assert.assertTrue(duration>0.0);
                }
                
                public String toString() { return "testMPStartMethod"; }
