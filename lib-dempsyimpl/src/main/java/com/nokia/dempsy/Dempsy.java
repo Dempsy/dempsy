@@ -182,13 +182,15 @@ public class Dempsy
                                  }
                                  catch(ContainerException e)
                                  {
-                                    logger.error("Failed to instantiate MP for Key "+key, e);
+                                    logger.error("Failed to instantiate MP for Key "+key +
+                                          " of type "+key.getClass().getSimpleName(), e);
                                  }
                               }
                            }
                            catch(Throwable e)
                            {
-                              logger.error("Exception occured while processing keys during pre-instantiation.", e);
+                              logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
+                                    keyStore.getClass().getSimpleName()+":getAllPossibleKeys()", e);
                            }
                            finally
                            {
