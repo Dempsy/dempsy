@@ -93,7 +93,7 @@ Above all, and in many ways, Dempsy is meant to be *SIMPLE*. It doesn't try to b
 
 * "Do one thing well" - Dempsy is written to provide one service: support for the type of "Distributed Actors Model" (with all of the acknowledged caveats) programming paradigm. For this reason it does not pretend to be an Application Server. Nor does it substitute for the lack of an automated provistioning/deployment system. 
 
-### How does Dempsy compare with the alternatives?
+## What about other options?
 
 #### Complex Event Processing systems (CEP)
 
