@@ -269,4 +269,51 @@ public class TestConfig
       app.add(cd);
       app.initialize();
    }
+
+   @Test
+   public void testConfigWithKeyStore() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      cd.setMessageProcessorPrototype(new GoodTestMp())
+      .setKeyStore(new KeyStore<Object>()
+      {
+         @Override
+         public Iterable<Object> getAllPossibleKeys()
+         {
+            return null;
+         }
+      });
+      app.add(cd);
+      app.initialize();
+   }
+   
+   @Test(expected=DempsyException.class)
+   public void testConfigAdaptorWithKeyStore() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      cd.setAdaptor(new Adaptor()
+      {
+         @Override
+         public void stop(){ }
+         
+         @Override
+         public void start(){ }
+         
+         @Override
+         public void setDispatcher(Dispatcher dispatcher){ }
+      })
+      .setKeyStore(new KeyStore<Object>()
+      {
+         @Override
+         public Iterable<Object> getAllPossibleKeys()
+         {
+            return null;
+         }
+      });
+      app.add(cd);
+      app.initialize();
+   }
+
 }

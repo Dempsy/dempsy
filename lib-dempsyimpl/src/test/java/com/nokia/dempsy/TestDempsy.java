@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -118,6 +119,7 @@ public class TestDempsy
       public AtomicLong outputCount = new AtomicLong(0);
       public CountDownLatch outputLatch = new CountDownLatch(10);
       public AtomicInteger startCalls = new AtomicInteger(0);
+      public AtomicInteger cloneCalls = new AtomicInteger(0);
       
       @Start
       public void start()
@@ -134,6 +136,7 @@ public class TestDempsy
       @Override
       public TestMp clone() throws CloneNotSupportedException 
       {
+         cloneCalls.incrementAndGet();
          return (TestMp) super.clone();
       }
       
@@ -179,6 +182,18 @@ public class TestDempsy
       {
          lastSent = message;
          dispatcher.dispatch(message);
+      }
+   }
+   
+   public static class KeyStoreImpl implements KeyStore<String>
+   {
+      @Override
+      public Iterable<String> getAllPossibleKeys()
+      {
+         ArrayList<String> keys = new ArrayList<String>();
+         keys.add("test1");
+         keys.add("test2");
+         return keys;
       }
    }
    
@@ -497,5 +512,56 @@ public class TestDempsy
       Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
       return node.clusterDefinition.getAdaptor();
    }
+
+   @Test
+   public void testMpKeyStore() throws Throwable
+   {
+      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
+          new Checker()   
+            {
+               @Override
+               public void check(ApplicationContext context) throws Throwable
+               {
+                  // start things and verify that the init method was called
+                  Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+                  TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+                      
+                  // verify we haven't called it again, not that there's really
+                  // a way to given the code
+                  assertEquals(1, mp.startCalls.get());
+
+                  // instead of the latch we are going to poll for the correct result
+                  // wait for it to be received.
+                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                        endTime > System.currentTimeMillis() && mp.cloneCalls.get()<2;)
+                     Thread.sleep(1);
+                  
+                  assertEquals(2, mp.cloneCalls.get());
+
+                  TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
+                  adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
+
+                  // instead of the latch we are going to poll for the correct result
+                  // wait for it to be received.
+                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                        endTime > System.currentTimeMillis() && mp.cloneCalls.get()<3;)
+                     Thread.sleep(1);
+                  
+                  assertEquals(3, mp.cloneCalls.get());
+                  
+                  adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
+
+                  // instead of the latch we are going to poll for the correct result
+                  // wait for it to be received.
+                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                        endTime > System.currentTimeMillis() && mp.cloneCalls.get()<3;)
+                     Thread.sleep(1);
+                  assertEquals(3, mp.cloneCalls.get());
+               }
+               
+               public String toString() { return "testMPStartMethod"; }
+            });
+   }   
+
 
 }

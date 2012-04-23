@@ -31,6 +31,7 @@ import org.slf4j.MarkerFactory;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.container.ContainerException;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Receiver;
@@ -115,10 +116,11 @@ public class Dempsy
                   if (serializer != null)
                      container.setSerializer(serializer);
                   
-                  // there is only a reciever if we have an Mp (that is, we aren't an adaptor) 
+                  // there is only a reciever if we have an Mp (that is, we aren't an adaptor) and start accepting messages 
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                   {
                      receiver = transport.createInbound();
+                     receiver.setListener(container);
                   }
 
                   StatsCollectorFactory statsFactory = (StatsCollectorFactory)clusterDefinition.getStatsCollectorFactory();
@@ -158,22 +160,31 @@ public class Dempsy
                   if (adaptor != null)
                      adaptor.setDispatcher(router);
                   
-                  KeyStore<?> keyStore = clusterDefinition.getKeyStore();
+                  final KeyStore<?> keyStore = clusterDefinition.getKeyStore();
                   if(keyStore != null)
                   {
-                     Iterable<?> iterable = keyStore.getAllPossibleKeys();
-                     for(Object key: iterable)
+                     Thread t = new Thread(new Runnable()
                      {
-                        if(strategyInbound.doesMessageKeyBelongToCluster(key))
+                        @Override
+                        public void run()
                         {
-                           container.getInstanceForKey(key);
+                           Iterable<?> iterable = keyStore.getAllPossibleKeys();
+                           for(Object key: iterable)
+                           {
+                              if(strategyInbound.doesMessageKeyBelongToCluster(key))
+                              {
+                                 try
+                                 {
+                                    container.getInstanceForKey(key);
+                                 }
+                                 catch(ContainerException e){ }
+                              }
+                           }
                         }
-                     }
+                     }, "Pre-Instantation Thread");
+                     t.start();
                   }
                   
-                  // start accepting message in the container.
-                  if(receiver != null)
-                        receiver.setListener(container);
                   // now we want to set the Node as the watcher.
                   if (strategyInbound != null && receiver != null)
                   {

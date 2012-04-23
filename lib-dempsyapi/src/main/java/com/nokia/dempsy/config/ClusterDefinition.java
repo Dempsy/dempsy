@@ -223,5 +223,9 @@ public class ClusterDefinition
             throw new DempsyException("Multiple methods on the message processor of type\""
                   + SafeString.valueOf(messageProcessorPrototype) + "\" is identified as a Start method. Please annotate at most one method using @Start.");
       }
+      if(adaptor != null && keyStore != null)
+      {
+         throw new DempsyException("A dempsy cluster can not pre-instantation an adaptor.");
+      }
    }
 }
