@@ -428,7 +428,6 @@ public class Dempsy
    
    /**
     * This is meant to be autowired by type.
-    * @param routeDefinations
     */
    @Inject
    public void setApplicationDefinitions(List<ApplicationDefinition> applicationDefinitions)

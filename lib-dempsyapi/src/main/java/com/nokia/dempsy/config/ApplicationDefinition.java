@@ -122,8 +122,9 @@ public class ApplicationDefinition
    
    /**
     * When configuring by hand, this method 
-    * @param clusterDefinitions
-    * @return
+    * @param clusterDefinitions is the {@link ClusterDefinition}s that make
+    *  up this Application.
+    * @return the current ApplicationDefinition to allow for chaining.
     */
    public ApplicationDefinition add(ClusterDefinition... clusterDefinitions)
    {

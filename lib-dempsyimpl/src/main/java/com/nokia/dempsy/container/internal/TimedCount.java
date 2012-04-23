@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  *  A single counter that keeps track of the first and last times that the
- *  {@link #increment} or {@link #add} were called. Useful to keep track of
+ *  {@link #increment} were called. Useful to keep track of
  *  a series of events, where the reporting points span a larger time than
  *  the event times (so if you simply calculated start/end based on reporting
  *  points, you'd report an incorrectly low event rate).
@@ -90,7 +90,7 @@ public class TimedCount
 
    /**
     *  Returns the Java timestamp of the first event, 0 if there has not been
-    *  an event. For most purposes, {@link #getElapsedTime} is a better choice.
+    *  an event. For most purposes, {@link #getElapsedMillis} is a better choice.
     */
    public long getFirstEventTimestamp()
    {
@@ -101,7 +101,7 @@ public class TimedCount
 
    /**
     *  Returns the Java timestamp of the last event, 0 if there has not been
-    *  an event. For most purposes, {@link #getElapsedTime} is a better choice.
+    *  an event. For most purposes, {@link #getElapsedMillis} is a better choice.
     */
    public long getLastEventTimestamp()
    {

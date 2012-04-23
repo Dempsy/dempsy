@@ -63,7 +63,7 @@ public class ClusterDefinition
     * <p>This Cluster will represent an {@link Adaptor} cluster. Use this constructor from a dependency injection
     * framework supporting constructor injection.</p>
     * 
-    * @see {@link setAdaptor}
+    * @see #setAdaptor
     */
    public ClusterDefinition(String clusterName, Adaptor adaptor) { this.clusterName = clusterName; setAdaptor(adaptor); }
 
@@ -74,7 +74,7 @@ public class ClusterDefinition
     * <p>This Cluster will represent a {@link MessageProcessor} cluster. Use this constructor from a dependency injection
     * framework supporting constructor injection.</p>
     * 
-    * @see {@link setMessageProcessorPrototype}
+    * @see #setMessageProcessorPrototype
     */
    public ClusterDefinition(String clusterName, Object prototype) throws DempsyException 
    {
@@ -104,7 +104,7 @@ public class ClusterDefinition
    
    /**
     * Returns true if there are any explicitly defined destinations.
-    * @see {@link setDestinations}
+    * @see #setDestinations
     */
    public boolean hasExplicitDestinations() { return this.destinations != null && this.destinations.length > 0; }
    

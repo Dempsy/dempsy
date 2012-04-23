@@ -35,7 +35,7 @@ public interface Adaptor
     * start will be called by Dempsy to tell the Adaptor that it can begin
     * dispatching messages with the {@link Dispatcher}. start() will always be
     * called after Adpator.setDispatcher. This method is not expected to return
-    * until {@link Adaptor.stop()} is called from another thread.
+    * until {@link #stop()} is called from another thread.
     */
    public void start();
    
