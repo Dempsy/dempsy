@@ -186,6 +186,10 @@ public class Dempsy
                                  }
                               }
                            }
+                           catch(Throwable e)
+                           {
+                              logger.error("Exception occured while processing keys during pre-instantiation.", e);
+                           }
                            finally
                            {
                               statsCollector.preInstantiationCompleted();
