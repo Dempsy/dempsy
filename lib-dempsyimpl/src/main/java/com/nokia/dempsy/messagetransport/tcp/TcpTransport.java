@@ -20,38 +20,27 @@ import com.nokia.dempsy.messagetransport.*;
 
 public class TcpTransport implements Transport
 {
-    private OverflowHandler overflowHandler;
+   private OverflowHandler overflowHandler;
 
-    @Override
-    public SenderFactory createOutbound() throws MessageTransportException
-    {
-        return new TcpSenderFactory();
-    }
+   @Override
+   public SenderFactory createOutbound() throws MessageTransportException
+   {
+      return new TcpSenderFactory();
+   }
 
-    @Override
-    public Receiver createInbound() throws MessageTransportException
-    {
-        return createStartedReceiver();
-    }
+   @Override
+   public Receiver createInbound() throws MessageTransportException
+   {
+      TcpReceiver receiver = new TcpReceiver();
+      receiver.setOverflowHandler(overflowHandler);
+      receiver.start();
+      return receiver;
+   }
 
-    private Receiver createStartedReceiver() throws MessageTransportException
-    {
-        TcpReceiver receiver = createReceiver();
-        receiver.start();
-        return receiver;
-    }
-
-    private TcpReceiver createReceiver()
-    {
-        TcpReceiver receiver = new TcpReceiver();
-        receiver.setOverflowHandler(overflowHandler);
-        return receiver;
-    }
-
-    @Override
-    public void setOverflowHandler(OverflowHandler overflowHandler) throws MessageTransportException
-    {
-        this.overflowHandler = overflowHandler;
-    }
+   @Override
+   public void setOverflowHandler(OverflowHandler overflowHandler) throws MessageTransportException
+   {
+      this.overflowHandler = overflowHandler;
+   }
 
 }
