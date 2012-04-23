@@ -88,6 +88,8 @@ public interface RoutingStrategy
        */
       public void resetCluster(MpCluster<ClusterInformation, SlotInformation> cluster,
             List<Class<?>> messageTypes, Destination thisDestination) throws MpClusterException;
+      
+      public boolean doesMessageKeyBelongToCluster(Object messageKey);
    }
    
    public Inbound createInbound();

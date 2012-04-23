@@ -76,6 +76,16 @@ public interface StatsCollector {
 	 * Some stats collectors need to be stopped.
 	 */
    public void stop();
+   
+   /**
+    * Dempsy calls into this just before starting pre-instantiation.
+    */
+   public void preInstantiationStarted();
+   
+   /**
+    * Dempsy calls into this just after pre-instantiation is complete.
+    */
+   public void preInstantiationCompleted();
 
 	// FIXME
 	/*
@@ -94,5 +104,6 @@ public interface StatsCollector {
 	long getMessageFailedCount();
 	long getDiscardedMessageCount();
 	int getInFlightMessageCount();
+	double getPreInstantiationDuration();
 	
 }

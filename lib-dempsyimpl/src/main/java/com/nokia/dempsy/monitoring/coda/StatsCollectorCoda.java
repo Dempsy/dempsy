@@ -27,6 +27,8 @@ import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricsRegistry;
+import com.yammer.metrics.core.Timer;
+import com.yammer.metrics.core.TimerContext;
 
 /**
  * An implementation of the Dempsy StatsCollector
@@ -78,6 +80,9 @@ public class StatsCollectorCoda implements StatsCollector {
 	@SuppressWarnings("unused")
    private Gauge<Long> messageProcessors;
 	private String scope;
+	
+	private Timer preInstantiationDuration;
+	private TimerContext preInstantiationDurationContext;
 
 	public StatsCollectorCoda(ClusterId clusterId)
 	{
@@ -118,7 +123,9 @@ public class StatsCollectorCoda implements StatsCollector {
 	         return numberOfMPs.get();
 	      }
 	   });
-
+	   
+	   preInstantiationDuration = Metrics.newTimer(Dempsy.class, "pre-instantiation-duration",
+	         scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 	   
 	}
 	
@@ -227,5 +234,21 @@ public class StatsCollectorCoda implements StatsCollector {
 	   }
 	}
 
+	@Override
+	public void preInstantiationStarted()
+	{
+	   preInstantiationDurationContext = preInstantiationDuration.time();
+	}
 	
+	@Override
+	public void preInstantiationCompleted()
+	{
+	   preInstantiationDurationContext.stop();
+	}
+	
+	@Override
+	public double getPreInstantiationDuration()
+	{
+	   return preInstantiationDuration.meanRate();
+	}
 }

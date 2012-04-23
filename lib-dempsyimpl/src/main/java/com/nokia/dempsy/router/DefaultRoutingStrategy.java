@@ -143,6 +143,12 @@ public class DefaultRoutingStrategy implements RoutingStrategy
          return addressInUse < totalAddressNeeded && destinationsAcquired.size() < maxSlotsForOneNode;
       }
       
+      @Override
+      public boolean doesMessageKeyBelongToCluster(Object messageKey)
+      {
+         return destinationsAcquired.contains(messageKey.hashCode()%defaultTotalSlots);
+      }
+      
    } // end Inbound class definition
    
    public RoutingStrategy.Inbound createInbound() { return new Inbound(); }

@@ -31,6 +31,7 @@ import org.slf4j.MarkerFactory;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.container.ContainerException;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Receiver;
@@ -115,8 +116,7 @@ public class Dempsy
                   if (serializer != null)
                      container.setSerializer(serializer);
                   
-                  // there is only a reciever if we have an Mp (that is, we aren't an adaptor) and
-                  // we actually accept messages
+                  // there is only a reciever if we have an Mp (that is, we aren't an adaptor) and start accepting messages 
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                   {
                      receiver = transport.createInbound();
@@ -159,6 +159,47 @@ public class Dempsy
                   Adaptor adaptor = clusterDefinition.isRouteAdaptorType() ? clusterDefinition.getAdaptor() : null;
                   if (adaptor != null)
                      adaptor.setDispatcher(router);
+                  
+                  final KeyStore<?> keyStore = clusterDefinition.getKeyStore();
+                  if(keyStore != null)
+                  {
+                     Thread t = new Thread(new Runnable()
+                     {
+                        @Override
+                        public void run()
+                        {
+                           try{
+                              statsCollector.preInstantiationStarted();
+                              Iterable<?> iterable = keyStore.getAllPossibleKeys();
+                              for(Object key: iterable)
+                              {
+                                 try
+                                 {
+                                    if(strategyInbound.doesMessageKeyBelongToCluster(key))
+                                    {
+                                          container.getInstanceForKey(key);
+                                    }
+                                 }
+                                 catch(ContainerException e)
+                                 {
+                                    logger.error("Failed to instantiate MP for Key "+key +
+                                          " of type "+key.getClass().getSimpleName(), e);
+                                 }
+                              }
+                           }
+                           catch(Throwable e)
+                           {
+                              logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
+                                    keyStore.getClass().getSimpleName()+":getAllPossibleKeys()", e);
+                           }
+                           finally
+                           {
+                              statsCollector.preInstantiationCompleted();
+                           }
+                        }
+                     }, "Pre-Instantation Thread");
+                     t.start();
+                  }
                   
                   // now we want to set the Node as the watcher.
                   if (strategyInbound != null && receiver != null)
