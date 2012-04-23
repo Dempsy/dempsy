@@ -22,8 +22,6 @@ package com.nokia.dempsy.mpcluster;
  * cluster. That choice is dependent on the implementation and the use within Dempsy.
  * See the ZookeeperCluster for an example where this isn't the case.
  * 
- * @author jim
- *
  * @param <T>
  */
 public interface MpClusterSlot<T>

@@ -40,6 +40,9 @@ public class BasicStatsCollector implements StatsCollector
    private final AtomicLong numberOfMPs = new AtomicLong();
    private final AtomicLong mpsCreated = new AtomicLong();
    private final AtomicLong mpsDeleted = new AtomicLong();
+   
+   private final AtomicLong preInstantiationStart = new AtomicLong();
+   private final AtomicLong preInstantiationDuration = new AtomicLong();
 
    @Override
    public long getDiscardedMessageCount()
@@ -138,4 +141,21 @@ public class BasicStatsCollector implements StatsCollector
 
    }
 
+   @Override
+   public double getPreInstantiationDuration()
+   {
+      return preInstantiationDuration.doubleValue();
+   }
+   
+   @Override
+   public void preInstantiationStarted()
+   {
+      preInstantiationStart.set(System.currentTimeMillis());
+   }
+   
+   @Override
+   public void preInstantiationCompleted()
+   {
+      preInstantiationDuration.set(System.currentTimeMillis()-preInstantiationStart.get());
+   }
 }
