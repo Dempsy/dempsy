@@ -20,6 +20,13 @@ Dempsy recognizes three types of developers and the api documentation is organiz
 
 This Api documentation is currently for the 0.6-SNAPSHOT revision.
 
+## Current Work
+
+Dempsy is currently only available as source code. Binaries for the next release (0.6) will be available within a week. See the [issues](https://github.com/Dempsy/Dempsy/issues) list for a backlog. The primary tasks are currently:
+
+# Full Elasticity - While Dempsy was built from the ground up to be elastic, the ability for the topology to dynamically morph is under development and expected in May.
+# AWS push button deployment and an example integration with an elastic provisioning tool
+
 # Overview
 
 ## What is Dempsy?
