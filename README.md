@@ -29,6 +29,8 @@ Dempsy is currently only available as source code. Binaries for the next release
 
 # Overview
 
+* See the recent [InfoQ post](http://www.infoq.com/news/2012/04/Dempsy) on Dempsy
+
 ## What is Dempsy?
 
 In a nutshell, Dempsy is a framework that provides for the easy implementation Stream-based, Real-time, BigData applications.
