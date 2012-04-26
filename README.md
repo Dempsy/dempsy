@@ -27,6 +27,15 @@ Dempsy is currently only available as source code. Binaries for the next release
 1. Full Elasticity - While Dempsy was built from the ground up to be elastic, the ability for the topology to dynamically morph is under development and expected in May.
 1. AWS push button deployment and an example integration with an elastic provisioning tool
 
+## Getting Help
+
+The team is available through several channels.
+
+* If you have a specific issue like a bug report or feature request, you can use the [issues](https://github.com/Dempsy/Dempsy/issues) list.
+* Participate in any discussion on any commit or Pull Request
+* You can subscribe to the [Dempsy Email Group](http://tech.groups.yahoo.com/group/DempsyUser/)
+* You can join the IRC chanel and see if we're in. It's at [FreeNode.net](http://freenode.net/faq.shtml) IRC. The channel is ```#dempsy```. Currently it's best to catch us during the day in the Eastern US.
+
 # Overview
 
 * See the recent [InfoQ post](http://www.infoq.com/news/2012/04/Dempsy) on Dempsy
