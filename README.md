@@ -32,7 +32,7 @@ Dempsy is currently only available as source code. Binaries for the next release
 The team is available through several channels.
 
 * If you have a specific issue like a bug report or feature request, you can use the [issues](https://github.com/Dempsy/Dempsy/issues) list.
-* Participate in any discussion on any commit or Pull Request
+* Comment on any discussion on any [issues](https://github.com/Dempsy/Dempsy/issues), [commit](https://github.com/Dempsy/Dempsy/commits/master), or [Pull Request](https://github.com/Dempsy/Dempsy/pulls) 
 * You can subscribe to the [Dempsy Email Group](http://tech.groups.yahoo.com/group/DempsyUser/)
 * You can join the IRC chanel and see if we're in. It's at [FreeNode.net](http://freenode.net/faq.shtml) IRC. The channel is ```#dempsy```. Currently it's best to catch us during the day in the Eastern US.
 
