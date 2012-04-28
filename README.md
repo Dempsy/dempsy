@@ -136,4 +136,4 @@ This means that applications with complicated topologies with many branches and 
 
 ## Now that you've decided to give it a try
 
-* See "[Getting Started](https://github.com/Dempsy/Dempsy/wiki/Getting-Started)"
+* See "[The Dempsy User Guide](https://github.com/Dempsy/Dempsy/wiki/User-Guide)" and the "[Simple Example](https://github.com/Dempsy/Dempsy/wiki/Simple-Example)" to get a better idea of what it can do.
