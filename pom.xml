@@ -3,11 +3,25 @@
 
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.nokia.dempsy</groupId>
+  <groupId>net.dempsy</groupId>
   <artifactId>dempsy-parent</artifactId>
   <version>0.6-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>
+
+  <licenses>
+    <license>
+      <name>Apache 2</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <scm>
+    <connection>scm:git:git://github.com/Dempsy/Dempsy.git</connection>
+    <developerConnection>scm:git:https://Dempsy@github.com/Dempsy/Dempsy.git</developerConnection>
+    <url>https://github.com/Dempsy/Dempsy</url>
+  </scm>
 
   <properties>
     <spring.version>3.0.6.RELEASE</spring.version>
@@ -53,7 +67,7 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>com.nokia.dempsy</groupId>
+        <groupId>net.dempsy</groupId>
         <artifactId>lib-dempsyimpl</artifactId>
         <type>test-jar</type>
         <version>${project.version}</version>
@@ -61,27 +75,27 @@
 
       <!-- Project -->
       <dependency>
-        <groupId>com.nokia.dempsy</groupId>
+        <groupId>net.dempsy</groupId>
         <artifactId>lib-dempsyapi</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.nokia.dempsy</groupId>
+        <groupId>net.dempsy</groupId>
         <artifactId>lib-dempsycore</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.nokia.dempsy</groupId>
+        <groupId>net.dempsy</groupId>
         <artifactId>lib-dempsyimpl</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.nokia.dempsy</groupId>
+        <groupId>net.dempsy</groupId>
         <artifactId>lib-dempsyspring</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.nokia.dempsy</groupId>
+        <groupId>net.dempsy</groupId>
         <artifactId>lib-dempsyguice</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -204,6 +218,19 @@
       </plugins>
     </pluginManagement>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
