@@ -9,6 +9,12 @@
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>
 
+  <parent>
+    <groupId>org.sonatype.oss</groupId>
+    <artifactId>oss-parent</artifactId>
+    <version>7</version>
+  </parent>
+
   <licenses>
     <license>
       <name>Apache 2</name>
@@ -18,9 +24,9 @@
   </licenses>
 
   <scm>
-    <connection>scm:git:git://github.com/Dempsy/Dempsy.git</connection>
-    <developerConnection>scm:git:https://Dempsy@github.com/Dempsy/Dempsy.git</developerConnection>
-    <url>https://github.com/Dempsy/Dempsy</url>
+    <connection>scm:git:git@github.com:Dempsy/Dempsy.git</connection>
+    <developerConnection>scm:git:git@github.com:Dempsy/Dempsy.git</developerConnection>
+    <url>git@github.com:Dempsy/Dempsy.git</url>
   </scm>
 
   <properties>
