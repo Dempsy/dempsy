@@ -187,7 +187,7 @@ public class TestDempsy
       }
    }
    
-   public static class KeyStoreImpl implements KeyStore<String>
+   public static class KeySourceImpl implements KeySource<String>
    {
       @Override
       public Iterable<String> getAllPossibleKeys()

@@ -17,11 +17,11 @@
 package com.nokia.dempsy;
 
 /**
- * An {@link KeyStore} is used to provide entire key space to the container
+ * An {@link KeySource} is used to provide entire key space to the container
  * so that it can pre-instantiate the MP's that would reside on the node;
  *
  */
-public interface KeyStore<T>
+public interface KeySource<T>
 {
    /**
     * This will be called by Dempsy to retrieve all possible keys that the 

@@ -30,7 +30,7 @@ import org.junit.Test;
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.Dispatcher;
-import com.nokia.dempsy.KeyStore;
+import com.nokia.dempsy.KeySource;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
@@ -261,7 +261,7 @@ public class TestConfig
       ApplicationDefinition app = new ApplicationDefinition("test");
       ClusterDefinition cd = new ClusterDefinition("test-slot");
       cd.setMessageProcessorPrototype(new GoodTestMp());
-      cd.setKeyStore(new KeyStore<Object>()
+      cd.setKeySource(new KeySource<Object>()
       {
          @Override
          public Iterable<Object> getAllPossibleKeys(){ return null; }
@@ -276,7 +276,7 @@ public class TestConfig
       ApplicationDefinition app = new ApplicationDefinition("test");
       ClusterDefinition cd = new ClusterDefinition("test-slot");
       cd.setMessageProcessorPrototype(new GoodTestMp())
-      .setKeyStore(new KeyStore<Object>()
+      .setKeySource(new KeySource<Object>()
       {
          @Override
          public Iterable<Object> getAllPossibleKeys()
@@ -304,7 +304,7 @@ public class TestConfig
          @Override
          public void setDispatcher(Dispatcher dispatcher){ }
       })
-      .setKeyStore(new KeyStore<Object>()
+      .setKeySource(new KeySource<Object>()
       {
          @Override
          public Iterable<Object> getAllPossibleKeys()
