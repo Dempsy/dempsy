@@ -160,8 +160,8 @@ public class Dempsy
                   if (adaptor != null)
                      adaptor.setDispatcher(router);
                   
-                  final KeyStore<?> keyStore = clusterDefinition.getKeyStore();
-                  if(keyStore != null)
+                  final KeySource<?> keySource = clusterDefinition.getKeySource();
+                  if(keySource != null)
                   {
                      Thread t = new Thread(new Runnable()
                      {
@@ -170,12 +170,12 @@ public class Dempsy
                         {
                            try{
                               statsCollector.preInstantiationStarted();
-                              Iterable<?> iterable = keyStore.getAllPossibleKeys();
+                              Iterable<?> iterable = keySource.getAllPossibleKeys();
                               for(Object key: iterable)
                               {
                                  try
                                  {
-                                    if(strategyInbound.doesMessageKeyBelongToCluster(key))
+                                    if(strategyInbound.doesMessageKeyBelongToNode(key))
                                     {
                                           container.getInstanceForKey(key);
                                     }
@@ -190,7 +190,7 @@ public class Dempsy
                            catch(Throwable e)
                            {
                               logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
-                                    keyStore.getClass().getSimpleName()+":getAllPossibleKeys()", e);
+                                    keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
                            }
                            finally
                            {
