@@ -46,7 +46,7 @@ Dempsy is meant to solve the problem of processing large amounts of "near real t
 * Real time analytics on log information generated from widely distributed systems
 * Statistical analytics on real-time vehicle traffic information on a global basis
 
-It is meant to provide developers with a tool that allows them to solve these problems in a simple straightforward manner by allowing them to concentrate on the analytics themselves rather than the infrastructure. Dempsy heavily emphasizes "separation of concerns" through "dependency injection" and out of the box supports both Spring and Guice. It does all of this by supporting what can be (almost) described as a "distributed actors model."
+It is meant to provide developers with a tool that allows them to solve these problems in a simple straightforward manner by allowing them to concentrate on the analytics themselves rather than the infrastructure. Dempsy heavily emphasizes "separation of concerns" through "dependency injection" and out of the box supports both Spring and Guice. It does all of this by supporting what can be (almost) described as a "distributed actor model."
 
 In short Dempsy is a framework to enable decomposing a large class of message processing applications into flows of messages to relatively simple processing units implemented as [POJOs](http://en.wikipedia.org/wiki/Plain_Old_Java_Object)
 
@@ -66,7 +66,7 @@ Dempsy is intentionally not an “Application Server” and runs in a completely
 
 Dempsy has been described as a distributed actor framework. While not strictly speaking an [actor](http://en.wikipedia.org/wiki/Actor_model) framework in the sense of [Erlang](http://www.erlang.org) or [Akka](http://akka.io) actors, in that actors typically direct messages directly to other actors, the Message Processors in Dempsy are "actor like POJOs" similar to Processor Elements in [S4](http://s4.io) and less so like Bolts in [Storm](https://github.com/nathanmarz/storm). Message processors are similar to actors in that Message processors act on a single message at a time, and need not deal with concurrency directly. Unlike actors, Message Processors also are relieved of the the need to know the destination(s) for their output messages, as this is handled inside Dempsy itself.
 
-The Actors model is an approach to concurrent programming that has the following features:
+The Actor model is an approach to concurrent programming that has the following features:
 
 * **Fine-grained processing**
 
@@ -80,7 +80,7 @@ Each actor maintains its own state, and does not expose that state to any other 
 
 Actors communicate by sending immutable messages to one-another. Each message has a key, and the framework is responsible for directing the message to the actor responsible for that key.
 
-A distributed actors model takes an additional step, of allowing actors to exist on multiple nodes in a cluster, and supporting communication of messages between nodes. It adds the following complexities to the Actors model:
+A distributed actor model takes an additional step, of allowing actors to exist on multiple nodes in a cluster, and supporting communication of messages between nodes. It adds the following complexities to the Actor model:
 
 * **Distribution of Messages**
 
@@ -112,7 +112,7 @@ Above all, and in many ways, Dempsy is meant to be *SIMPLE*. It doesn't try to b
 
 * Testability - All of this provides a basis to write code that's more testable.
 
-* "Do one thing well" - Dempsy is written to provide one service: support for the type of "Distributed Actors Model" (with all of the acknowledged caveats) programming paradigm. For this reason it does not pretend to be an Application Server. Nor does it substitute for the lack of an automated provistioning/deployment system. 
+* "Do one thing well" - Dempsy is written to provide one service: support for the type of "Distributed Actor Model" (with all of the acknowledged caveats) programming paradigm. For this reason it does not pretend to be an Application Server. Nor does it substitute for the lack of an automated provistioning/deployment system. 
 
 ## What about other options?
 
@@ -120,9 +120,9 @@ Above all, and in many ways, Dempsy is meant to be *SIMPLE*. It doesn't try to b
 
 CEP is really trying to solve a different problem. If you have a large stream of data you want to mine by separating it into subsets and executing different analytics on each subset (which can including ignoring entire subsets), then CEP solutions make sense. If, however, you’re going to do the same thing to every message then you will be underutilizing the power of CEP. Underutilized functionality usually means an increased total cost of ownership, and Dempsy is ALL ABOUT reducing the total cost of ownership for systems that do this type of processing.
 
-#### Pure Actors Model Frameworks and Languages
+#### Pure Actor Model Frameworks and Languages
 
-There are several pure ["Actors Model"](http://en.wikipedia.org/wiki/Actor_model) frameworks and languages that have been posed as alternatives for Dempsy. Dempsy is not a pure actors model and primarily solves a different problem. As described above Dempsy is primarily a routing mechanism for messages for "fine grained" actors. The reason we still (though loosely) call it an "actors model" is because Dempsy supports concurrency the way a typical Actors Model does.
+There are several pure ["Actor Model"](http://en.wikipedia.org/wiki/Actor_model) frameworks and languages that have been posed as alternatives for Dempsy. Dempsy is not a pure actor model and primarily solves a different problem. As described above Dempsy is primarily a routing mechanism for messages for "fine grained" actors. The reason we still (though loosely) call it an "actor model" is because Dempsy supports concurrency the way a typical Actor Model does.
 
 #### Other Stream Processors
 
