@@ -4,6 +4,10 @@ See the wiki for the [Documentation](https://github.com/Dempsy/Dempsy/wiki)
 
 Since we are updating the documentation frequently, we recommend that you watch the [Documentation issue](https://github.com/Dempsy/Dempsy/issues/23) (at the bottom of the issue page click on "Enable notifications for this issue")  
 
+## Download
+
+Dempsy is currently releases as a set of libraries and version 0.6 is now in the Maven Central Repository. Please see the section on [Prerequisites](Prerequisites) for more information.
+
 ## Current Work
 
 See the [issues](https://github.com/Dempsy/Dempsy/issues) list for a backlog. The primary tasks are currently:
