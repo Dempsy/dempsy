@@ -6,7 +6,7 @@ Since we are updating the documentation frequently, we recommend that you watch 
 
 ## Download
 
-Dempsy is currently releases as a set of libraries and version 0.6 is now in the Maven Central Repository. Please see the section on [Prerequisites](Prerequisites) for more information.
+Dempsy is currently releases as a set of libraries and version 0.6 is now in the Maven Central Repository. Please see the section on [Prerequisites](https://github.com/Dempsy/Dempsy/wiki/Prerequisites) for more information.RE
 
 ## Current Work
 
