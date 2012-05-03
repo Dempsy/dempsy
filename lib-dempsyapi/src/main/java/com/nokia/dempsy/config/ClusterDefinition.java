@@ -20,7 +20,7 @@ import java.lang.reflect.Method;
 
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.DempsyException;
-import com.nokia.dempsy.KeyStore;
+import com.nokia.dempsy.KeySource;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Start;
@@ -48,7 +48,7 @@ public class ClusterDefinition
    private Object statsCollectorFactory = null;
    private OutputSchedule outputScheduler = null;
    private boolean adaptorIsDaemon = false;
-   private KeyStore<?> keyStore = null;
+   private KeySource<?> keySource = null;
    
    private ApplicationDefinition parent;
    
@@ -154,8 +154,8 @@ public class ClusterDefinition
    public ClusterDefinition setAdaptor(Adaptor adaptor) { this.adaptor = adaptor; return this; }
    public boolean isAdaptorDaemon() { return adaptorIsDaemon; }
    public ClusterDefinition setAdaptorDaemon(boolean isAdaptorDaemon) { this.adaptorIsDaemon = isAdaptorDaemon; return this; }
-   public KeyStore<?> getKeyStore(){ return keyStore; }
-   public ClusterDefinition setKeyStore(KeyStore<?> keyStore){ this.keyStore = keyStore; return this; }
+   public KeySource<?> getKeySource(){ return keySource; }
+   public ClusterDefinition setKeySource(KeySource<?> keySource){ this.keySource = keySource; return this; }
    
    @Override
    public String toString()
@@ -223,7 +223,7 @@ public class ClusterDefinition
             throw new DempsyException("Multiple methods on the message processor of type\""
                   + SafeString.valueOf(messageProcessorPrototype) + "\" is identified as a Start method. Please annotate at most one method using @Start.");
       }
-      if(adaptor != null && keyStore != null)
+      if(adaptor != null && keySource != null)
       {
          throw new DempsyException("A dempsy cluster can not pre-instantation an adaptor.");
       }
