@@ -108,9 +108,9 @@ Above all, and in many ways, Dempsy is meant to be *SIMPLE*. It doesn't try to b
 
 * Separation of Concerns (SoC) - Dempsy expects the developer to be able to concentrate on writing the analytics and business logic with (virtually) no consideration for framework or infrastructure.
 
-* Decoupling - SoC provides the means to isolate cross-cutting concerns so that code written for the Dempsy little to no (with due respect to annotations) dependence on even the framework itself. Developer's code is easily separable from the framework and, in the spirit of Dependency Injection, the framework uses the developer's code rather than the developer begin required to use the framework. This type of decoupling provides for analytics/business code that has no infrastructure concerns: no framework dependencies, no messaging code, no threading code, etc.
+* Decoupling - SoC provides the means to isolate cross-cutting concerns so that code written for Dempsy will have little to no (with due respect to annotations) dependence on even the framework itself. Developer's code can be easily run separate from the framework and, in the spirit of Dependency Injection, the framework uses the developer's code rather than the developer having to use the framework. This type of decoupling provides for analytics/business code that has no infrastructure concerns: no framework dependencies, no messaging code, no threading code, etc.
 
-* Testability - All of this provides for code that's more testable in isolation from these concerns.
+* Testability - All of this provides a basis to write code that's more testable.
 
 * "Do one thing well" - Dempsy is written to provide one service: support for the type of "Distributed Actors Model" (with all of the acknowledged caveats) programming paradigm. For this reason it does not pretend to be an Application Server. Nor does it substitute for the lack of an automated provistioning/deployment system. 
 
