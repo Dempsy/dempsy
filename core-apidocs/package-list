@@ -1,0 +1,6 @@
+com.nokia.dempsy.messagetransport
+com.nokia.dempsy.messagetransport.util
+com.nokia.dempsy.monitoring
+com.nokia.dempsy.mpcluster
+com.nokia.dempsy.router
+com.nokia.dempsy.serialization
