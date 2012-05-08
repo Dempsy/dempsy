@@ -247,4 +247,15 @@ public class TestMpContainer
       Assert.assertTrue(out2.outputCount>8);
    }
 
+   @Test
+   public void testOutputInvoker() throws Exception {
+	   inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+	      ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
+	      assertTrue("messages received", (out1 != null) );
+
+	      assertEquals("number of MP instances", 1, container.getProcessorCount());
+	      assertTrue("queue is empty", outputQueue.isEmpty());
+
+   }
+   
 }

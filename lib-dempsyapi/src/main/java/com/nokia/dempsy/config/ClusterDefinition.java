@@ -46,7 +46,7 @@ public class ClusterDefinition
    private Object strategy = null;
    private Object serializer = null;
    private Object statsCollectorFactory = null;
-   private OutputSchedule outputScheduler = null;
+   private Object outputExecuter;
    private boolean adaptorIsDaemon = false;
    private KeyStore<?> keyStore = null;
    
@@ -113,6 +113,24 @@ public class ClusterDefinition
    public ClusterDefinition setRoutingStrategy(Object strategy) { this.strategy = strategy; return this; }
    public Object getRoutingStrategy() { return strategy == null ? parent.getRoutingStrategy() : strategy; }
    
+   /**
+    * returns OutputExecuter
+    * @return OutputExecuter
+    */
+   public Object getOutputExecuter() {
+      return outputExecuter;
+   }
+   
+   /**
+    * returns ClusterDefinition
+    * @param output
+    * @return
+    */
+   public ClusterDefinition setOutputExecuter(Object outputExecuter) {
+      this.outputExecuter = outputExecuter;
+      return this;
+   }
+
    protected ClusterDefinition setParentApplicationDefinition(ApplicationDefinition applicationDef) throws DempsyException
    {
       if (clusterName == null)
@@ -133,14 +151,6 @@ public class ClusterDefinition
       this.statsCollectorFactory = statsCollectorFactory;
       return this;
    }
-   
-   public ClusterDefinition setOutputSchedule(OutputSchedule outputScheduler)
-   {
-      this.outputScheduler = outputScheduler;
-      return this;
-   }
-   
-   public OutputSchedule getOutputSchedule() { return this.outputScheduler;}
    
    public ClusterDefinition setMessageProcessorPrototype(Object messageProcessor) throws DempsyException
    {

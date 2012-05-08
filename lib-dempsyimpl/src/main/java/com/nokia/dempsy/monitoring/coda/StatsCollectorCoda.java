@@ -83,6 +83,10 @@ public class StatsCollectorCoda implements StatsCollector {
 	
 	private Timer preInstantiationDuration;
 	private TimerContext preInstantiationDurationContext;
+	
+	private Timer outputInvokeDuration;
+  private TimerContext outputInvokeDurationContext;
+  
 
 	public StatsCollectorCoda(ClusterId clusterId)
 	{
@@ -126,6 +130,9 @@ public class StatsCollectorCoda implements StatsCollector {
 	   
 	   preInstantiationDuration = Metrics.newTimer(Dempsy.class, "pre-instantiation-duration",
 	         scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+	   
+	   outputInvokeDuration = Metrics.newTimer(Dempsy.class, "outputInvoke-duration",
+       scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 	   
 	}
 	
@@ -251,4 +258,21 @@ public class StatsCollectorCoda implements StatsCollector {
 	{
 	   return preInstantiationDuration.meanRate();
 	}
+
+  @Override
+  public void outputInvokeCompleted() {
+    outputInvokeDurationContext.stop();
+    
+  }
+
+  @Override
+  public void outputInvokeStarted() {
+    outputInvokeDurationContext = outputInvokeDuration.time();
+  }
+	
+  @Override
+  public double getOutputInvokeDuration()
+  {
+     return outputInvokeDuration.meanRate();
+  }
 }
