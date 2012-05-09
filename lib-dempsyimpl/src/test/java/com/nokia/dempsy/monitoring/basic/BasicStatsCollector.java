@@ -44,6 +44,8 @@ public class BasicStatsCollector implements StatsCollector
    private final AtomicLong preInstantiationStart = new AtomicLong();
    private final AtomicLong preInstantiationDuration = new AtomicLong();
 
+   private final AtomicLong outputInvokeStart = new AtomicLong();
+   private final AtomicLong outputInvokeDuration = new AtomicLong();
    @Override
    public long getDiscardedMessageCount()
    {
@@ -158,4 +160,23 @@ public class BasicStatsCollector implements StatsCollector
    {
       preInstantiationDuration.set(System.currentTimeMillis()-preInstantiationStart.get());
    }
+   
+   @Override
+   public double getOutputInvokeDuration()
+   {
+      return outputInvokeDuration.doubleValue();
+   }
+   
+   @Override
+   public void outputInvokeStarted()
+   {
+      outputInvokeStart.set(System.currentTimeMillis());
+   }
+   
+   @Override
+   public void outputInvokeCompleted()
+   {
+      outputInvokeDuration.set(System.currentTimeMillis()-preInstantiationStart.get());
+   }
+   
 }

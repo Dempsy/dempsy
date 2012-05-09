@@ -43,6 +43,7 @@ import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
 import com.nokia.dempsy.mpcluster.MpClusterWatcher;
+import com.nokia.dempsy.output.OutputExecuter;
 import com.nokia.dempsy.router.ClusterInformation;
 import com.nokia.dempsy.router.CurrentClusterCheck;
 import com.nokia.dempsy.router.Router;
@@ -132,9 +133,6 @@ public class Dempsy
                      container.setStatCollector(statsCollector);
                   }
                   
-                  if (clusterDefinition.getOutputSchedule()!=null)
-                     container.setOutPutPass(clusterDefinition.getOutputSchedule().getInterval(), clusterDefinition.getOutputSchedule().getTimeUnit());
-
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
                   
                   // there is only an inbound strategy if we have an Mp (that is, we aren't an adaptor) and
@@ -159,6 +157,13 @@ public class Dempsy
                   Adaptor adaptor = clusterDefinition.isRouteAdaptorType() ? clusterDefinition.getAdaptor() : null;
                   if (adaptor != null)
                      adaptor.setDispatcher(router);
+                  else {
+                    OutputExecuter outputExecuter = (OutputExecuter) clusterDefinition.getOutputExecuter();
+                    if (outputExecuter != null) {
+                       outputExecuter.setOutputInvoker(container);
+                    }
+                 }
+
                   
                   final KeySource<?> keySource = clusterDefinition.getKeySource();
                   if(keySource != null)
@@ -400,6 +405,12 @@ public class Dempsy
                   thread.start();
                   clusterStarted = true;
                }
+               else {
+                 OutputExecuter outputExecuter = (OutputExecuter) cluster.clusterDefinition.getOutputExecuter();
+                 if (outputExecuter != null) {
+                    outputExecuter.start();
+                 }
+              }
             }
          }
          return clusterStarted;
@@ -413,7 +424,13 @@ public class Dempsy
 
          // stop all of the non-adaptor clusters.
          for(Cluster cluster : appClusters)
+         {
+           OutputExecuter outputExecuter = (OutputExecuter) cluster.clusterDefinition.getOutputExecuter();
+           if (outputExecuter != null) {
+              outputExecuter.stop();
+           }
             cluster.stop();
+         }
       }
       
    } // end Application definition

@@ -86,6 +86,17 @@ public interface StatsCollector {
     * Dempsy calls into this just after pre-instantiation is complete.
     */
    public void preInstantiationCompleted();
+   
+   
+   /**
+    * Dempsy calls into this just before calling @Output methods for MPs.
+    */
+   public void outputInvokeStarted();
+   
+   /**
+    * empsy calls into this just after @Output methods for MPs complete.
+    */
+   public void outputInvokeCompleted();
 
 	// FIXME
 	/*
@@ -105,5 +116,6 @@ public interface StatsCollector {
 	long getDiscardedMessageCount();
 	int getInFlightMessageCount();
 	double getPreInstantiationDuration();
+	double getOutputInvokeDuration();
 	
 }
