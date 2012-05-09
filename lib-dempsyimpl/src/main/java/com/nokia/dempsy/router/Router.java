@@ -322,6 +322,11 @@ public class Router implements Dispatcher
          try
          {
             target = strategyOutbound.selectSlotForMessageKey(key);
+            if(target == null)
+            {
+               setup(false);
+               target = strategyOutbound.selectSlotForMessageKey(key);
+            }
 
             if(target != null)
             {

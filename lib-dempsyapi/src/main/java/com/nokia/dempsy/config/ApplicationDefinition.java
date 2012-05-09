@@ -129,6 +129,7 @@ public class ApplicationDefinition
    public ApplicationDefinition add(ClusterDefinition... clusterDefinitions)
    {
       this.clusterDefinitions.addAll(Arrays.asList(clusterDefinitions));
+      isInitialized = false;
       return this;
    }
    

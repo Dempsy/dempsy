@@ -167,29 +167,37 @@ public class Dempsy {
                      }
                   }
 
-                  final KeyStore<?> keyStore = clusterDefinition.getKeyStore();
-                  if (keyStore != null) {
-                     Thread t = new Thread(new Runnable() {
+                  final KeySource<?> keySource = clusterDefinition.getKeySource();
+                  if(keySource != null)
+                  {
+                     Thread t = new Thread(new Runnable()
+                     {
                         @Override
                         public void run() {
                            try {
                               statsCollector.preInstantiationStarted();
-                              Iterable<?> iterable = keyStore.getAllPossibleKeys();
-                              for (Object key : iterable) {
-                                 try {
-                                    if (strategyInbound.doesMessageKeyBelongToCluster(key)) {
-                                       container.getInstanceForKey(key);
+                              Iterable<?> iterable = keySource.getAllPossibleKeys();
+                              for(Object key: iterable)
+                              {
+                                 try
+                                 {
+                                    if(strategyInbound.doesMessageKeyBelongToNode(key))
+                                    {
+                                          container.getInstanceForKey(key);
                                     }
                                  } catch (ContainerException e) {
                                     logger.error("Failed to instantiate MP for Key " + key + " of type "
                                           + key.getClass().getSimpleName(), e);
                                  }
                               }
-                           } catch (Throwable e) {
-                              logger.error(
-                                    "Exception occured while processing keys during pre-instantiation using KeyStore method"
-                                          + keyStore.getClass().getSimpleName() + ":getAllPossibleKeys()", e);
-                           } finally {
+                           }
+                           catch(Throwable e)
+                           {
+                              logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
+                                    keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
+                           }
+                           finally
+                           {
                               statsCollector.preInstantiationCompleted();
                            }
                         }

@@ -144,7 +144,7 @@ public class DefaultRoutingStrategy implements RoutingStrategy
       }
       
       @Override
-      public boolean doesMessageKeyBelongToCluster(Object messageKey)
+      public boolean doesMessageKeyBelongToNode(Object messageKey)
       {
          return destinationsAcquired.contains(messageKey.hashCode()%defaultTotalSlots);
       }
