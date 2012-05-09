@@ -37,6 +37,7 @@ import com.nokia.dempsy.container.internal.LifecycleHelper;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.output.OutputInvoker;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
@@ -48,7 +49,7 @@ import com.nokia.dempsy.serialization.java.JavaSerializer;
  *  The container is simple in that it does no thread management. When it's called 
  *  it assumes that the transport has provided the thread that's needed 
  */
-public class MpContainer implements Listener
+public class MpContainer implements Listener, OutputInvoker
 {
    private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -157,7 +158,6 @@ public class MpContainer implements Listener
    {
       this.dispatcher = dispatcher;
    }
-
 
    /**
     * Set the StatsCollector.  This is optional, but likely desired in
@@ -340,7 +340,7 @@ public class MpContainer implements Listener
    }
    
    // This method MUST NOT THROW
-   protected void outputPass()
+   public void outputPass()
    {
       if (!prototype.isOutputSupported())
          return;
@@ -375,6 +375,14 @@ public class MpContainer implements Listener
       }
    }
    
+   @Override
+   public void invokeOutput() {
+     statCollector.outputInvokeStarted();
+     outputPass();
+     statCollector.outputInvokeCompleted();
+      
+   }
+
 //----------------------------------------------------------------------------
 // Internals
 //----------------------------------------------------------------------------
@@ -550,10 +558,12 @@ public class MpContainer implements Listener
            logger.error("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                  " due to an unknown exception.", e);
            statCollector.messageFailed();
+           
            if (op == Operation.handle)
               throw e;
         }
      }
 
   }
+
 }
