@@ -33,6 +33,7 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dispatcher;
 import com.nokia.dempsy.annotations.Activation;
+import com.nokia.dempsy.annotations.Evictable;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
@@ -129,11 +130,14 @@ public class TestMpContainer
       public volatile int activationCount;
       public volatile int invocationCount;
       public volatile int outputCount;
+      public volatile boolean evict = false;
+      public static int cloneCount;
 
       @Override
       public TestProcessor clone()
       throws CloneNotSupportedException
       {
+         cloneCount++;
          return (TestProcessor)super.clone();
       }
 
@@ -152,6 +156,9 @@ public class TestMpContainer
          // put it on output queue so that we can synchronize test
          return message;
       }
+      
+      @Evictable
+      public boolean isEvictable(){ return evict; }
 
       @Output
       public OutputMessage doOutput()
@@ -258,4 +265,33 @@ public class TestMpContainer
 
    }
    
+   @Test
+   public void testEvictable()
+   throws Exception
+   {
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      outputQueue.poll(1000, TimeUnit.MILLISECONDS);
+
+      assertEquals("did not create MP", 1, container.getProcessorCount());
+
+      TestProcessor mp = (TestProcessor)container.getMessageProcessor("foo");
+      assertNotNull("MP not associated with expected key", mp);
+      assertEquals("activation count, 1st message", 1, mp.activationCount);
+      assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      outputQueue.poll(1000, TimeUnit.MILLISECONDS);
+
+      assertEquals("activation count, 2nd message", 1, mp.activationCount);
+      assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
+      int tmpCloneCount = mp.cloneCount;
+      
+      mp.evict = true;
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      outputQueue.poll(1000, TimeUnit.MILLISECONDS);
+
+      assertEquals("Clone count, 2nd message", tmpCloneCount+1, mp.cloneCount);
+
+   }
+
 }

@@ -21,6 +21,7 @@ import java.lang.reflect.Method;
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.KeySource;
+import com.nokia.dempsy.annotations.Evictable;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Start;
@@ -232,6 +233,30 @@ public class ClusterDefinition
          if (startMethods > 1)
             throw new DempsyException("Multiple methods on the message processor of type\""
                   + SafeString.valueOf(messageProcessorPrototype) + "\" is identified as a Start method. Please annotate at most one method using @Start.");
+      
+         Method[] evictableMethods = messageProcessorPrototype.getClass().getMethods();
+         
+         boolean foundEvictableMethod = false;
+         Method evictableMethod = null;
+         for(Method method: evictableMethods)
+         {
+            if(method.isAnnotationPresent(Evictable.class))
+            {
+               if(foundEvictableMethod)
+               {
+                  throw new DempsyException("More than one method on the message processor of type \"" +
+                        SafeString.valueOfClass(messageProcessorPrototype) + "\" is identified as a Evictable. Please annotate the appropriate method using @Evictable.");
+               }
+               foundEvictableMethod = true;
+               evictableMethod = method;
+            }
+         }
+         if(evictableMethod != null)
+         {
+            if(evictableMethod.getReturnType() == null || !evictableMethod.getReturnType().isAssignableFrom(boolean.class))
+               throw new DempsyException("Evictable method \""+ SafeString.valueOf(evictableMethod) + "\" on the message processor of type \"" +
+                     SafeString.valueOfClass(messageProcessorPrototype) + "\" should return boolean value. Please annotate the appropriate method using @Evictable.");
+         }
       }
       if(adaptor != null && keySource != null)
       {
