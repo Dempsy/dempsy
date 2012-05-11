@@ -25,6 +25,15 @@ import com.nokia.dempsy.config.ClusterId;
  */
 public interface MpClusterSession<T, N>
 {
+   /**
+    * <p>This call will retrieve a reference to the {@link MpCluster} by the 
+    * {@link ClusterId}. The underlying implementation may return the identical {@link MpCluster}
+    * for successive calls given the same {@link ClusterId}.
+    * 
+    * @param mpClusterId is the {@link ClusterId} to retrieve the {@link MpCluster} for.
+    * @return the {@link MpCluster} for the given {@link ClusterId}
+    * @throws MpClusterException when the underlying implementation has a problem.
+    */
    public MpCluster<T, N> getCluster(ClusterId mpClusterId) throws MpClusterException;
    
    /**
