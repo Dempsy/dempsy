@@ -284,13 +284,13 @@ public class TestMpContainer
 
       assertEquals("activation count, 2nd message", 1, mp.activationCount);
       assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
-      int tmpCloneCount = mp.cloneCount;
+      int tmpCloneCount = TestProcessor.cloneCount;
       
       mp.evict = true;
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
       outputQueue.poll(1000, TimeUnit.MILLISECONDS);
 
-      assertEquals("Clone count, 2nd message", tmpCloneCount+1, mp.cloneCount);
+      assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount);
 
    }
 
