@@ -39,10 +39,12 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.Watcher.Event.KeeperState;
 import org.apache.zookeeper.ZooDefs.Ids;
-import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.Stat;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.SerializationConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +55,8 @@ import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.mpcluster.MpClusterSlot;
 import com.nokia.dempsy.mpcluster.MpClusterWatcher;
+import com.nokia.dempsy.serialization.SerializationException;
+import com.nokia.dempsy.serialization.Serializer;
 
 public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
 {
@@ -502,26 +506,61 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       {
          private ZookeeperPath slotPath;
          private String slotName;
+         private Serializer<TS> serializer;
          
          public ZkClusterSlot(String slotName)
          {
             this.slotName = slotName;
             this.slotPath = new ZookeeperPath(clusterPath, slotName);
+            serializer = new JSONSerializer<TS>();
          }
          
          @Override
          public String getSlotName() { return slotName; }
          
-         @SuppressWarnings("unchecked")
          @Override
          public TS getSlotInformation() throws MpClusterException
          {
-            return (TS)readInfoFromPath(slotPath);
+            byte[] slot = null;
+            try
+            {
+               slot = zk.get().getData(slotPath.path, true, null);
+            }
+            catch(Exception e)
+            {
+               throw new MpClusterException("Error reading slot data for path "+slotPath.path, e);
+            }
+            try
+            {
+               return (slot==null||slot.length==0)?null:serializer.deserialize(slot);
+            }
+            catch(Exception e)
+            {
+               throw new MpClusterException("Error deserializing slot data "+slot+" for path "+ slotPath.path, e);
+            }
          }
 
          public void setSlotInformation(TS info) throws MpClusterException
          {
-            setInfoToPath(slotPath,info);
+            byte[] slotData = null;
+            try
+            {
+               slotData = serializer.serialize(info);
+            }
+            catch(Exception e)
+            {
+               throw new MpClusterException("Error serializing data "+
+                     info + " to cluster path "+ slotPath.path, e);
+            }
+            try
+            {
+               zk.get().setData(slotPath.path, slotData, -1);
+            }
+            catch(Exception e)
+            {
+               throw new MpClusterException("Error writing data "+
+                     info + " to cluster path "+slotPath.path, e);
+            }
          }
 
          private boolean join() throws MpClusterException
@@ -586,6 +625,62 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
          }
          
          public String toString() { return slotPath.toString(); }
+         
+         @SuppressWarnings("hiding")
+         private class JSONSerializer<TS> implements Serializer<TS>
+         {
+            ObjectMapper objectMapper;
+            
+            public JSONSerializer()
+            {
+               objectMapper = new ObjectMapper();
+               objectMapper.enableDefaultTyping();
+               objectMapper.configure(SerializationConfig.Feature.WRITE_EMPTY_JSON_ARRAYS, true);
+               objectMapper.configure(SerializationConfig.Feature.FAIL_ON_EMPTY_BEANS, false);
+               objectMapper.configure(SerializationConfig.Feature.WRITE_NULL_MAP_VALUES, true);
+            }
+            
+            @SuppressWarnings("unchecked")
+            @Override
+            public TS deserialize(byte[] data) throws SerializationException
+            {
+               ArrayList<TS> info = null;
+               if(data != null)
+               {
+                  String jsonData = new String(data);
+                  try
+                  {
+                     info = objectMapper.readValue(jsonData, ArrayList.class);
+                  }
+                  catch(Exception e)
+                  {
+                     throw new SerializationException("Error occured while deserializing data "+jsonData, e);
+                  }
+               }
+               return (info != null && info.size()>0)?info.get(0):null;
+            }
+            
+            @Override
+            public byte[] serialize(TS data) throws SerializationException 
+            {
+               String jsonData = null;
+               if(data != null)
+               {
+                  ArrayList<TS> arr = new ArrayList<TS>();
+                  arr.add(data);
+                  try
+                  {
+                     jsonData = objectMapper.writeValueAsString(arr);
+                  }
+                  catch(Exception e)
+                  {
+                     throw new SerializationException("Error occured during serializing class " +
+                           SafeString.valueOfClass(data) + " with information "+SafeString.valueOf(data), e);
+                  }
+               }
+               return (jsonData != null)?jsonData.getBytes():null;
+            }
+         }
       }
       
    }
