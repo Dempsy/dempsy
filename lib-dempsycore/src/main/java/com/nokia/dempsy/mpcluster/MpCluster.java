@@ -87,6 +87,6 @@ public interface MpCluster<T, N>
     * using Set semantics.
     * @param watch
     */
-   public void addWatcher(MpClusterWatcher<T,N> watch);
+   public void addWatcher(MpClusterWatcher watch);
    
 }

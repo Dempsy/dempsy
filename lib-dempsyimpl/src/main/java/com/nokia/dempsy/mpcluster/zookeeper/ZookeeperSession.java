@@ -282,7 +282,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       private ZookeeperPath clusterPath;
       private ZookeeperPath appPath;
       
-      private CopyOnWriteArraySet<MpClusterWatcher<T,N>> watchers = new CopyOnWriteArraySet<MpClusterWatcher<T,N>>();
+      private CopyOnWriteArraySet<MpClusterWatcher> watchers = new CopyOnWriteArraySet<MpClusterWatcher>();
       
       private Object processLock = new Object();
       
@@ -357,8 +357,8 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
          
          synchronized(processLock)
          {
-            for(MpClusterWatcher<T,N> watch: watchers)
-               watch.process(this);
+            for(MpClusterWatcher watch: watchers)
+               watch.process();
          }
       }
       
@@ -392,7 +392,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       }
 
       @Override
-      public void addWatcher(MpClusterWatcher<T,N> watch)
+      public void addWatcher(MpClusterWatcher watch)
       {
          // set semantics adds it only if it's not there already
          watchers.add(watch); // to avoid a potential race condition, we clear the allSlots

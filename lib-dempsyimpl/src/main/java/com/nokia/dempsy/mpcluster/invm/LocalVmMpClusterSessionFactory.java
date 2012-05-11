@@ -88,7 +88,7 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
       
       public class LocalVmMpCluster implements MpCluster<T, N>
       {
-         private List<MpClusterWatcher<T, N>> watchers = new ArrayList<MpClusterWatcher<T, N>>();
+         private List<MpClusterWatcher> watchers = new ArrayList<MpClusterWatcher>();
          private ClusterId clusterId;
          private Object processLock = new Object();
          
@@ -101,7 +101,7 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
          }
 
          @Override
-         public synchronized void addWatcher(MpClusterWatcher<T, N> watch)
+         public synchronized void addWatcher(MpClusterWatcher watch)
          {
             if(!watchers.contains(watch))
                watchers.add(watch);
@@ -197,11 +197,11 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
          
       } // end cluster definition
       
-      private final void callUpdateWatchersForCluster(ClusterId clusterId) { updateWatchers(this, clusterId); }
+      private final void callUpdateWatchersForCluster(ClusterId clusterId) { updateClusterWatchers(this, clusterId); }
 
    } // end session definition
 
-   protected void updateWatchers(LocalVmMpSession fromSession, ClusterId clusterId)
+   protected void updateClusterWatchers(LocalVmMpSession fromSession, ClusterId clusterId)
    {
       for (LocalVmMpSession session : currentSessions)
       {
@@ -212,11 +212,11 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
             {
                synchronized(cluster.processLock)
                {
-                  for(MpClusterWatcher<T, N> watcher: cluster.watchers)
+                  for(MpClusterWatcher watcher: cluster.watchers)
                   {
                      try
                      {
-                        watcher.process(cluster);
+                        watcher.process();
                      }
                      catch (RuntimeException e)
                      {

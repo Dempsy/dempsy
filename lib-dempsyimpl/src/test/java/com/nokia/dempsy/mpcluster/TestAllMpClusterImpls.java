@@ -188,7 +188,7 @@ public class TestAllMpClusterImpls
       });
    }
    
-   private class TestWatcher implements MpClusterWatcher<String, String>
+   private class TestWatcher implements MpClusterWatcher
    {
       public boolean recdUpdate = false;
       public CountDownLatch latch;
@@ -196,7 +196,7 @@ public class TestAllMpClusterImpls
       public TestWatcher(int count) { latch = new CountDownLatch(count); }
       
       @Override
-      public void process(MpCluster<String, String> cluster) 
+      public void process() 
       {
          System.out.println("Hello");
          recdUpdate = true;

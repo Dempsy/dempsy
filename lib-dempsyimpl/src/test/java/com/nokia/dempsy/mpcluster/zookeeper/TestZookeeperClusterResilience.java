@@ -58,11 +58,11 @@ public class TestZookeeperClusterResilience
       logger.debug("Running zookeeper test server on port " + port);
    }
    
-   public static class TestWatcher implements MpClusterWatcher<String, String>
+   public static class TestWatcher implements MpClusterWatcher
    {
       AtomicBoolean called = new AtomicBoolean(false);
       @Override
-      public void process(MpCluster<String, String> cluster)
+      public void process()
       {
          called.set(true);
       }
@@ -81,17 +81,19 @@ public class TestZookeeperClusterResilience
 
          ZookeeperSessionFactory<String, String> factory = new ZookeeperSessionFactory<String, String>("127.0.0.1:" + port,5000);
          session = (ZookeeperSession<String, String>)factory.createSession();
-         MpCluster<String, String> cluster = session.getCluster(new ClusterId(appname,"testBouncingServer"));
+         final MpCluster<String, String> cluster = session.getCluster(new ClusterId(appname,"testBouncingServer"));
          TestWatcher callback = new TestWatcher()
          {
+            MpCluster<String, String> m_cluster = cluster;
+            
             @Override
-            public void process(MpCluster<String, String> cluster)
+            public void process()
             {
                try
                {
-                  if (cluster.getActiveSlots().size() == 0)
+                  if (m_cluster.getActiveSlots().size() == 0)
                   {
-                     cluster.join("slot1");
+                     m_cluster.join("slot1");
                      called.set(true);
                   }
                }
@@ -104,7 +106,7 @@ public class TestZookeeperClusterResilience
          };
 
          cluster.addWatcher(callback);
-         callback.process(cluster);
+         callback.process();
 
          // create another session and look
          ZookeeperSession<String, String> session2 = (ZookeeperSession<String, String>)factory.createSession();

@@ -16,7 +16,11 @@
 
 package com.nokia.dempsy.mpcluster;
 
-public interface MpClusterWatcher<T,N>
+public interface MpClusterWatcher
 {
-   public void process(MpCluster<T, N> cluster);
+   /**
+    * This callback will be executed whenever there's a change to the {@link MpCluster} or 
+    * {@link MpApplication} that this {@link MpClusterWatcher} is added to.
+    */
+   public void process();
 }
