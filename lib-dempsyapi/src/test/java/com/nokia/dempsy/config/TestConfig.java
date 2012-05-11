@@ -31,6 +31,7 @@ import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.Dispatcher;
 import com.nokia.dempsy.KeySource;
+import com.nokia.dempsy.annotations.Evictable;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
@@ -53,6 +54,9 @@ public class TestConfig
       
       @Start
       public void startMethod() {}
+      
+      @Evictable
+      public boolean evict(){return false;}
    }
    
    @MessageProcessor
@@ -81,7 +85,7 @@ public class TestConfig
       public void stop() {}
 
    }
-   
+
    @Test
    public void testSimpleConfig() throws Throwable
    {
@@ -312,6 +316,122 @@ public class TestConfig
             return null;
          }
       });
+      app.add(cd);
+      app.initialize();
+   }
+
+   @Test(expected=DempsyException.class)
+   public void testConfigMpWithMultipleEvict() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      
+      @MessageProcessor
+      class mp 
+      {
+         @SuppressWarnings("unused")
+         @MessageHandler
+         public void handle(GoodMessage string) {}
+         
+         @SuppressWarnings("unused")
+         @Start
+         public void startMethod() {}
+         
+         @SuppressWarnings("unused")
+         @Evictable
+         public boolean evict2(){return false;}
+
+         @SuppressWarnings("unused")
+         @Evictable
+         public boolean evict1(){return false;}
+         
+      }
+      
+      cd.setMessageProcessorPrototype(new mp());
+      app.add(cd);
+      app.initialize();
+   }
+
+   @Test(expected=DempsyException.class)
+   public void testConfigMpWithWrongReturnTypeEvict1() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      
+      @MessageProcessor
+      class mp 
+      {
+         @SuppressWarnings("unused")
+         @MessageHandler
+         public void handle(GoodMessage string) {}
+         
+         @SuppressWarnings("unused")
+         @Start
+         public void startMethod() {}
+         
+         @SuppressWarnings("unused")
+         @Evictable
+         public void evict1(){ }
+         
+      }
+      
+      cd.setMessageProcessorPrototype(new mp());
+      app.add(cd);
+      app.initialize();
+   }
+
+   @Test(expected=DempsyException.class)
+   public void testConfigMpWithWrongReturnTypeEvict2() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      
+      @MessageProcessor
+      class mp 
+      {
+         @SuppressWarnings("unused")
+         @MessageHandler
+         public void handle(GoodMessage string) {}
+         
+         @SuppressWarnings("unused")
+         @Start
+         public void startMethod() {}
+         
+         @SuppressWarnings("unused")
+         @Evictable
+         public Object evict1(){ return null; }
+         
+      }
+      
+      cd.setMessageProcessorPrototype(new mp());
+      app.add(cd);
+      app.initialize();
+   }
+
+   @Test
+   public void testConfigMpWithGoodMPEvict() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      
+      @MessageProcessor
+      class mp 
+      {
+         @SuppressWarnings("unused")
+         @MessageHandler
+         public void handle(GoodMessage string) {}
+         
+         @SuppressWarnings("unused")
+         @Start
+         public void startMethod() {}
+         
+         @SuppressWarnings("unused")
+         @Evictable
+         public boolean evict1(Object arg){ return false; }
+         
+      }
+      
+      cd.setMessageProcessorPrototype(new mp());
       app.add(cd);
       app.initialize();
    }

@@ -21,6 +21,7 @@ import java.lang.reflect.Method;
 import java.util.Set;
 
 import com.nokia.dempsy.annotations.Activation;
+import com.nokia.dempsy.annotations.Evictable;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
@@ -44,6 +45,7 @@ public class LifecycleHelper
    private MethodHandle activationMethod;
    private MethodHandle passivationMethod;
    private Method outputMethod;
+   private MethodHandle evictableMethod;
    private AnnotatedMethodInvoker invocationMethods;
 
    public LifecycleHelper(Object prototype) throws ContainerException
@@ -73,6 +75,7 @@ public class LifecycleHelper
       }
       passivationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Passivation.class));
       outputMethod = AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Output.class);
+      evictableMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Evictable.class));
    }
 
    /**
@@ -158,6 +161,21 @@ public class LifecycleHelper
    {
       return (outputMethod != null) ? outputMethod.invoke(instance) : null;
    }
+   
+   /**
+    * Invokes the evictable method on the provided instance.
+    * If the evictable is not implemented, returns false.
+    * 
+    * @param instance
+    * @return
+    * @throws IllegalArgumentException
+    * @throws IllegalAccessException
+    * @throws InvocationTargetException
+    */
+   public boolean invokeEvictable(Object instance) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
+   {
+      return isEvictableSupported() ? (Boolean)evictableMethod.invoke(instance): false;
+   }
 
    /**
     * Determines whether the passed class matches the prototype's class.
@@ -181,6 +199,14 @@ public class LifecycleHelper
    public boolean isOutputSupported()
    {
       return outputMethod != null;
+   }
+   
+   /**
+    * Determines whether this MP provides an evictable method.
+    */
+   public boolean isEvictableSupported()
+   {
+      return evictableMethod.getMethod() != null;
    }
 
    /**
@@ -291,6 +317,11 @@ public class LifecycleHelper
       public Object invoke(Object instance) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
       {
          return this.invoke(instance, null, null);
+      }
+      
+      public Method getMethod()
+      {
+         return this.method;
       }
    }
 }
