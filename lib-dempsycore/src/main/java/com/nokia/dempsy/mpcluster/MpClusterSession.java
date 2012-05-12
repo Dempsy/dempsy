@@ -19,12 +19,23 @@ package com.nokia.dempsy.mpcluster;
 import com.nokia.dempsy.config.ClusterId;
 
 /**
- * <p>An {@link MpClusterSession} represents a session with the cluster
- * manager. In the case of a ZooKeeper implementation this represents
- * a ZooKeeper instance.</p>
+ * <p>An {@link MpClusterSession} represents a session with the cluster manager. 
+ * In the case of a ZooKeeper implementation this represents a ZooKeeper instance.</p>
  */
 public interface MpClusterSession<T, N>
 {
+   /**
+    * This will retrieve a reference to the {@link MpApplication} given the applicationId.
+    * See {@link MpCluster} for a description of how the entire store data store is structured.
+    * 
+    * @param applicationId is the id (or name) of the application you want to get the
+    * {@link MpApplication} reference to.
+    * @return the {@link MpApplication} reference for the given name/id
+    * @throws MpClusterException is thrown by the particular implementation when recoverable
+    * errors are detected.
+    */
+   public MpApplication<T, N> getApplication(String applicationId) throws MpClusterException;
+   
    /**
     * <p>This call will retrieve a reference to the {@link MpCluster} by the 
     * {@link ClusterId}. The underlying implementation may return the identical {@link MpCluster}

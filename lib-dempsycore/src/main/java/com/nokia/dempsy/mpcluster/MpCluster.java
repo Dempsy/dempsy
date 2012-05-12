@@ -35,7 +35,16 @@ import com.nokia.dempsy.config.ClusterId;
  * of an Mp container but it is possible. That choice is dependent on the MpCluster implementation
  * and its use within Dempsy.
  * 
- * See the ZookeeperCluster for an example where this isn't the case.
+ * <p>See the ZookeeperCluster for an example where this isn't the case.</p>
+ * 
+ * <p>In general the MpCluster functionality manages a distributed information store as a tree
+ * whose leaves are 4 levels deep:</p>
+ * 
+ *  <p><li>At the topmost level is the root '/.' Branches from the root are {@link MpApplication}s</li>
+ *  <li>Next is the application level. All branches from the application represent {@link MpCluster}s</li>
+ *  <li>Next is the cluster level. Cluster information stored at this level and all branches from here 
+ *  are individual {@link MpClusterSlot}s</li>
+ *  <li>Finally there is the {@link MpClusterSlot}. Information stored here is per-slot</li></p>
  */
 public interface MpCluster<T, N>
 {
@@ -88,5 +97,5 @@ public interface MpCluster<T, N>
     * @param watch
     */
    public void addWatcher(MpClusterWatcher watch);
-   
+      
 }

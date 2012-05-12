@@ -147,9 +147,16 @@ public class TestZookeeperClusterResilience
    @Test
    public void testNoServerOnStartup() throws Throwable
    {
+      // create a session factory
       ZookeeperSessionFactory<String, String> factory = new ZookeeperSessionFactory<String, String>("127.0.0.1:" + port,5000);
+      
+      // create a session from the session factory
       ZookeeperSession<String, String> session = (ZookeeperSession<String, String>)factory.createSession();
+      
+      // create a cluster from the session
       MpCluster<String, String> cluster = session.getCluster(new ClusterId(appname,"testNoServerOnStartup"));
+      
+      // hook a test watch to make sure that callbacks work correctly
       TestWatcher callback = new TestWatcher();
       cluster.addWatcher(callback);
       

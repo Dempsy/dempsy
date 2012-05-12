@@ -31,7 +31,9 @@ import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.mpcluster.MpApplication;
 import com.nokia.dempsy.mpcluster.MpCluster;
+import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
 import com.nokia.dempsy.router.Router.ClusterRouter;
@@ -94,6 +96,13 @@ public class TestRouterClusterManagement
 
          @Override
          public void stop() { }
+
+         @Override
+         public MpApplication<ClusterInformation, SlotInformation> getApplication(String applicationId) throws MpClusterException
+         {
+            // TODO Auto-generated method stub
+            return null;
+         }
       });
       routerFactory.initialize();
    }
