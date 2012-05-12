@@ -56,7 +56,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
 {
    private Logger logger = LoggerFactory.getLogger(ZookeeperSession.class);
    
-   protected AtomicReference<ZooKeeper> zk;
+   protected AtomicReference<ZooKeeper> zkref;
    private Map<ClusterId, ZookeeperCluster> cachedClusters = new HashMap<ClusterId, ZookeeperCluster>();
    protected long resetDelay = 500;
    protected String connectString;
@@ -66,8 +66,8 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
    {
       this.connectString = connectString;
       this.sessionTimeout = sessionTimeout;
-      this.zk = new AtomicReference<ZooKeeper>();
-      this.zk.set(makeZookeeperInstance(connectString,sessionTimeout));
+      this.zkref = new AtomicReference<ZooKeeper>();
+      this.zkref.set(makeZookeeperInstance(connectString,sessionTimeout));
    }
    
    /**
@@ -104,8 +104,8 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       AtomicReference<ZooKeeper> curZk;
       synchronized(this)
       {
-         curZk = zk;
-         zk = null; // this blows up any more usage
+         curZk = zkref;
+         zkref = null; // this blows up any more usage
       }
       Set<ZookeeperCluster> tmp = new HashSet<ZookeeperCluster>();
       synchronized(cachedClusters)
@@ -121,7 +121,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
    
    private List<String> getChildren(ZookeeperCluster cluster) throws MpClusterException
    {
-      ZooKeeper cur = zk.get();
+      ZooKeeper cur = zkref.get();
       try
       {
          return cur.getChildren(cluster.clusterPath.path, cluster);
@@ -147,9 +147,9 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       if (logger.isTraceEnabled())
          logger.trace("reestablished connection to " + connectString);
       
-      if (zk != null)
+      if (zkref != null)
       {
-         ZooKeeper last = zk.getAndSet(newZk);
+         ZooKeeper last = zkref.getAndSet(newZk);
          if (last != null)
          {
             try { last.close(); } catch (Throwable th) {}
@@ -186,15 +186,17 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
                }
                finally
                {
-                  if (newZk == null && zk != null) // if zk is null then we stopped so no point in continuing.
+                  if (newZk == null && zkref != null) // if zk is null then we stopped so no point in continuing.
                      // reschedule me.
                      scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
-                  else
-                     setNewZookeeper(newZk);
                }
 
-               if (newZk != null && zk != null)
+               // this is true if the reset worked and we're not in the process
+               // of shutting down.
+               if (newZk != null && zkref != null)
                {
+                  setNewZookeeper(newZk);
+
                   // now reset the watchers
                   Set<ZookeeperCluster> clustersToReset = new HashSet<ZookeeperCluster>();
                   synchronized(cachedClusters)
@@ -224,7 +226,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       }
       
       // set the root node
-      ZooKeeper cur = zk.get();
+      ZooKeeper cur = zkref.get();
       try 
       {
          Stat s = cur.exists(cluster.appPath.path,false);
@@ -350,8 +352,8 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
             {
                clearAllSlots(event);
 
-               if (zk != null)
-                  resetZookeeper(zk.get());
+               if (zkref != null)
+                  resetZookeeper(zkref.get());
             }
          }
          
@@ -427,7 +429,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
 
          private boolean join() throws MpClusterException
          {
-            ZooKeeper cur = zk.get();
+            ZooKeeper cur = zkref.get();
             try
             {
                cur.create(slotPath.path, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
@@ -460,7 +462,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
          {
             try
             {
-               zk.get().delete(slotPath.path,-1);
+               zkref.get().delete(slotPath.path,-1);
             }
             catch(KeeperException e)
             {
@@ -516,7 +518,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       ObjectInputStream is = null;
       try
       {
-         byte[] ret = zk.get().getData(path.path, true, null);
+         byte[] ret = zkref.get().getData(path.path, true, null);
          
          if (ret != null && ret.length > 0)
          {
@@ -557,7 +559,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
             buf = bos.toByteArray();
          }
          
-         zk.get().setData(path.path, buf, -1);
+         zkref.get().setData(path.path, buf, -1);
       }
       catch (RuntimeException e) { throw e;} 
       catch (Exception e) 

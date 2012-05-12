@@ -180,7 +180,7 @@ public class TestZookeeperClusterResilience
          // now we should be all happycakes ... but with the server running lets sever the connection
          // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
          // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
-         ZooKeeper origZk = session.zk.get();
+         ZooKeeper origZk = session.zkref.get();
          long sessionid = origZk.getSessionId();
          callback.called.set(false); // reset the callbacker ...
          ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
@@ -263,7 +263,7 @@ public class TestZookeeperClusterResilience
          // cause a problem with the server running lets sever the connection
          // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
          // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
-         ZooKeeper origZk = session.zk.get();
+         ZooKeeper origZk = session.zkref.get();
          long sessionid = origZk.getSessionId();
          ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
          
