@@ -22,9 +22,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -34,10 +38,21 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.messagetransport.tcp.TcpTransport;
+import com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda;
 import com.nokia.dempsy.mpcluster.MpCluster;
 import com.nokia.dempsy.mpcluster.MpClusterException;
+import com.nokia.dempsy.mpcluster.MpClusterSession;
+import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
 import com.nokia.dempsy.mpcluster.MpClusterWatcher;
+import com.nokia.dempsy.router.ClusterInformation;
+import com.nokia.dempsy.router.DefaultRoutingStrategy;
+import com.nokia.dempsy.router.SlotInformation;
+import com.nokia.dempsy.router.SpecificClusterCheck;
+import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 /**
  * The goal here is to make sure the cluster is always consistent even if it looses 
@@ -67,6 +82,19 @@ public class TestZookeeperClusterResilience
          called.set(true);
       }
       
+   }
+   
+   private interface Condition<T>
+   {
+      public boolean conditionMet(T o);
+   }
+
+   public static <T> boolean poll(long timeoutMillis, T userObject, Condition<T> condition) throws InterruptedException
+   {
+      for (long endTime = System.currentTimeMillis() + timeoutMillis;
+            endTime > System.currentTimeMillis() && !condition.conditionMet(userObject);)
+         Thread.sleep(1);
+      return condition.conditionMet(userObject);
    }
    
    @Test
@@ -231,6 +259,209 @@ public class TestZookeeperClusterResilience
       }
    }
    
+   @Test
+   public void testSessionExpired() throws Throwable
+   {
+      // now lets startup the server.
+      ZookeeperTestServer server = null;
+      ZookeeperSession<String, String> session = null;
+      final AtomicLong processCount = new AtomicLong(0);
+      
+      try
+      {
+         server = new ZookeeperTestServer();
+         server.start();
+
+         session =  new ZookeeperSession<String, String>("127.0.0.1:" + port,5000) {
+            @Override
+            public ZookeeperCluster makeZookeeperCluster(ClusterId clusterId) throws MpClusterException
+            {
+               return new ZookeeperCluster(clusterId){
+                  @Override
+                  public void process(WatchedEvent event)
+                  {
+                     processCount.incrementAndGet();
+                     super.process(event);
+                  }
+               };
+            }
+         };
+         
+         assertEquals(0,processCount.intValue()); // no calls yet
+
+         // This will create the cluster itself and so will call process.
+         MpCluster<String, String> cluster = session.getCluster(new ClusterId(appname,"testSessionExpired"));
+         TestWatcher callback = new TestWatcher();
+         cluster.addWatcher(callback);
+
+         assertNotNull(cluster);
+
+         // now the count should reach 1
+         assertTrue(poll(5000,null,new Condition<Object>() {  @Override public boolean conditionMet(Object o) {  return processCount.intValue() == 1; } }));
+
+         // now see if the cluster works.
+         cluster.getActiveSlots();
+         
+         // cause a problem with the server running lets sever the connection
+         // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
+         // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
+         ZooKeeper origZk = session.zkref.get();
+         long sessionid = origZk.getSessionId();
+         ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
+         
+         // now the count should still be 1
+         Thread.sleep(10);
+         assertEquals(1,processCount.intValue());
+         
+         // and the callback wasn't called.
+         assertFalse(callback.called.get());
+         
+         killer.close(); // tricks the server into expiring the other session
+         
+         // now I should get a process call
+         assertTrue(poll(5000,null,new Condition<Object>() {  @Override public boolean conditionMet(Object o) {  return processCount.intValue() > 1; } }));
+         
+         // and eventually a callback
+         assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
+      }
+      finally
+      {
+         if (server != null)
+            server.shutdown();
+         
+         if (session != null)
+            session.stop();
+      }
+   }
+   
+   private static Dempsy getDempsyFor(ClusterId clusterId, ApplicationDefinition ad) throws Throwable
+   {
+      //------------------------------------------------------------------------------
+      // here is a complete non-spring, non-DI Dempsy instantiation
+      //------------------------------------------------------------------------------
+      List<ApplicationDefinition> ads = new ArrayList<ApplicationDefinition>();
+      ads.add(ad);
+      
+      Dempsy dempsy = new Dempsy();
+      dempsy.setApplicationDefinitions(ads);
+      dempsy.setClusterCheck(new SpecificClusterCheck(clusterId));
+      dempsy.setDefaultRoutingStrategy(new DefaultRoutingStrategy(20, 1));
+      dempsy.setDefaultSerializer(new JavaSerializer<Object>());
+      dempsy.setDefaultStatsCollectorFactory(new StatsCollectorFactoryCoda());
+      dempsy.setDefaultTransport(new TcpTransport());
+      //------------------------------------------------------------------------------
+
+      return dempsy;
+   }
+   
+   @SuppressWarnings("rawtypes")
+   @Test
+   public void testSessionExpiredWithFullApp() throws Throwable
+   {
+      // now lets startup the server.
+      ZookeeperTestServer server = null;
+      final AtomicReference<ZookeeperSession> sessionRef = new AtomicReference<ZookeeperSession>();
+      ZookeeperSession session = null;
+      final AtomicLong processCount = new AtomicLong(0);
+      
+      try
+      {
+         server = new ZookeeperTestServer();
+         server.start();
+
+         session = new ZookeeperSession("127.0.0.1:" + port,5000) {
+            @Override
+            public ZookeeperCluster makeZookeeperCluster(ClusterId clusterId) throws MpClusterException
+            {
+               return new ZookeeperCluster(clusterId){
+                  @Override
+                  public void process(WatchedEvent event)
+                  {
+//                     System.out.println("" + event);
+                     processCount.incrementAndGet();
+                     super.process(event);
+                  }
+               };
+            }
+         };
+         sessionRef.set(session);
+
+         final FullApplication app = new FullApplication();
+         ApplicationDefinition ad = app.getTopology();
+
+         assertEquals(0,processCount.intValue()); // no calls yet
+         Dempsy[] dempsy = new Dempsy[3];
+
+         dempsy[0] = getDempsyFor(new ClusterId(FullApplication.class.getSimpleName(),FullApplication.MyAdaptor.class.getSimpleName()),ad);
+         dempsy[0].setClusterSessionFactory(new ZookeeperSessionFactory<ClusterInformation, SlotInformation>("127.0.0.1:" + port,5000));
+
+         dempsy[1] = getDempsyFor(new ClusterId(FullApplication.class.getSimpleName(),FullApplication.MyMp.class.getSimpleName()),ad);
+         dempsy[1].setClusterSessionFactory(new ZookeeperSessionFactory<ClusterInformation, SlotInformation>("127.0.0.1:" + port,5000));
+
+         dempsy[2] = getDempsyFor(new ClusterId(FullApplication.class.getSimpleName(),FullApplication.MyRankMp.class.getSimpleName()),ad);
+//         dempsy[2].setClusterSessionFactory(new ZookeeperSessionFactory<ClusterInformation, SlotInformation>("127.0.0.1:" + port,5000));
+         
+         dempsy[2].setClusterSessionFactory(new MpClusterSessionFactory<ClusterInformation, SlotInformation>()
+         {
+            @SuppressWarnings("unchecked")
+            @Override
+            public MpClusterSession<ClusterInformation, SlotInformation> createSession() throws MpClusterException
+            {
+               return sessionRef.get();
+            }
+         });
+
+         // start everything in reverse order
+         for (int i = 2; i >= 0; i--)
+            dempsy[i].start();
+         
+         // make sure the final count is incrementing
+         long curCount = app.finalMessageCount.get();
+         assertTrue(poll(30000,curCount,new Condition<Long>(){
+
+            @Override
+            public boolean conditionMet(Long o)
+            {
+               return app.finalMessageCount.get() > (o + 100L);
+            }
+            
+         }));
+         
+         // cause a problem with the server running lets sever the connection
+         // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
+         // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
+         ZooKeeper origZk = (ZooKeeper)session.zkref.get();
+         long sessionid = origZk.getSessionId();
+         ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
+         
+         killer.close(); // tricks the server into expiring the other session
+         
+         Thread.sleep(300);
+         
+         // make sure the final count is STILL incrementing
+         curCount = app.finalMessageCount.get();
+         assertTrue(poll(30000,curCount,new Condition<Long>(){
+
+            @Override
+            public boolean conditionMet(Long o)
+            {
+               return app.finalMessageCount.get() > (o + 100L);
+            }
+            
+         }));
+
+      }
+      finally
+      {
+         if (server != null)
+            server.shutdown();
+         
+         if (session != null)
+            session.stop();
+      }
+   }
+
+
    private AtomicBoolean forceIOException = new AtomicBoolean(false);
    private CountDownLatch forceIOExceptionLatch = new CountDownLatch(5);
    
@@ -284,11 +515,12 @@ public class TestZookeeperClusterResilience
          
          // now in the background it should be retrying but hosed.
          assertTrue(forceIOExceptionLatch.await(baseTimeoutMillis * 3, TimeUnit.MILLISECONDS));
-         
-         // wait for the callback
-         for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && !callback.called.get();)
-            Thread.sleep(1);
-         assertTrue(callback.called.get());
+
+// There is no longer a callback on a disconnect....only a callback when the reconnect is successful         
+//         // wait for the callback
+//         for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && !callback.called.get();)
+//            Thread.sleep(1);
+//         assertTrue(callback.called.get());
          
          // TODO: do I really meed this sleep?
          Thread.sleep(1000);
