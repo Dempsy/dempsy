@@ -81,6 +81,14 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
    {
       return new ZooKeeper(connectString, sessionTimeout, new ZkWatcher());
    }
+   
+   /**
+    * This is defined here to be overridden in a test.
+    */
+   protected ZookeeperCluster makeZookeeperCluster(ClusterId clusterId) throws MpClusterException
+   {
+      return new ZookeeperCluster(clusterId);
+   }
 
    @Override
    public MpApplication<T, N> getApplication(String applicationId) throws MpClusterException
@@ -109,7 +117,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
          if (cluster == null)
          {
             // make sure the paths are set up
-            cluster = new ZookeeperCluster(clusterId);
+            cluster = makeZookeeperCluster(clusterId);
             initializeCluster(cluster,false);
             cachedClusters.put(clusterId, cluster);
          }
@@ -361,14 +369,18 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
          // event = null means it was called explicitly
          if (logger.isDebugEnabled() && event != null)
             logger.debug("CALLBACK:MpContainerCluster for " + idForLogging + " Event:" + event);
-         
+
+         boolean kickOffProcess = true;
          if (event != null)
          {
             if (event.getType() == Watcher.Event.EventType.NodeChildrenChanged)
                clearState(event);
 
+            // when we're not connected we want to reset
             if (event.getState() != KeeperState.SyncConnected)
             {
+               kickOffProcess = false; // no reason to execute process if we're going to reset zookeeper.
+               
                clearState(event);
 
                if (zkref != null)
@@ -376,10 +388,13 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
             }
          }
 
-         synchronized(processLock)
+         if (kickOffProcess)
          {
-            for(MpClusterWatcher watch: watchers)
-               watch.process();
+            synchronized(processLock)
+            {
+               for(MpClusterWatcher watch: watchers)
+                  watch.process();
+            }
          }
       }
    }
@@ -414,7 +429,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       private ZookeeperPath clusterPath;
       private ZookeeperPath appPath;
       
-      private ZookeeperCluster(ClusterId clusterId) throws MpClusterException
+      protected ZookeeperCluster(ClusterId clusterId) throws MpClusterException
       {
          super(clusterId.toString());
          this.clusterId = clusterId;
