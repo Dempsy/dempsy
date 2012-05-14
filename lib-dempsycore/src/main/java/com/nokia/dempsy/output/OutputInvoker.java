@@ -17,16 +17,18 @@
 package com.nokia.dempsy.output;
 
 /**
- *  <p>This is a Server side interface for the Output abstraction. 
- *  It enables the client application[s] to invoke the @Output method call for all MPs</p>
- *  It's implementor class would get hold of container and call @Output method for all MPs
+ * This is a server side interface to invoke the @Output methods of MPs.
+ * Dempsy will provide an implementation of this interface. During startup, Dempsy will set an instance of OutputInovker to
+ * the client output scheduler. Using this instance, client application will  call @Output method of MPs.
+ * 
  */
 
-public interface OutputInvoker
-{
-	/**
-	 *  This method is invoked by client application to execute @Output method on all MPs.
-	 *   
-	 */
-	  public void invokeOutput();
+public interface OutputInvoker {
+
+  /**
+   * This method will be called by client application to invoke the @Output methods of MPs.
+   * Dempsy will execute the @Output method of all MPs. During the Output execution, MP will not receive any incoming message. 
+   */
+  public void invokeOutput();
 }
+
