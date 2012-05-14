@@ -198,7 +198,7 @@ public class TestFullApp
 
          // ok ... so now we have stuff going all the way through. let's kick
          // the middle Mp's zookeeper cluster and see what happens.
-         ZooKeeper origZk = zookeeperCluster.zk.get();
+         ZooKeeper origZk = zookeeperCluster.zkref.get();
          long sessionid = origZk.getSessionId();
          ZooKeeper killer = new ZooKeeper(System.getProperty("zk_connect"),5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
          killer.close(); // tricks the server into expiring the other session
@@ -313,7 +313,7 @@ public class TestFullApp
 
          // ok ... so now we have stuff going all the way through. let's kick
          // the middle Mp's zookeeper cluster and see what happens.
-         ZooKeeper origZk = zookeeperCluster.zk.get();
+         ZooKeeper origZk = zookeeperCluster.zkref.get();
          origZk.close(); // this should kill it.
          
          // but just to be sure actually stop the node.

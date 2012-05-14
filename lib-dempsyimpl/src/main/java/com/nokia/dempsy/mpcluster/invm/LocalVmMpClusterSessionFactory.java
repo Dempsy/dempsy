@@ -18,7 +18,9 @@ package com.nokia.dempsy.mpcluster.invm;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
@@ -28,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.mpcluster.MpApplication;
 import com.nokia.dempsy.mpcluster.MpCluster;
 import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
@@ -44,7 +47,9 @@ import com.nokia.dempsy.mpcluster.MpClusterWatcher;
 public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFactory<T, N>
 {
    protected ConcurrentHashMap<ClusterId,ConcurrentHashMap<String, MpClusterSlot<N>>> nodes = new ConcurrentHashMap<ClusterId, ConcurrentHashMap<String, MpClusterSlot<N>>>();
+   protected ConcurrentHashMap<String,MpApplication<T, N>> apps = new ConcurrentHashMap<String,MpApplication<T, N>>();
    protected ConcurrentHashMap<ClusterId,AtomicReference<T>> clusterData = new ConcurrentHashMap<ClusterId, AtomicReference<T>>();
+   private ConcurrentHashMap<ClusterId, MpCluster<T, N>> cache = new ConcurrentHashMap<ClusterId, MpCluster<T, N>>();
 
    private static Logger logger = LoggerFactory.getLogger(LocalVmMpClusterSessionFactory.class);
 
@@ -60,7 +65,6 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
    
    public class LocalVmMpSession implements MpClusterSession<T, N>
    {
-      private ConcurrentHashMap<ClusterId, LocalVmMpCluster> cache = new ConcurrentHashMap<ClusterId, LocalVmMpCluster>();
       private volatile boolean isStopped = false;
       
       @Override
@@ -69,26 +73,64 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
          if (!isStopped)
          {
             LocalVmMpCluster cluster = new LocalVmMpCluster(clusterId); // potential new one
-            LocalVmMpCluster ret = cache.putIfAbsent(clusterId, cluster); // ret == null if this was added, otherwise ret is what was already in the map
+            LocalVmMpCluster ret = (LocalVmMpCluster)cache.putIfAbsent(clusterId, cluster); // ret == null if this was added, otherwise ret is what was already in the map
+            if (ret == null)
+            {
+               // then we're adding a new cluster.
+               callUpdateWatchersForApplication(clusterId.getApplicationName());
+            }
             return ret == null ? cluster : ret; // if cluster was newly added (ret == null) then return it. Otherwise return what was already cached.
          }
          
          throw new MpClusterException("getCluster() with a cluster id of " + SafeString.valueOf(clusterId) +
                " was called on a stopped session.");
-        
       }
       
       public void stop()
       {
          isStopped = true;
          
-         for (LocalVmMpCluster cluster : cache.values())
-            cluster.stop();
+         for (MpCluster<T, N> cluster : cache.values())
+            ((LocalVmMpCluster)cluster).stop();
       }
+      
+      public class LocalVmMpApplication implements MpApplication<T,N>
+      {
+         private List<MpClusterWatcher> watchers = new ArrayList<MpClusterWatcher>();
+
+         @Override
+         public Collection<MpCluster<T, N>> getActiveClusters()
+         {
+            Set<MpCluster<T, N>> ret = new HashSet<MpCluster<T, N>>();
+            ret.addAll(cache.values());
+            return ret;
+         }
+
+         @Override
+         public synchronized void addWatcher(MpClusterWatcher watch)
+         {
+            if(!watchers.contains(watch))
+               watchers.add(watch);
+         }
+      }
+      
+      public MpApplication<T, N> getApplication(String applicationId) throws MpClusterException
+      {
+         if (!isStopped)
+         {
+            LocalVmMpApplication app = new LocalVmMpApplication(); // potential new one
+            LocalVmMpApplication ret = (LocalVmMpApplication)apps.putIfAbsent(applicationId, app); // ret == null if this was added, otherwise ret is what was already in the map
+            return ret == null ? app : ret; // if cluster was newly added (ret == null) then return it. Otherwise return what was already cached.
+         }
+         
+         throw new MpClusterException("getApplication() with a application id of " + applicationId +
+               " was called on a stopped session.");
+      }
+
       
       public class LocalVmMpCluster implements MpCluster<T, N>
       {
-         private List<MpClusterWatcher<T, N>> watchers = new ArrayList<MpClusterWatcher<T, N>>();
+         private List<MpClusterWatcher> watchers = new ArrayList<MpClusterWatcher>();
          private ClusterId clusterId;
          private Object processLock = new Object();
          
@@ -101,7 +143,7 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
          }
 
          @Override
-         public synchronized void addWatcher(MpClusterWatcher<T, N> watch)
+         public synchronized void addWatcher(MpClusterWatcher watch)
          {
             if(!watchers.contains(watch))
                watchers.add(watch);
@@ -197,32 +239,47 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
          
       } // end cluster definition
       
-      private final void callUpdateWatchersForCluster(ClusterId clusterId) { updateWatchers(this, clusterId); }
-
+      private final void callUpdateWatchersForCluster(ClusterId clusterId) { updateClusterWatchers(clusterId); }
+      
+      private final void callUpdateWatchersForApplication(String applicationId)
+      {
+         LocalVmMpSession.LocalVmMpApplication application = (LocalVmMpApplication)apps.get(applicationId);
+         if (application != null)
+         {
+            synchronized(application)
+            {
+               for(MpClusterWatcher watcher: application.watchers)
+               {
+                  try
+                  {
+                     watcher.process();
+                  }
+                  catch (RuntimeException e)
+                  {
+                     logger.error("Failed to handle process for watcher " + SafeString.objectDescription(watcher),e);
+                  }
+               }
+            }
+         }
+      }
    } // end session definition
 
-   protected void updateWatchers(LocalVmMpSession fromSession, ClusterId clusterId)
+   protected void updateClusterWatchers(ClusterId clusterId)
    {
-      for (LocalVmMpSession session : currentSessions)
+      LocalVmMpSession.LocalVmMpCluster cluster = (LocalVmMpSession.LocalVmMpCluster)cache.get(clusterId);
+      if (cluster != null)
       {
-//         if (session != fromSession)
+         synchronized(cluster.processLock)
          {
-            LocalVmMpSession.LocalVmMpCluster cluster = session.cache.get(clusterId);
-            if (cluster != null)
+            for(MpClusterWatcher watcher: cluster.watchers)
             {
-               synchronized(cluster.processLock)
+               try
                {
-                  for(MpClusterWatcher<T, N> watcher: cluster.watchers)
-                  {
-                     try
-                     {
-                        watcher.process(cluster);
-                     }
-                     catch (RuntimeException e)
-                     {
-                        logger.error("Failed to handle process for watcher " + SafeString.objectDescription(watcher),e);
-                     }
-                  }
+                  watcher.process();
+               }
+               catch (RuntimeException e)
+               {
+                  logger.error("Failed to handle process for watcher " + SafeString.objectDescription(watcher),e);
                }
             }
          }

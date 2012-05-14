@@ -272,7 +272,7 @@ public class Router implements Dispatcher
     * This class routes messages within a particular cluster. It is protected for test 
     * access only. Otherwise it would be private.
     */
-   protected class ClusterRouter implements MpClusterWatcher<ClusterInformation,SlotInformation>
+   protected class ClusterRouter implements MpClusterWatcher
    {
       private Serializer<Object> serializer;
       private ClusterId clusterId;
@@ -300,7 +300,7 @@ public class Router implements Dispatcher
       }
       
       @Override
-      public void process(MpCluster<ClusterInformation,SlotInformation> cluster)
+      public void process()
       {
          // it appears that the cluster configuration has changed.
          // we need to reset up the distributor

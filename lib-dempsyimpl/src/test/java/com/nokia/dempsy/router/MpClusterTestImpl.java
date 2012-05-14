@@ -71,7 +71,7 @@ public class MpClusterTestImpl implements MpCluster<ClusterInformation, SlotInfo
    public MpClusterTestImpl() { nodes.add(new MpClusterSlotTestImpl("test")); }
 	
 	@Override
-	public void addWatcher(MpClusterWatcher<ClusterInformation,SlotInformation> watch) { }
+	public void addWatcher(MpClusterWatcher watch) { }
 
 	@Override
 	public Collection<MpClusterSlot<SlotInformation>> getActiveSlots() { return this.nodes; }
