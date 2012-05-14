@@ -20,10 +20,10 @@
                <property name="messageProcessorPrototype">
                   <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
                </property>
-               <property name="outputSchedule">
-                  <bean class="com.nokia.dempsy.config.OutputSchedule">
-                    <constructor-arg index="0" type="long" value="100"/>
-                    <constructor-arg index="1" type="java.lang.String" value="MILLISECONDS" />
+               <property name="outputExecuter">
+                  <bean class="com.nokia.dempsy.output.RelativeOutputSchedule">
+                        <constructor-arg index="0" value="1" />
+                        <constructor-arg index="1" value="SECONDS" type="java.util.concurrent.TimeUnit" />
                   </bean>
                </property>
             </bean>
