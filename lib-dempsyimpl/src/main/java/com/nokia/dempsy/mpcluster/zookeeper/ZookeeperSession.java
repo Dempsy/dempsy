@@ -59,6 +59,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
    private Logger logger = LoggerFactory.getLogger(ZookeeperSession.class);
    
    protected volatile AtomicReference<ZooKeeper> zkref;
+   private volatile boolean isRunning = true;
    private Map<ClusterId, ZookeeperCluster> cachedClusters = new HashMap<ClusterId, ZookeeperCluster>();
    private Map<String, ZookeeperApplication> cachedApps = new HashMap<String, ZookeeperApplication>();
    protected long resetDelay = 500;
@@ -132,6 +133,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       AtomicReference<ZooKeeper> curZk;
       synchronized(this)
       {
+         isRunning = false;
          curZk = zkref;
          zkref = null; // this blows up any more usage
       }
@@ -149,22 +151,27 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
    
    private List<String> getChildren(ZookeeperPath path, Watcher watcher) throws MpClusterException
    {
-      ZooKeeper cur = zkref.get();
-      try
+      if (isRunning)
       {
-         return cur.getChildren(path.path, watcher);
+         ZooKeeper cur = zkref.get();
+         try
+         {
+            return cur.getChildren(path.path, watcher);
+         }
+         catch (KeeperException e) 
+         {
+            resetZookeeper(cur);
+            throw new MpClusterException("Failed to get active slots (" + path + 
+                  ") on provided zookeeper instance.",e);
+         } 
+         catch (InterruptedException e) 
+         {
+            throw new MpClusterException("Failed to get active slots (" + path + 
+                  ") on provided zookeeper instance.",e);
+         }
       }
-      catch (KeeperException e) 
-      {
-         resetZookeeper(cur);
-         throw new MpClusterException("Failed to get active slots (" + path + 
-               ") on provided zookeeper instance.",e);
-      } 
-      catch (InterruptedException e) 
-      {
-         throw new MpClusterException("Failed to get active slots (" + path + 
-               ") on provided zookeeper instance.",e);
-      }
+      throw new MpClusterException("getChildren called on stopped MpCluster (" + path + 
+            ") on provided zookeeper instance.");
    }
    
    private synchronized void setNewZookeeper(ZooKeeper newZk)
@@ -172,7 +179,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       if (logger.isTraceEnabled())
          logger.trace("reestablished connection to " + connectString);
       
-      if (zkref != null)
+      if (isRunning)
       {
          ZooKeeper last = zkref.getAndSet(newZk);
          if (last != null)
@@ -216,14 +223,14 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
                }
                finally
                {
-                  if (newZk == null && zkref != null) // if zk is null then we stopped so no point in continuing.
+                  if (newZk == null && isRunning)
                      // reschedule me.
                      scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
                }
 
                // this is true if the reset worked and we're not in the process
                // of shutting down.
-               if (newZk != null && zkref != null)
+               if (newZk != null && isRunning)
                {
                   // we want the setNewZookeeper and the clearing of the
                   // beingReset flag to be atomic so future failures that result
@@ -282,7 +289,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       }
       catch (KeeperException e) 
       {
-         logger.error("Failed to create the root node (" + path + ") on provided zookeeper instance.",e);
+         logger.warn("Failed to create the root node (" + path + ") on provided zookeeper instance.",e);
          resetZookeeper(cur);
       } 
       catch (InterruptedException e) 
@@ -296,9 +303,8 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
    private void initializeApplication(ZookeeperApplication application)
    {
       ZooKeeper cur = null;
-      try { cur = zkref.get();}
-      // this means zk has been set to null which means we're stopping so just allow it to stop
-      catch (NullPointerException npe) { }
+      if (isRunning)
+         cur = zkref.get();
 
       if (cur != null)
       {
@@ -316,9 +322,8 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
       }
 
       ZooKeeper cur = null;
-      try { cur = zkref.get();}
-      // this means zk has been set to null which means we're stopping so just allow it to stop
-      catch (NullPointerException npe) { }
+      if (isRunning)
+         cur = zkref.get();
 
       if (cur != null)
       {
@@ -383,7 +388,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
                
                clearState(event);
 
-               if (zkref != null)
+               if (isRunning)
                   resetZookeeper(zkref.get());
             }
          }
@@ -521,51 +526,63 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
 
          private boolean join() throws MpClusterException
          {
-            ZooKeeper cur = zkref.get();
-            try
+            if (isRunning)
             {
-               cur.create(slotPath.path, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
-               return true;
+               ZooKeeper cur = zkref.get();
+               try
+               {
+                  cur.create(slotPath.path, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
+                  return true;
+               }
+               catch(KeeperException.NodeExistsException e)
+               {
+                  if(logger.isDebugEnabled())
+                     logger.debug("Failed to join the cluster " + clusterId + 
+                           ". Couldn't create the node within zookeeper using \"" + slotPath + "\"");
+                  return false;
+               }
+               catch(KeeperException e)
+               {
+                  resetZookeeper(cur);
+                  throw new MpClusterException("Zookeeper failed while trying to join the cluster " + clusterId + 
+                        ". Couldn't create the node within zookeeper using \"" + slotPath + "\"",e);
+               }
+               catch(InterruptedException e)
+               {
+                  resetZookeeper(cur);
+                  throw new MpClusterException("Interrupted while trying to join the cluster " + clusterId + 
+                        ". Couldn't create the node within zookeeper using \"" + slotPath + "\"",e);
+               }
             }
-            catch(KeeperException.NodeExistsException e)
-            {
-               if(logger.isDebugEnabled())
-                  logger.debug("Failed to join the cluster " + clusterId + 
-                        ". Couldn't create the node within zookeeper using \"" + slotPath + "\"");
-               return false;
-            }
-            catch(KeeperException e)
-            {
-               resetZookeeper(cur);
-               throw new MpClusterException("Zookeeper failed while trying to join the cluster " + clusterId + 
-                     ". Couldn't create the node within zookeeper using \"" + slotPath + "\"",e);
-            }
-            catch(InterruptedException e)
-            {
-               resetZookeeper(cur);
-               throw new MpClusterException("Interrupted while trying to join the cluster " + clusterId + 
-                     ". Couldn't create the node within zookeeper using \"" + slotPath + "\"",e);
-            }
+            
+            throw new MpClusterException("join called on stopped MpClusterSlot (" + slotPath + 
+                  ") on provided zookeeper instance.");
 
          }
 
          @Override
          public synchronized void leave() throws MpClusterException
          {
-            try
+            if (isRunning)
             {
-               zkref.get().delete(slotPath.path,-1);
+               try
+               {
+                  zkref.get().delete(slotPath.path,-1);
+               }
+               catch(KeeperException e)
+               {
+                  throw new MpClusterException("Failed to leave the cluster " + clusterId.getApplicationName() + 
+                        ". Couldn't delete the node within zookeeper using \"" + slotPath + "\"",e);
+               }
+               catch(InterruptedException e)
+               {
+                  throw new MpClusterException("Interrupted while trying to leave the cluster " + clusterId.getApplicationName() + 
+                        ". Couldn't delete the node within zookeeper using \"" + slotPath + "\"",e);
+               }
             }
-            catch(KeeperException e)
-            {
-               throw new MpClusterException("Failed to leave the cluster " + clusterId.getApplicationName() + 
-                     ". Couldn't delete the node within zookeeper using \"" + slotPath + "\"",e);
-            }
-            catch(InterruptedException e)
-            {
-               throw new MpClusterException("Interrupted while trying to leave the cluster " + clusterId.getApplicationName() + 
-                     ". Couldn't delete the node within zookeeper using \"" + slotPath + "\"",e);
-            }
+            else
+               throw new MpClusterException("leave called on stopped MpClusterSlot (" + slotPath + 
+                     ") on provided zookeeper instance.");
          }
          
          public String toString() { return slotPath.toString(); }
@@ -612,60 +629,67 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
    
    private Object readInfoFromPath(ZookeeperPath path) throws MpClusterException
    {
-      ObjectInputStream is = null;
-      try
+      if (isRunning)
       {
-         byte[] ret = zkref.get().getData(path.path, true, null);
-         
-         if (ret != null && ret.length > 0)
+         ObjectInputStream is = null;
+         try
          {
-            is = new ObjectInputStream(new ByteArrayInputStream(ret));
-            return is.readObject();
+            byte[] ret = zkref.get().getData(path.path, true, null);
+
+            if (ret != null && ret.length > 0)
+            {
+               is = new ObjectInputStream(new ByteArrayInputStream(ret));
+               return is.readObject();
+            }
+            return null;
          }
-         return null;
+         // this is an indication that the node has disappeared since we retrieved 
+         // this MpContainerClusterNode
+         catch (KeeperException.NoNodeException e) { return null; }
+         catch (RuntimeException e) { throw e; } 
+         catch (Exception e) 
+         {
+            throw new MpClusterException("Failed to get node information for (" + path + ").",e);
+         }
+         finally
+         {
+            IOUtils.closeQuietly(is);
+         }
       }
-      // this is an indication that the node has disappeared since we retrieved 
-      // this MpContainerClusterNode
-      catch (KeeperException.NoNodeException e) { return null; }
-      catch (RuntimeException e) { throw e; } 
-      catch (Exception e) 
-      {
-         throw new MpClusterException("Failed to get node information for (" + path + ").",e);
-      }
-      finally
-      {
-         IOUtils.closeQuietly(is);
-      }
+      return null;
    }
    
    private void setInfoToPath(ZookeeperPath path, Object info) throws MpClusterException
    {
-      ObjectOutputStream os = null;
-      try
+      if (isRunning)
       {
-         byte[] buf = null;
-         if (info != null)
+         ObjectOutputStream os = null;
+         try
          {
-            // Serialize to a byte array
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            os = new ObjectOutputStream(bos);
-            os.writeObject(info);
-            os.close(); // flush
+            byte[] buf = null;
+            if (info != null)
+            {
+               // Serialize to a byte array
+               ByteArrayOutputStream bos = new ByteArrayOutputStream();
+               os = new ObjectOutputStream(bos);
+               os.writeObject(info);
+               os.close(); // flush
 
-            // Get the bytes of the serialized object
-            buf = bos.toByteArray();
+               // Get the bytes of the serialized object
+               buf = bos.toByteArray();
+            }
+
+            zkref.get().setData(path.path, buf, -1);
          }
-         
-         zkref.get().setData(path.path, buf, -1);
-      }
-      catch (RuntimeException e) { throw e;} 
-      catch (Exception e) 
-      {
-         throw new MpClusterException("Failed to get node information for (" + path + ").",e);
-      }
-      finally
-      {
-         IOUtils.closeQuietly(os);
+         catch (RuntimeException e) { throw e;} 
+         catch (Exception e) 
+         {
+            throw new MpClusterException("Failed to get node information for (" + path + ").",e);
+         }
+         finally
+         {
+            IOUtils.closeQuietly(os);
+         }
       }
    }
 

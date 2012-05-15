@@ -22,8 +22,8 @@
                </property>
                <property name="outputExecuter">
                   <bean class="com.nokia.dempsy.output.RelativeOutputSchedule">
-                        <constructor-arg index="0" value="1" />
-                        <constructor-arg index="1" value="SECONDS" type="java.util.concurrent.TimeUnit" />
+                        <constructor-arg index="0" value="100" />
+                        <constructor-arg index="1" value="MILLISECONDS" type="java.util.concurrent.TimeUnit" />
                   </bean>
                </property>
             </bean>
