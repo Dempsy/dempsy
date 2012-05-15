@@ -266,6 +266,8 @@ public class TestZookeeperClusterResilience
       ZookeeperTestServer server = null;
       ZookeeperSession<String, String> session = null;
       final AtomicLong processCount = new AtomicLong(0);
+      final AtomicReference<CountDownLatch> processFinishLatch = new AtomicReference<CountDownLatch>();
+      processFinishLatch.set(new CountDownLatch(1));
       
       try
       {
@@ -282,6 +284,8 @@ public class TestZookeeperClusterResilience
                   {
                      processCount.incrementAndGet();
                      super.process(event);
+                     if (processFinishLatch.get() != null)
+                        processFinishLatch.get().countDown();
                   }
                };
             }
@@ -291,13 +295,19 @@ public class TestZookeeperClusterResilience
 
          // This will create the cluster itself and so will call process.
          MpCluster<String, String> cluster = session.getCluster(new ClusterId(appname,"testSessionExpired"));
-         TestWatcher callback = new TestWatcher();
-         cluster.addWatcher(callback);
-
-         assertNotNull(cluster);
 
          // now the count should reach 1
          assertTrue(poll(5000,null,new Condition<Object>() {  @Override public boolean conditionMet(Object o) {  return processCount.intValue() == 1; } }));
+         TestWatcher callback = new TestWatcher();
+         
+         // wait until the process call is actually finished ...
+         assertTrue(processFinishLatch.get().await(5, TimeUnit.SECONDS));
+         
+         // ... before adding the watcher. There's a race condition (without the latch)
+         // where the watcher could get added but the process loop is still running.
+         cluster.addWatcher(callback);
+
+         assertNotNull(cluster);
 
          // now see if the cluster works.
          cluster.getActiveSlots();
