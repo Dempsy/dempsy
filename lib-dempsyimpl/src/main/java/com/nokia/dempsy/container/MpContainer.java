@@ -361,12 +361,8 @@ public class MpContainer implements Listener, OutputInvoker
                if (gotLock)
                {
                   Object instance = wrapper.getInstance(); // only called while holding the lock
-                  try 
-                  {
-                     if(!prototype.isEvictableSupported() || !prototype.invokeEvictable(wrapper.instance)) // only invoke output if MP not in evictable state.
-                        invokeOperation(instance, Operation.output, null); 
-                  }
-                  catch (Throwable e) { /* The error message is logged in invokeOperation */ }
+                  try { invokeOperation(instance, Operation.output, null); }
+                  catch (RuntimeException e) { /* The error message is logged in invokeOperation */ }
                   iter.remove();
                }
             }
@@ -420,27 +416,27 @@ public class MpContainer implements Listener, OutputInvoker
      return key;
   }
   
-  /**
-   * Passivates the instance for given key and removes from the 
-   * list of active instances.
-   * 
-   * This method does not confirm 
-   * 
-   * @param key
-   * @throws IllegalArgumentException
-   * @throws IllegalAccessException
-   * @throws InvocationTargetException
-   */
-  private void removeAndPassivateInstance(Object key) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
-  {
-     InstanceWrapper wrapper = instances.remove(key);
-     if(wrapper != null && !wrapper.isPassivated())
-     {
-        prototype.passivate(wrapper.instance);
-        wrapper.markPassivated();
-     }
-     wrapper = null;
-  }
+//  /**
+//   * Passivates the instance for given key and removes from the 
+//   * list of active instances.
+//   * 
+//   * This method does not confirm 
+//   * 
+//   * @param key
+//   * @throws IllegalArgumentException
+//   * @throws IllegalAccessException
+//   * @throws InvocationTargetException
+//   */
+//  private void removeAndPassivateInstance(Object key) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
+//  {
+//     InstanceWrapper wrapper = instances.remove(key);
+//     if(wrapper != null && !wrapper.isPassivated())
+//     {
+//        prototype.passivate(wrapper.instance);
+//        wrapper.markPassivated();
+//     }
+//     wrapper = null;
+//  }
   
   /**
    * This is required to return non null or throw a ContainerException
@@ -452,46 +448,14 @@ public class MpContainer implements Listener, OutputInvoker
      // common case has "no" contention
      InstanceWrapper wrapper = instances.get(key);
      if(wrapper != null)
-     {
-        try
-        {
-           if(!prototype.isEvictableSupported() || !prototype.invokeEvictable(wrapper.instance))
-           {
-              return wrapper;
-           }
-        }
-        catch(Throwable e)
-        {
-           throw new ContainerException("the container for " + clusterId + " failed to check evictable for instance of " + 
-                 SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) + 
-                 ".",e.getCause());
-        }
-     }
+        return wrapper;
 
      // otherwise we'll do an atomic check-and-update
      synchronized (this)
      {
         wrapper = instances.get(key); // double checked lock?????
         if (wrapper != null)
-        {
-           try
-           {
-              if(!prototype.isEvictableSupported() || !prototype.invokeEvictable(wrapper.instance))
-              {
-                 return wrapper;
-              }
-              else
-              {
-                 removeAndPassivateInstance(key);
-              }
-           }
-           catch(Throwable e)
-           {
-              throw new ContainerException("the container for " + clusterId + " failed to check evictable for instance of " + 
-                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) + 
-                    ".",e.getCause());
-           }
-        }
+           return wrapper;
 
         Object instance = null;
         try
