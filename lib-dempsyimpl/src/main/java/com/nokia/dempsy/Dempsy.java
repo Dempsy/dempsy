@@ -308,12 +308,6 @@ public class Dempsy
       }
       
       private DempsyException failedStart = null;
-      public class ClusterStart implements Runnable
-      {
-         private Cluster cluster;
-         private ClusterStart(Cluster cluster) { this.cluster = cluster; }
-         public void run() { try { cluster.start(); } catch(DempsyException e) { failedStart = e; } } 
-      }
       
       /**
        * 
