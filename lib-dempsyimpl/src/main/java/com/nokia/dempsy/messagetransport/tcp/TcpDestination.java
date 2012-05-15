@@ -45,6 +45,8 @@ public class TcpDestination implements Destination, Serializable
    @Override
    public boolean equals(Object other)
    {
+      if (other == null)
+         return false;
       TcpDestination otherTcpDestination = (TcpDestination)other;
       return inetAddress.equals(otherTcpDestination.inetAddress ) && (port == otherTcpDestination.port);
    }
