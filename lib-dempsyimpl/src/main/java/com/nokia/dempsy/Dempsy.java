@@ -78,7 +78,7 @@ public class Dempsy
           * Currently a Node is instantiated within the Dempsy orchestrator as a one to one with the
           * {@link Cluster}.
           */
-         public class Node implements MpClusterWatcher<ClusterInformation,SlotInformation>
+         public class Node implements MpClusterWatcher
          {
             protected ClusterDefinition clusterDefinition;
             
@@ -88,6 +88,7 @@ public class Dempsy
             List<Class<?>> acceptedMessageClasses = null;
             Receiver receiver = null;
             StatsCollector statsCollector = null;
+            MpCluster<ClusterInformation, SlotInformation> currentClusterHandle = null;
             
             private Node(ClusterDefinition clusterDefinition) { this.clusterDefinition = clusterDefinition; }
             
@@ -140,7 +141,7 @@ public class Dempsy
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                      strategyInbound = strategy.createInbound();
                   
-                  MpCluster<ClusterInformation, SlotInformation> currentClusterHandle = clusterSession.getCluster(currentClusterId);
+                  currentClusterHandle = clusterSession.getCluster(currentClusterId);
                   
                   // this can fail because of down cluster manager server ... but it should eventually recover.
                   try
@@ -231,12 +232,12 @@ public class Dempsy
             public MpContainer getMpContainer() { return container; }
 
             @Override
-            public void process(MpCluster<ClusterInformation, SlotInformation> cluster)
+            public void process()
             {
                try
                {
                   if (strategyInbound != null)
-                     strategyInbound.resetCluster(cluster, acceptedMessageClasses, receiver.getDestination());
+                     strategyInbound.resetCluster(currentClusterHandle, acceptedMessageClasses, receiver.getDestination());
                }
                // TODO: fix these catches... .need to take note of a failure for a later retry
                // using a scheduled task.

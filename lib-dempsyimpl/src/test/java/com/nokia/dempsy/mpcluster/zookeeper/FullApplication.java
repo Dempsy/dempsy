@@ -18,8 +18,6 @@ package com.nokia.dempsy.mpcluster.zookeeper;
 
 import java.io.Serializable;
 import java.util.Random;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -36,8 +34,6 @@ import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
-import com.nokia.dempsy.output.OutputExecuter;
-import com.nokia.dempsy.output.OutputInvoker;
 import com.nokia.dempsy.output.RelativeOutputSchedule;
 
 @Ignore
