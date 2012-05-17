@@ -49,6 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.mpcluster.MpApplication;
 import com.nokia.dempsy.mpcluster.MpCluster;
 import com.nokia.dempsy.mpcluster.MpClusterException;
@@ -524,7 +525,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
             byte[] slot = null;
             try
             {
-               slot = zk.get().getData(slotPath.path, true, null);
+               slot = zkref.get().getData(slotPath.path, true, null);
             }
             catch(Exception e)
             {
@@ -554,7 +555,7 @@ public class ZookeeperSession<T, N> implements MpClusterSession<T, N>
             }
             try
             {
-               zk.get().setData(slotPath.path, slotData, -1);
+               zkref.get().setData(slotPath.path, slotData, -1);
             }
             catch(Exception e)
             {
