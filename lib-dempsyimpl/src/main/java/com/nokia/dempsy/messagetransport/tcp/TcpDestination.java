@@ -28,6 +28,8 @@ public class TcpDestination implements Destination, Serializable
    protected InetAddress inetAddress;
    protected int port;
    
+   public TcpDestination() {   }
+   
    protected TcpDestination(InetAddress inetAddress, int port)
    {
       this.inetAddress = inetAddress;
@@ -62,7 +64,22 @@ public class TcpDestination implements Destination, Serializable
     * Called by StatsCollectorFactory to make pretty names for nodes.
     * @return the InternetAddress of teh listner.
     */
-   public InetAddress getInetenetAddress() {
+   public InetAddress getInetAddress() {
       return inetAddress;
+   }
+
+   public void setInetAddress(InetAddress inetAddress)
+   {
+      this.inetAddress = inetAddress;
+   }
+
+   public void setPort(int port)
+   {
+      this.port = port;
+   }
+   
+   public int getPort()
+   {
+      return this.port;
    }
 }
