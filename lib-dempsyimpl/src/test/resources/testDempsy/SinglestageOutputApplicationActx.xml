@@ -27,6 +27,18 @@
                   </bean>
                </property>
             </bean>
+            <!--  CRON JOB -->
+               <bean class="com.nokia.dempsy.config.ClusterDefinition">
+               <constructor-arg name="clusterName" value="test-cluster2" />
+               <property name="messageProcessorPrototype">
+                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+               </property>
+               <property name="outputExecuter">
+                  <bean class="com.nokia.dempsy.output.CronOutputSchedule">
+                        <constructor-arg index="0" value="0/1 * * * * ?" />
+                  </bean>
+               </property>
+            </bean>
          </list>
       </property>
    </bean>
