@@ -484,7 +484,32 @@ public class TestDempsy
             });
    }
 
-   
+
+   @Test
+   public void testCronOutPutMessage() throws Throwable
+   {
+      runAllCombinations("SinglestageOutputApplicationActx.xml",
+            new Checker()
+            {
+               @Override
+               public void check(ApplicationContext context) throws Throwable
+               {
+                  TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
+                  TestMessage message = new TestMessage("output");
+                  adaptor.pushMessage(message); // this causes the container to clone the Mp
+                  
+                  // Now wait for the output call to be made 10 times (or so).
+                  Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+                  TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster2");
+                  assertTrue(mp.outputLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+                  assertTrue(mp.outputCount.get()>=10);
+               }
+               
+               public String toString() { return "testOutPutMessage"; }
+
+            });
+   }
+
    @Test
    public void testExplicitDesintationsStartup() throws Throwable
    {
