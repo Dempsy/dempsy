@@ -50,6 +50,7 @@ public class ClusterDefinition
    private Object outputExecuter;
    private boolean adaptorIsDaemon = false;
    private KeySource<?> keySource = null;
+   private long evictionFrequencySeconds = 600;
    
    private ApplicationDefinition parent;
    
@@ -167,6 +168,14 @@ public class ClusterDefinition
    public ClusterDefinition setAdaptorDaemon(boolean isAdaptorDaemon) { this.adaptorIsDaemon = isAdaptorDaemon; return this; }
    public KeySource<?> getKeySource(){ return keySource; }
    public ClusterDefinition setKeySource(KeySource<?> keySource){ this.keySource = keySource; return this; }
+   
+	public long getEvictionFrequencySeconds() {
+		return evictionFrequencySeconds;
+	}
+
+	public ClusterDefinition setEvictionFrequencySeconds(long evictionFrequencySeconds) {
+		this.evictionFrequencySeconds = evictionFrequencySeconds; return this;
+	}
    
    @Override
    public String toString()

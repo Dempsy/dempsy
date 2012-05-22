@@ -19,10 +19,12 @@ package com.nokia.dempsy.container;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -71,18 +73,20 @@ public class MpContainer implements Listener, OutputInvoker
    // message key -> instance that handles messages with this key
    // changes to this map will be synchronized; read-only may be concurrent
    private ConcurrentHashMap<Object,InstanceWrapper> instances = new ConcurrentHashMap<Object,InstanceWrapper>();
-   
-   private ScheduledExecutorService scheduler;
+
+   private ScheduledExecutorService outputScheduler;
+   private ScheduledExecutorService evictionScheduler;
 
    // The ClusterId is set for the sake of error messages.
    private ClusterId clusterId;
    
    public MpContainer(ClusterId clusterId) { this.clusterId = clusterId; }
    
-   protected static class InstanceWrapper
+   public static class InstanceWrapper
    {
       private Object instance;
       private Lock lock = new ReentrantLock(true);
+      private AtomicBoolean evicted = new AtomicBoolean(false);
       
       /**
        * DO NOT CALL THIS WITH NULL OR THE LOCKING LOGIC WONT WORK
@@ -133,11 +137,23 @@ public class MpContainer implements Listener, OutputInvoker
        * YOU OWN THE LOCK BEFORE CALLING.
        */
       public boolean isPassivated() { return instance == null; }
+
+      
+      /**
+       * This will prevent further operations on this instance. 
+       * MAKE SURE YOU OWN THE LOCK BEFORE CALLING.
+       */
+      public void markEvicted() { evicted.set(true); }
+      
+      /**
+       * Flag to indicate this instance has been evicted and no further operations should be enacted.
+       */
+      public boolean isEvicted() { return evicted.get(); }
       
       //----------------------------------------------------------------------------
       //  Test access
       //----------------------------------------------------------------------------
-      protected Object getInstance() { return instance; }
+      public Object getInstance() { return instance; }
    }
 
 //----------------------------------------------------------------------------
@@ -152,6 +168,14 @@ public class MpContainer implements Listener, OutputInvoker
    public Object getPrototype()
    {
       return prototype == null ? null : prototype.getPrototype();
+   }
+   
+   public LifecycleHelper getLifecycleHelper() {
+	   return prototype;
+   }
+   
+   public Map<Object,InstanceWrapper> getInstances() {
+	   return instances;
    }
 
    public void setDispatcher(Dispatcher dispatcher)
@@ -231,10 +255,11 @@ public class MpContainer implements Listener, OutputInvoker
    
    public void shutdown()
    {
-      if(scheduler != null)
-      {
-         scheduler.shutdownNow();
-      }
+      if (outputScheduler != null)
+    	  outputScheduler.shutdownNow();
+      
+      if (evictionScheduler != null)
+    	  evictionScheduler.shutdownNow();
    }
 
 
@@ -295,7 +320,7 @@ public class MpContainer implements Listener, OutputInvoker
         if (instance != null) // null indicates we didn't get the lock
         {
            gotLock = true;
-           invokeOperation(wrapper.instance, Operation.handle, message);
+           invokeOperation(wrapper.getInstance(), Operation.handle, message);
            ret = true;
         }
         else 
@@ -332,11 +357,47 @@ public class MpContainer implements Listener, OutputInvoker
       InstanceWrapper wrapper = getInstanceForKey(key);
       return wrapper;
    }
-   
+
+	public void evict() {
+		if (!prototype.isEvictableSupported())
+			return;
+
+		for (Iterator<Object> keys = instances.keySet().iterator(); keys.hasNext();) {
+			Object key = keys.next();
+			InstanceWrapper wrapper = instances.get(key);
+			boolean gotLock = false;
+			try {
+				gotLock = wrapper.tryLock();
+				if (gotLock) {
+					Object instance = wrapper.getInstance();
+					try {
+						if (prototype.invokeEvictable(instance)) {
+							prototype.passivate(wrapper.getInstance());
+							wrapper.markPassivated();
+							wrapper.markEvicted();
+							instances.remove(key);
+						}
+					} catch (Throwable e) {
+					}
+				}
+			} finally {
+				if (gotLock)
+					wrapper.releaseLock();
+			}
+		}
+	}
+
+	public void startEvictionThread(long evictionFrequencyInSeconds) {
+		if (prototype != null && prototype.isEvictableSupported()){
+			evictionScheduler = Executors.newSingleThreadScheduledExecutor();
+			evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, 0, evictionFrequencyInSeconds * 1000, TimeUnit.MILLISECONDS);
+		}
+	}
+	
    public void setOutPutPass(long freqInSeconds, TimeUnit timeUnit)
    {
-      scheduler = Executors.newSingleThreadScheduledExecutor();
-      scheduler.scheduleWithFixedDelay(new Runnable() { @Override public void run() { outputPass(); }}, 0, freqInSeconds, timeUnit );
+	   outputScheduler = Executors.newSingleThreadScheduledExecutor();
+	   outputScheduler.scheduleWithFixedDelay(new Runnable() { @Override public void run() { outputPass(); }}, 0, freqInSeconds, timeUnit );
    }
    
    // This method MUST NOT THROW
@@ -361,11 +422,7 @@ public class MpContainer implements Listener, OutputInvoker
                if (gotLock)
                {
                   Object instance = wrapper.getInstance(); // only called while holding the lock
-                  try 
-                  {
-                     if(!prototype.isEvictableSupported() || !prototype.invokeEvictable(wrapper.instance)) // only invoke output if MP not in evictable state.
-                        invokeOperation(instance, Operation.output, null); 
-                  }
+                  try { invokeOperation(instance, Operation.output, null); }
                   catch (Throwable e) { /* The error message is logged in invokeOperation */ }
                   iter.remove();
                }
@@ -384,12 +441,11 @@ public class MpContainer implements Listener, OutputInvoker
      statCollector.outputInvokeStarted();
      outputPass();
      statCollector.outputInvokeCompleted();
-      
    }
 
-//----------------------------------------------------------------------------
-// Internals
-//----------------------------------------------------------------------------
+	//----------------------------------------------------------------------------
+	// Internals
+	//----------------------------------------------------------------------------
 
   private Object getKeyFromMessage(Object message) throws ContainerException
   {
@@ -421,28 +477,6 @@ public class MpContainer implements Listener, OutputInvoker
   }
   
   /**
-   * Passivates the instance for given key and removes from the 
-   * list of active instances.
-   * 
-   * This method does not confirm 
-   * 
-   * @param key
-   * @throws IllegalArgumentException
-   * @throws IllegalAccessException
-   * @throws InvocationTargetException
-   */
-  private void removeAndPassivateInstance(Object key) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
-  {
-     InstanceWrapper wrapper = instances.remove(key);
-     if(wrapper != null && !wrapper.isPassivated())
-     {
-        prototype.passivate(wrapper.instance);
-        wrapper.markPassivated();
-     }
-     wrapper = null;
-  }
-  
-  /**
    * This is required to return non null or throw a ContainerException
  * @throws IllegalAccessException 
  * @throws InvocationTargetException 
@@ -451,47 +485,15 @@ public class MpContainer implements Listener, OutputInvoker
   {
      // common case has "no" contention
      InstanceWrapper wrapper = instances.get(key);
-     if(wrapper != null)
-     {
-        try
-        {
-           if(!prototype.isEvictableSupported() || !prototype.invokeEvictable(wrapper.instance))
-           {
-              return wrapper;
-           }
-        }
-        catch(Throwable e)
-        {
-           throw new ContainerException("the container for " + clusterId + " failed to check evictable for instance of " + 
-                 SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) + 
-                 ".",e.getCause());
-        }
-     }
-
+     if(wrapper != null && !wrapper.isEvicted())
+    	 return wrapper;
+     
      // otherwise we'll do an atomic check-and-update
      synchronized (this)
      {
         wrapper = instances.get(key); // double checked lock?????
-        if (wrapper != null)
-        {
-           try
-           {
-              if(!prototype.isEvictableSupported() || !prototype.invokeEvictable(wrapper.instance))
-              {
-                 return wrapper;
-              }
-              else
-              {
-                 removeAndPassivateInstance(key);
-              }
-           }
-           catch(Throwable e)
-           {
-              throw new ContainerException("the container for " + clusterId + " failed to check evictable for instance of " + 
-                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) + 
-                    ".",e.getCause());
-           }
-        }
+        if (wrapper != null && !wrapper.isEvicted())
+        	return wrapper;
 
         Object instance = null;
         try
@@ -621,7 +623,5 @@ public class MpContainer implements Listener, OutputInvoker
               throw e;
         }
      }
-
   }
-
 }

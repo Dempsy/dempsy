@@ -45,8 +45,8 @@
           <constructor-arg index="1" value="test" />
         </bean>
       </constructor-arg>
-      <property name="prototype" ref="testMP"/>
-      <property name="dispatcher" ref="distributor"/>
+      <property name="prototype" ref="testMP" />
+      <property name="dispatcher" ref="distributor" />
       <property name="statCollector">
         <bean class="com.nokia.dempsy.monitoring.coda.StatsCollectorCoda">
            <constructor-arg>

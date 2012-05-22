@@ -266,9 +266,7 @@ public class TestMpContainer
    }
    
    @Test
-   public void testEvictable()
-   throws Exception
-   {
+   public void testEvictable() throws Exception {
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
       outputQueue.poll(1000, TimeUnit.MILLISECONDS);
 
@@ -287,11 +285,10 @@ public class TestMpContainer
       int tmpCloneCount = TestProcessor.cloneCount;
       
       mp.evict = true;
+      container.evict();
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
       outputQueue.poll(1000, TimeUnit.MILLISECONDS);
 
       assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount);
-
    }
-
 }

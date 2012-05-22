@@ -203,9 +203,10 @@ public class Dempsy
                      }, "Pre-Instantation Thread");
                      t.start();
                   }
-               }
-               catch(RuntimeException e) { throw e; }
-               catch(Exception e) { throw new DempsyException(e); }
+                  
+                  container.startEvictionThread(clusterDefinition.getEvictionFrequencySeconds());
+               } catch(RuntimeException e) { throw e; }
+                 catch(Exception e) { throw new DempsyException(e); }
             }
             
             public StatsCollector getStatsCollector() { return statsCollector; }
@@ -223,7 +224,7 @@ public class Dempsy
                            " for " + SafeString.valueOf(clusterDefinition) + " due to the following exception:",th);
                   }
                }
-
+               
                // shut the container down prior to the router.
                if (container != null)
                   try { container.shutdown(); container = null; } catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
@@ -237,6 +238,7 @@ public class Dempsy
 
                if (strategyInbound != null)
                   try { strategyInbound.stop(); strategyInbound = null;} catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
+               
             }
             
             /**
@@ -480,10 +482,10 @@ public class Dempsy
       
       if (transport == null)
          throw new DempsyException("Cannot start this application because there's no transport implementation defined");
-      
+
       if (defaultStatsCollectorFactory == null)
         throw new DempsyException("Cannot start this application because there's no default stats collector factory defined.");
-    
+          
       try
       {
          applications = new ArrayList<Application>(applicationDefinitions.size()); 
@@ -503,7 +505,7 @@ public class Dempsy
 
                if (appDef.getStatsCollectorFactory() == null)
                   appDef.setStatsCollectorFactory(defaultStatsCollectorFactory);
-
+               
                applications.add(app);
             }
          }
@@ -569,10 +571,10 @@ public class Dempsy
 
    @Inject
    public void setDefaultSerializer(Serializer<Object> defaultSerializer) { this.defaultSerializer = defaultSerializer; }
-   
+
    @Inject
    public void setDefaultStatsCollectorFactory(StatsCollectorFactory defaultfactory) { this.defaultStatsCollectorFactory = defaultfactory; }
-   
+      
    public Application.Cluster getCluster(ClusterId clusterId)
    {
       return allClusters.get(clusterId);
