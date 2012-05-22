@@ -82,7 +82,7 @@ public class MpContainer implements Listener, OutputInvoker
    
    public MpContainer(ClusterId clusterId) { this.clusterId = clusterId; }
    
-   public static class InstanceWrapper
+   protected static class InstanceWrapper
    {
       private Object instance;
       private Lock lock = new ReentrantLock(true);
@@ -153,7 +153,7 @@ public class MpContainer implements Listener, OutputInvoker
       //----------------------------------------------------------------------------
       //  Test access
       //----------------------------------------------------------------------------
-      public Object getInstance() { return instance; }
+      protected Object getInstance() { return instance; }
    }
 
 //----------------------------------------------------------------------------
