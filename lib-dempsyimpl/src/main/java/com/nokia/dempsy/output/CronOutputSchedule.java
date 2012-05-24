@@ -16,8 +16,6 @@
 
 package com.nokia.dempsy.output;
 
-import java.util.concurrent.TimeUnit;
-
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
@@ -25,75 +23,69 @@ import org.quartz.Trigger;
 import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
- 
+
+
 /**
- * This is a default implementation of OutputExecuter. At fixed time interval,
- * this class will invoke the @Output method of MPs
+ * The Class CronOutputScheduler. 
+ * This class executes @Output method on MPs based on provided cron time expression (example: '*\/1 * * * * ?', run job at every one sec) 
+ *  
  */
-public class RelativeOutputSchedule implements OutputExecuter {
-  
+public class CronOutputSchedule implements OutputExecuter {
+
   /** The logger. */
-  private static Logger logger = LoggerFactory.getLogger(RelativeOutputSchedule.class);
-  
-  /** The interval. */
-  private long interval;
-  
-  /** The time unit. */
-  private TimeUnit timeUnit;
-  
-  /** The output invoker. */
-  private OutputInvoker outputInvoker;
+  private static Logger logger = LoggerFactory.getLogger(CronOutputSchedule.class);
   
   /** The scheduler. */
   private Scheduler scheduler;
+  
+  /** The cron expression. */
+  private String cronExpression;
+  
+  /** The output invoker. */
+  private OutputInvoker outputInvoker;
 
   /**
-   * Instantiates a new relative output schedule.
+   * Instantiates a new cron output scheduler.
    *
-   * @param interval the interval
-   * @param timeUnit the time unit
+   * @param cronExpression the cron expression
    */
-  public RelativeOutputSchedule(long interval, TimeUnit timeUnit) {
-    this.interval = interval;
-    this.timeUnit = timeUnit;
+  public CronOutputSchedule(String cronExpression) {
+    this.cronExpression = cronExpression;
   }
 
-  /* (non-Javadoc)
-   * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
+   /* (non-Javadoc)
+   * @see com.nokia.dempsy.output.OutputExecuter#start()
    */
-  @Override
-  public void setOutputInvoker(OutputInvoker outputInvoker) {
-    this.outputInvoker = outputInvoker;
-  }
- 
-/**
- * Container will invoke this method.
- */
-  @Override
   public void start() {
     try {
       OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
       JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
-      Trigger trigger = outputQuartzHelper.getSimpleTrigger(timeUnit, (int) interval);
+      Trigger trigger = outputQuartzHelper.getCronTrigger(cronExpression);
       scheduler = StdSchedulerFactory.getDefaultScheduler();
       scheduler.scheduleJob(jobDetail, trigger);
       scheduler.start();
-    } catch (SchedulerException se) { 
-      logger.error("Error occurred while starting the relative scheduler : " + se.getMessage(), se);
+    } catch (SchedulerException se) {
+      logger.error("Error occurred while starting the cron scheduler : " + se.getMessage(), se);
     }
   }
- 
 
-  /**
-   * Container will invoke this method.
+  /* (non-Javadoc)
+   * @see com.nokia.dempsy.output.OutputExecuter#stop()
    */
-  @Override
   public void stop() {
     try {
       // gracefully shutting down
       scheduler.shutdown();
     } catch (SchedulerException se) {
-      logger.error("Error occurred while stopping the relative scheduler : " + se.getMessage(), se);
+      logger.error("Error occurred while stopping the cron scheduler : " + se.getMessage(), se);
     }
   }
+
+  /* (non-Javadoc)
+   * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
+   */
+  public void setOutputInvoker(OutputInvoker outputInvoker) {
+    this.outputInvoker = outputInvoker;
+  }
+
 }

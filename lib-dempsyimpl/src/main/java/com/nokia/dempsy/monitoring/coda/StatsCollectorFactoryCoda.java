@@ -145,7 +145,7 @@ public class StatsCollectorFactoryCoda implements StatsCollectorFactory {
       String prefix = "local";
       if (destination != null && destination instanceof TcpDestination)
       {
-         prefix = ((TcpDestination)destination).getInetenetAddress().getHostAddress().replaceAll("\\.", "-");
+         prefix = ((TcpDestination)destination).getInetAddress().getHostAddress().replaceAll("\\.", "-");
       }
       if (logger.isTraceEnabled()) logger.trace("setting prefix to \"" + prefix + "\"");
       return prefix;

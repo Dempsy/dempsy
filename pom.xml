@@ -35,6 +35,7 @@
     <metrics.version>2.0.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <mockito.version>1.9.0</mockito.version>
+    <quartz.version>2.0.1</quartz.version>
   </properties>
 
   <modules>
@@ -114,6 +115,11 @@
         <version>1.6.4</version>
       </dependency>
       <dependency>
+		<groupId>org.quartz-scheduler</groupId>
+		<artifactId>quartz</artifactId>
+		<version>${quartz.version}</version>
+	  </dependency> 
+      <dependency>
       	<groupId>org.mockito</groupId>
       	<artifactId>mockito-core</artifactId>
       	<version>${mockito.version}</version>
@@ -144,6 +150,11 @@
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper</artifactId>
         <version>3.3.3</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-mapper-asl</artifactId>
+        <version>1.9.7</version>
       </dependency>
       <dependency>
         <groupId>javax.inject</groupId>
