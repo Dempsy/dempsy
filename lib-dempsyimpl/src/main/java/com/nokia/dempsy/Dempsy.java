@@ -204,7 +204,7 @@ public class Dempsy
                      t.start();
                   }
                   
-                  container.startEvictionThread(clusterDefinition.getEvictionFrequencySeconds());
+                  container.startEvictionThread(clusterDefinition.getEvictionFrequency(), clusterDefinition.getEvictionTimeUnit());
                } catch(RuntimeException e) { throw e; }
                  catch(Exception e) { throw new DempsyException(e); }
             }
