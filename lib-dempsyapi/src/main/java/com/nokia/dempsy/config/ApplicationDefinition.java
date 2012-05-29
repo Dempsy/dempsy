@@ -121,17 +121,6 @@ public class ApplicationDefinition
    public List<ClusterDefinition> getClusterDefinitions() { return Collections.unmodifiableList(clusterDefinitions); }
    
    /**
-    * Get the {@link ClusterDefinition} that corresponds to the given clusterId.
-    */
-   public ClusterDefinition getClusterDefinition(ClusterId clusterId)
-   {
-      for (ClusterDefinition cur : clusterDefinitions)
-         if (cur.getClusterId().equals(clusterId))
-            return cur;
-      return null;
-   }
-   
-   /**
     * When configuring by hand, this method 
     * @param clusterDefinitions is the {@link ClusterDefinition}s that make
     *  up this Application.
