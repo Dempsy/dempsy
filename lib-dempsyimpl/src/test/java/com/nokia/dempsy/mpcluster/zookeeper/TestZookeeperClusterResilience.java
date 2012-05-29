@@ -374,7 +374,6 @@ public class TestZookeeperClusterResilience
       ZookeeperSession session = null;
       final AtomicLong processCount = new AtomicLong(0);
       
-      Dempsy[] dempsy = new Dempsy[3];
       try
       {
          server = new ZookeeperTestServer();
@@ -401,6 +400,7 @@ public class TestZookeeperClusterResilience
          ApplicationDefinition ad = app.getTopology();
 
          assertEquals(0,processCount.intValue()); // no calls yet
+         Dempsy[] dempsy = new Dempsy[3];
 
          dempsy[0] = getDempsyFor(new ClusterId(FullApplication.class.getSimpleName(),FullApplication.MyAdaptor.class.getSimpleName()),ad);
          dempsy[0].setClusterSessionFactory(new ZookeeperSessionFactory<ClusterInformation, SlotInformation>("127.0.0.1:" + port,5000));
@@ -468,10 +468,6 @@ public class TestZookeeperClusterResilience
          
          if (session != null)
             session.stop();
-         
-         for (int i = 0; i < 3; i++)
-            if (dempsy[i] != null)
-               dempsy[i].stop();
       }
    }
 

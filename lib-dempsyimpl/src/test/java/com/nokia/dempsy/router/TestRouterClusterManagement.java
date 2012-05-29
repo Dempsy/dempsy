@@ -16,74 +16,95 @@
 
 package com.nokia.dempsy.router;
 
-import java.util.List;
 import java.util.Set;
 
 import junit.framework.Assert;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.messagetransport.Destination;
+import com.nokia.dempsy.mpcluster.MpApplication;
 import com.nokia.dempsy.mpcluster.MpCluster;
+import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
-import com.nokia.dempsy.mpcluster.invm.LocalVmMpClusterSessionFactory;
 import com.nokia.dempsy.router.Router.ClusterRouter;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 public class TestRouterClusterManagement
 {
    Router routerFactory = null;
-   RoutingStrategy.Inbound inbound = null;
    
    @MessageProcessor
    public static class GoodTestMp
    {
       @MessageHandler
-      public void handle(Exception message) {}
+      public void handle(String message) {}
    }
    
    @Before
    public void init() throws Throwable
    {
-      final ClusterId clusterId = new ClusterId("test", "test-slot");
-      Destination destination = new Destination() {};
-      ApplicationDefinition app = new ApplicationDefinition(clusterId.getApplicationName());
-      DefaultRoutingStrategy strategy = new DefaultRoutingStrategy(1, 1);
-      app.setRoutingStrategy(strategy);
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      app.setRoutingStrategy(new RoutingStrategy()
+      {
+         
+         @Override
+         public Outbound createOutbound()
+         {
+            return new Outbound()
+            {
+               @SuppressWarnings("serial")
+               SlotInformation slotInfo = new SlotInformation(){};
+               
+               @Override
+               public SlotInformation selectSlotForMessageKey(Object messageKey) throws DempsyException
+               {
+                  return slotInfo;
+               }
+               
+               @Override
+               public void resetCluster(MpCluster<ClusterInformation, SlotInformation> cluster) { }
+            };
+         }
+         
+         @Override
+         public Inbound createInbound() { return null; }
+      });
       app.setSerializer(new JavaSerializer<Object>());
-      ClusterDefinition cd = new ClusterDefinition(clusterId.getMpClusterName());
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
       cd.setMessageProcessorPrototype(new GoodTestMp());
       app.add(cd);
       app.initialize();
-      
-      LocalVmMpClusterSessionFactory<ClusterInformation, SlotInformation> mpfactory = new LocalVmMpClusterSessionFactory<ClusterInformation, SlotInformation>();
-      MpClusterSession<ClusterInformation, SlotInformation> session = mpfactory.createSession();
-
-      // fake the inbound side setup
-      inbound = strategy.createInbound(session.getCluster(clusterId), 
-            new Dempsy(){ public List<Class<?>> gm(ClusterDefinition clusterDef) { return super.getAcceptedMessages(clusterDef); }}.gm(cd), 
-         destination);
-      
       routerFactory = new Router(app);
-      routerFactory.setClusterSession(session);
+      routerFactory.setClusterSession(
+            new MpClusterSession<ClusterInformation, SlotInformation>()
+      {
+         @Override
+         public MpCluster<ClusterInformation, SlotInformation> getCluster(ClusterId mpClusterId)
+         {
+            return new MpClusterTestImpl();
+         }
+
+         @Override
+         public void stop() { }
+
+         @Override
+         public MpApplication<ClusterInformation, SlotInformation> getApplication(String applicationId) throws MpClusterException
+         {
+            // TODO Auto-generated method stub
+            return null;
+         }
+      });
       routerFactory.initialize();
-   }
-   
-   @After
-   public void stop() throws Throwable
-   {
-      routerFactory.stop();
-      inbound.stop();
    }
    
    @Test
@@ -117,7 +138,6 @@ public class TestRouterClusterManagement
       MpCluster<ClusterInformation, SlotInformation> ch = session.getCluster(new ClusterId("test-app", "test-cluster1"));
       ch.setClusterData(new DefaultRoutingStrategy.DefaultRouterClusterInfo(20,2));
       session.stop();
-      dempsy.stop();
    }
    
 

@@ -197,7 +197,6 @@ public class ClusterDefinition
       if (messageProcessorPrototype != null && adaptor != null)
          throw new DempsyException("A dempsy cluster must contain either an 'adaptor' or a message processor prototype but not both. " +
                clusterId + " appears to be configured with both.");
-
       
       if (messageProcessorPrototype != null)
       {
