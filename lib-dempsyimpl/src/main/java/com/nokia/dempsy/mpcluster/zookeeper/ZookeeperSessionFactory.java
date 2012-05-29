@@ -31,6 +31,7 @@ public class ZookeeperSessionFactory<T,N> implements MpClusterSessionFactory<T, 
 {
    private String connectString;
    private int sessionTimeout;
+   private int resetDelay=500;
    
    @Inject
    public ZookeeperSessionFactory(String connectString, int sessionTimeout)
@@ -38,6 +39,14 @@ public class ZookeeperSessionFactory<T,N> implements MpClusterSessionFactory<T, 
       this.connectString = connectString;
       this.sessionTimeout = sessionTimeout;
    }
+   
+   @Inject
+   public ZookeeperSessionFactory(String connectString, int sessionTimeout, int resetDelay)
+   {
+      this(connectString, sessionTimeout);
+      this.resetDelay = resetDelay;
+   }
+   
    
    @Override
    public MpClusterSession<T, N> createSession() throws MpClusterException
@@ -57,7 +66,7 @@ public class ZookeeperSessionFactory<T,N> implements MpClusterSessionFactory<T, 
                sessionTimeout,ioe);
       }
       
-      
+      ret.resetDelay=this.resetDelay;
       return ret;
    }
    

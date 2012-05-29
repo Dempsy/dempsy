@@ -209,6 +209,7 @@ public class DefaultRoutingStrategy implements RoutingStrategy
       private Collection<Class<?>> messageTypes;
       private Destination thisDestination;
       private ClusterId clusterId;
+      private AtomicInteger retries = new AtomicInteger(3);
       
       private Inbound(MpCluster<ClusterInformation, SlotInformation> cluster, 
             Collection<Class<?>> messageTypes,
@@ -218,8 +219,9 @@ public class DefaultRoutingStrategy implements RoutingStrategy
          this.messageTypes = messageTypes;
          this.thisDestination = thisDestination;
          this.clusterId = cluster.getClusterId();
-         this.cluster.addWatcher(this);
          process();
+         this.cluster.addWatcher(this);
+         this.retries.set(0);
       }
 
       @Override
@@ -271,7 +273,6 @@ public class DefaultRoutingStrategy implements RoutingStrategy
                      cluster, messageTypes, thisDestination))
                   destinationsAcquired.add(randomValue);                  
             }
-            
             retry = false;
          }
          catch(MpClusterException e)
@@ -281,11 +282,16 @@ public class DefaultRoutingStrategy implements RoutingStrategy
          finally
          {
             // if we never got the destinations set up then kick off a retry
-            if (retry)
-               scheduler.schedule(new Runnable(){
-                  @Override
-                  public void run() { process(); }
-               }, resetDelay, TimeUnit.MILLISECONDS);
+            if (retry && retries.get()>0)
+            {
+               retries.decrementAndGet();
+               logger.error("Calling process again. retries left "+retries.get());
+               process();
+//               scheduler.schedule(new Runnable(){
+//                  @Override
+//                  public void run() { process(); }
+//               }, resetDelay, TimeUnit.MILLISECONDS);
+            }
          }
       }
       

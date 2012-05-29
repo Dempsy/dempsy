@@ -276,7 +276,7 @@ public class TestDempsy
                }
                catch (AssertionError re)
                {
-                  logger.error("***************** FAILED ON: " + clusterManager + ", " + transport);
+                  logger.error("***************** FAILED ON: " + clusterManager + ", " + transport +" msg:"+re.getMessage());
                   throw re;
                }
                
