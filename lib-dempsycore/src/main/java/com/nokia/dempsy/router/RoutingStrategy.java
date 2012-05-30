@@ -16,17 +16,16 @@
 
 package com.nokia.dempsy.router;
 
-import java.util.Collection;
+import java.util.List;
 
 import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
-import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.mpcluster.MpCluster;
-import com.nokia.dempsy.router.RoutingStrategy.Outbound.Coordinator;
+import com.nokia.dempsy.mpcluster.MpClusterException;
 
 /**
  * <p>A {@link RoutingStrategy} is responsible for determining how to find the appropriate
@@ -73,56 +72,15 @@ public interface RoutingStrategy
     */
    public static interface Outbound
    {
-      /**
-       * This method needs to be implemented to determine the specific node that the outgoing
-       * message is to be routed to.
-       * 
-       * @param messageKey is the message key for the message to be routed
-       * @param message is the message to be routed.
-       * @return a transport Destination indicating the unique node in the downstream cluster 
-       * that the message should go to.
-       * @throws DempsyException when something distasteful happens.
-       */
-      public Destination selectDestinationForMessage(Object messageKey, Object message) throws DempsyException;
-      
-      /**
-       * The {@link Outbound} is responsible for providing the {@link ClusterId} for which it is the 
-       * {@link Outbound} for.
-       */
-      public ClusterId getClusterId();
-      
-      /**
-       * <p>Each node can have many Outbound instances and those Outbound cluster references
-       * can come and go. In order to tell Dempsy about what's going on in the cluster
-       * the Outbound should be updating the state of the OutboundCoordinator.</p>
-       * 
-       * <p>Implementors of the RoutingStrategy do not need to implement this interface.
-       * There is only one implementation and that instance will be supplied by the
-       * framework.</p>
-       */
-      public static interface Coordinator
-      {
-         /**
-          * registers the outbound with the Coordinator and provide what types the destination
-          * cluster can handle. Note that the Outbound is allowed to call registerOutbound 
-          * more than once, without calling unregisterOutbound first but the results should
-          * be the same.
-          */
-         public void registerOutbound(Outbound outbound, Collection<Class<?>> classes);
-         
-         /**
-          * registers the outbound with the Coordinator and provide what types the destination
-          * cluster can handle.
-          */
-         public void unregisterOutbound(Outbound outbound);
+      public SlotInformation selectSlotForMessageKey(Object messageKey) throws DempsyException;
 
-      }
-      
       /**
-       * Shut down and reclaim any resources associated with the {@link Outbound} instance.
+       * resetCluster is called when the cluster for the Outbound side changes. In this
+       * way implementations of this class do not need to be MpClusterWatchers
+       * @param cluster - the cluster handle containing the new state.
+       * @throws MpClusterException when the implementation has a problem accessing the cluster
        */
-      public void stop();
-      
+      public void resetCluster(MpCluster<ClusterInformation, SlotInformation> cluster) throws MpClusterException;
    }
    
    /**
@@ -135,46 +93,21 @@ public interface RoutingStrategy
    public static interface Inbound
    {
       /**
-       * Since the {@link Inbound} has the responsibility to determine which instances of a 
-       * {@link MessageProcessor} are valid in 'this' node, it should be able to privide that
-       * information through the implementataion of this method. This is used as part of the
-       * Pre-instantiation phase of the Message Processor's lifecylce.
+       * <p>resetCluster is called when the cluster for the Inbound side changes. In this
+       * way implementations of this class do not need to be MpClusterWatchers.</p>
+       * 
+       * @param cluster - the cluster handle containing the new state.
+       * @throws MpClusterException when the implementation has a problem accessing the cluster
        */
-      public boolean doesMessageKeyBelongToNode(Object messageKey);
+      public void resetCluster(MpCluster<ClusterInformation, SlotInformation> cluster,
+            List<Class<?>> messageTypes, Destination thisDestination) throws MpClusterException;
       
-      /**
-       * Shut down and reclaim any resources associated with the {@link Inbound} instance.
-       */
-      public void stop();
+      public boolean doesMessageKeyBelongToNode(Object messageKey);
    }
    
-   /**
-    * This method will be called from the Dempsy framework in order to instantiate the one Inbound for 
-    * 'this' node. Keep in mind that when running in LocalVm mode there can be more than one inbound per
-    * process.
-    *
-    * @param cluster is the cluster information manager handle for 'this' node.
-    * @param messageTypes is the types of messages that Dempsy determined could be handled by the {@link MessageProcessor}
-    * in this node. This information should be shared across to the {@link Outbound} and registered with 
-    * the {@link Coordinator} to allow Dempsy to restrict messages to the appropriate types.
-    * @param thisDestination is the transport Destination instance that represents how to communicate
-    * with 'this' node.
-    * @return the {@link Inbound} instance.
-    */
-   public Inbound createInbound(MpCluster<ClusterInformation, SlotInformation> cluster, Collection<Class<?>> messageTypes, Destination thisDestination);
+   public Inbound createInbound();
    
-   /**
-    * The RoutingStrategy needs to create an {@link Outbound} that corresponds to the given cluster. It should do this
-    * in a manner that absolutely succeeds even if the cluster information manager is in a bad state. This is why
-    * this method takes stable parameters and throws no exception.
-    *  
-    * @param coordinator is the coordinator that the newly created {@link Outbound} can use to call back on the 
-    * framework.
-    * @param clusterId is the cluster id that the {@link Outbound} is being created for.
-    * @return a new {@link Outbound} that manages the selection of a {@link Destination} given a message destined for 
-    * the given cluster.
-    */
-   public Outbound createOutbound(Outbound.Coordinator coordinator, MpCluster<ClusterInformation, SlotInformation> cluster);
+   public Outbound createOutbound();
    
 }
 
