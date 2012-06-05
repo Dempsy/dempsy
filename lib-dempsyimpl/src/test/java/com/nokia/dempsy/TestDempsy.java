@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy;
 
+import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -44,6 +45,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
+import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
@@ -58,7 +60,7 @@ public class TestDempsy
    
    private static long baseTimeoutMillis = 20000; // 20 seconds
    
-   String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" /*, "testDempsy/Dempsy-MultiThreadedStartup.xml"*/ };
+   String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
    
    String[] clusterManagers = new String[]{ "testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/ClusterManager-LocalVmActx.xml" };
    String[] transports = new String[]
@@ -253,6 +255,12 @@ public class TestDempsy
                   logger.debug("Starting up the appliction context ...");
                   ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
                   actx.registerShutdownHook();
+                  
+                  CountDownLatch startupLatch = (CountDownLatch)actx.getBean("latch");
+                  // if there was a latch set then we should validate that 
+                  //  everything has started before continuing.
+                  if (startupLatch != null)
+                     assertTrue(startupLatch.await(10, TimeUnit.SECONDS));
 
                   Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
 
@@ -296,6 +304,12 @@ public class TestDempsy
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();
+      CountDownLatch startupLatch = (CountDownLatch)actx.getBean("latch");
+      assertTrue(poll(baseTimeoutMillis,startupLatch,new Condition<CountDownLatch>()
+      {
+         @Override
+         public boolean conditionMet(CountDownLatch o) { return o.getCount() <= 15; }
+      }));
       
       Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
       assertNotNull(dempsy);
@@ -323,15 +337,12 @@ public class TestDempsy
    @Test(expected=BeanCreationException.class) 
    public void testInValidClusterStart() throws Throwable
    {
-      ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(
+      new ClassPathXmlApplicationContext(
             "testDempsy/Dempsy-InValidClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterManager-LocalVmActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
-      actx.registerShutdownHook();
-      actx.stop();
-      actx.destroy();
    }
 
    @Test
@@ -401,11 +412,8 @@ public class TestDempsy
                       
                   // instead of the latch we are going to poll for the correct result
                   // wait for it to be received.
-                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
-                        endTime > System.currentTimeMillis() && !message.equals(mp.lastReceived.get());)
-                     Thread.sleep(1);
-                  assertEquals(message,mp.lastReceived.get());
-
+                  final Object msg = message;
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return msg.equals(mp.lastReceived.get()); } }));
                       
                   // verify we haven't called it again, not that there's really
                   // a way to given the code
@@ -445,10 +453,8 @@ public class TestDempsy
                   
                   // instead of the latch we are going to poll for the correct result
                   // wait for it to be received.
-                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
-                        endTime > System.currentTimeMillis() && !message.equals(mp.lastReceived.get());)
-                     Thread.sleep(1);
-                  assertEquals(message,mp.lastReceived.get());
+                  final Object msg = message;
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return msg.equals(mp.lastReceived.get()); } }));
                   
                   assertEquals(adaptor2.lastSent,message);
                   assertEquals(adaptor2.lastSent,mp.lastReceived.get());
@@ -559,31 +565,20 @@ public class TestDempsy
 
                   // instead of the latch we are going to poll for the correct result
                   // wait for it to be received.
-                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
-                        endTime > System.currentTimeMillis() && mp.cloneCalls.get()<2;)
-                     Thread.sleep(1);
-                  
-                  assertEquals(2, mp.cloneCalls.get());
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
 
                   TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
                   adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
 
                   // instead of the latch we are going to poll for the correct result
                   // wait for it to be received.
-                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
-                        endTime > System.currentTimeMillis() && mp.cloneCalls.get()<3;)
-                     Thread.sleep(1);
-                  
-                  assertEquals(3, mp.cloneCalls.get());
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
                   
                   adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
 
                   // instead of the latch we are going to poll for the correct result
                   // wait for it to be received.
-                  for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
-                        endTime > System.currentTimeMillis() && mp.cloneCalls.get()<3;)
-                     Thread.sleep(1);
-                  assertEquals(3, mp.cloneCalls.get());
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
                   List<Node> nodes = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes();
                   Assert.assertNotNull(nodes);
                   Assert.assertTrue(nodes.size()>0);
