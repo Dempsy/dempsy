@@ -87,16 +87,26 @@ public interface StatsCollector {
     */
    public void preInstantiationCompleted();
    
-   
+
    /**
     * Dempsy calls into this just before calling @Output methods for MPs.
     */
    public void outputInvokeStarted();
    
    /**
-    * empsy calls into this just after @Output methods for MPs complete.
+    * Dempsy calls into this just after @Output methods for MPs complete.
     */
    public void outputInvokeCompleted();
+   
+   /**
+    * Dempsy calls into this just before calling @Output methods for MPs.
+    */
+   public void evictionPassStarted();
+   
+   /**
+    * Dempsy calls into this just after @Output methods for MPs complete.
+    */
+   public void evictionPassCompleted();
 
 	// FIXME
 	/*
@@ -117,5 +127,6 @@ public interface StatsCollector {
 	int getInFlightMessageCount();
 	double getPreInstantiationDuration();
 	double getOutputInvokeDuration();
+	double getEvictionDuration();
 	
 }

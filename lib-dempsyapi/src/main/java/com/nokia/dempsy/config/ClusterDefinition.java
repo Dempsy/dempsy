@@ -17,6 +17,7 @@
 package com.nokia.dempsy.config;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.TimeUnit;
 
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.DempsyException;
@@ -50,6 +51,8 @@ public class ClusterDefinition
    private Object outputExecuter;
    private boolean adaptorIsDaemon = false;
    private KeySource<?> keySource = null;
+   private long evictionFrequency = 600;
+   private TimeUnit evictionTimeUnit = TimeUnit.SECONDS;
    
    private ApplicationDefinition parent;
    
@@ -167,6 +170,22 @@ public class ClusterDefinition
    public ClusterDefinition setAdaptorDaemon(boolean isAdaptorDaemon) { this.adaptorIsDaemon = isAdaptorDaemon; return this; }
    public KeySource<?> getKeySource(){ return keySource; }
    public ClusterDefinition setKeySource(KeySource<?> keySource){ this.keySource = keySource; return this; }
+
+	public long getEvictionFrequency() {
+		return evictionFrequency;
+	}
+
+	public ClusterDefinition setEvictionFrequency(long evictionFrequency) {
+		this.evictionFrequency = evictionFrequency; return this;
+	}
+	
+	public TimeUnit getEvictionTimeUnit() {
+		return evictionTimeUnit;
+	}
+
+	public ClusterDefinition setEvictionTimeUnit(TimeUnit timeUnit) {
+		this.evictionTimeUnit = timeUnit; return this;
+	}
    
    @Override
    public String toString()

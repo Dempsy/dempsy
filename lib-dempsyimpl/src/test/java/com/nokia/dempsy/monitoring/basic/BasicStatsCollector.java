@@ -46,6 +46,10 @@ public class BasicStatsCollector implements StatsCollector
 
    private final AtomicLong outputInvokeStart = new AtomicLong();
    private final AtomicLong outputInvokeDuration = new AtomicLong();
+   
+   private final AtomicLong evictionPassStart = new AtomicLong();
+   private final AtomicLong evictionPassDuration = new AtomicLong();
+   
    @Override
    public long getDiscardedMessageCount()
    {
@@ -176,7 +180,21 @@ public class BasicStatsCollector implements StatsCollector
    @Override
    public void outputInvokeCompleted()
    {
-      outputInvokeDuration.set(System.currentTimeMillis()-preInstantiationStart.get());
+      outputInvokeDuration.set(System.currentTimeMillis()-outputInvokeStart.get());
    }
-   
+
+	@Override
+	public void evictionPassStarted() {
+	    evictionPassStart.set(System.currentTimeMillis());
+	}
+
+	@Override
+	public void evictionPassCompleted() {
+		evictionPassDuration.set(System.currentTimeMillis()-evictionPassStart.get());
+	}
+
+	@Override
+	public double getEvictionDuration() {
+		return evictionPassDuration.doubleValue();
+	}
 }
