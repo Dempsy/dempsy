@@ -40,7 +40,8 @@ public class OutputJob implements Job {
    */
   public void execute(JobExecutionContext context) throws JobExecutionException {
 
-    Map<String, OutputInvoker> dataMap = context.getJobDetail().getJobDataMap();
+    @SuppressWarnings("unchecked")
+    Map<String, OutputInvoker> dataMap = (Map<String, OutputInvoker>)context.getJobDetail().getJobDataMap();
     OutputInvoker outputInvoker = dataMap.get(OutputQuartzHelper.OUTPUT_JOB_NAME);
 
     if (outputInvoker != null) {
