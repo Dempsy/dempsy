@@ -310,6 +310,13 @@ public class MpContainer implements Listener, OutputInvoker
 
 		// wrapper cannot be null ... look at the getInstanceForDispatch method
 		boolean gotLock = false;
+		
+		if(wrapper.isEvicted()){
+			logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
+					+ " due to eviction");
+			statCollector.messageDiscarded(message);
+			return ret;
+		}
 
 		try {
 			Object instance = wrapper.getExclusive(block);
