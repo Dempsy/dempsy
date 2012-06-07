@@ -34,7 +34,6 @@ import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.ContainerException;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.internal.util.SafeString;
-import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.Transport;
 import com.nokia.dempsy.monitoring.StatsCollector;
@@ -43,6 +42,7 @@ import com.nokia.dempsy.mpcluster.MpCluster;
 import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
+import com.nokia.dempsy.mpcluster.MpClusterWatcher;
 import com.nokia.dempsy.output.OutputExecuter;
 import com.nokia.dempsy.router.ClusterInformation;
 import com.nokia.dempsy.router.CurrentClusterCheck;
@@ -78,7 +78,7 @@ public class Dempsy
           * Currently a Node is instantiated within the Dempsy orchestrator as a one to one with the
           * {@link Cluster}.
           */
-         public class Node
+         public class Node implements MpClusterWatcher
          {
             protected ClusterDefinition clusterDefinition;
             
@@ -119,34 +119,37 @@ public class Dempsy
                      container.setSerializer(serializer);
                   
                   // there is only a reciever if we have an Mp (that is, we aren't an adaptor) and start accepting messages 
-                  Destination thisDestination = null;
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                   {
                      receiver = transport.createInbound();
                      receiver.setListener(container);
-                     thisDestination = receiver.getDestination();
                   }
 
                   StatsCollectorFactory statsFactory = (StatsCollectorFactory)clusterDefinition.getStatsCollectorFactory();
                   if (statsFactory != null)
                   {
                      statsCollector = statsFactory.createStatsCollector(currentClusterId, 
-                           receiver != null ? thisDestination : null);
+                           receiver != null ? receiver.getDestination() : null);
                      router.setStatsCollector(statsCollector);
                      container.setStatCollector(statsCollector);
                   }
                   
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
                   
-                  currentClusterHandle = clusterSession.getCluster(currentClusterId);
-                  
                   // there is only an inbound strategy if we have an Mp (that is, we aren't an adaptor) and
                   // we actually accept messages
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
-                     strategyInbound = strategy.createInbound(currentClusterHandle,acceptedMessageClasses, thisDestination);
+                     strategyInbound = strategy.createInbound();
+                  
+                  currentClusterHandle = clusterSession.getCluster(currentClusterId);
                   
                   // this can fail because of down cluster manager server ... but it should eventually recover.
-                  try { router.initialize(); }
+                  try
+                  {
+                     if (strategyInbound != null && receiver != null)
+                        strategyInbound.resetCluster(currentClusterHandle, acceptedMessageClasses, receiver.getDestination());
+                     router.initialize();
+                  }
                   catch (MpClusterException e)
                   {
                      logger.warn("Strategy failed to initialize. Continuing anyway. The cluster manager issue will be resolved automatically.",e);
@@ -204,15 +207,44 @@ public class Dempsy
                      t.start();
                   }
                   
-                  container.startEvictionThread(clusterDefinition.getEvictionFrequency(), clusterDefinition.getEvictionTimeUnit());
-               } catch(RuntimeException e) { throw e; }
-                 catch(Exception e) { throw new DempsyException(e); }
+                  // now we want to set the Node as the watcher.
+                  if (strategyInbound != null && receiver != null)
+                  {
+                     currentClusterHandle.addWatcher(this);
+                  
+                     // and reset just in case something happened
+                     try
+                     {
+                        strategyInbound.resetCluster(currentClusterHandle, acceptedMessageClasses, receiver.getDestination());
+                     }
+                     catch (MpClusterException e)
+                     {
+                        logger.warn("Strategy failed to initialize. Continuing anyway. The cluster manager issue will be resolved automatically.",e);
+                     }
+                  }
+               }
+               catch(RuntimeException e) { throw e; }
+               catch(Exception e) { throw new DempsyException(e); }
             }
             
             public StatsCollector getStatsCollector() { return statsCollector; }
             
             public MpContainer getMpContainer() { return container; }
 
+            @Override
+            public void process()
+            {
+               try
+               {
+                  if (strategyInbound != null)
+                     strategyInbound.resetCluster(currentClusterHandle, acceptedMessageClasses, receiver.getDestination());
+               }
+               // TODO: fix these catches... .need to take note of a failure for a later retry
+               // using a scheduled task.
+               catch(RuntimeException e) { throw e; }
+               catch(Exception e) { throw new RuntimeException(e); }
+            }
+            
             public void stop()
             {
                if (receiver != null) 
@@ -236,9 +268,6 @@ public class Dempsy
                if (statsCollector != null)
                   try { statsCollector.stop(); statsCollector = null;} catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
 
-               if (strategyInbound != null)
-                  try { strategyInbound.stop(); strategyInbound = null;} catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
-               
             }
             
             /**
@@ -485,49 +514,39 @@ public class Dempsy
 
       if (defaultStatsCollectorFactory == null)
         throw new DempsyException("Cannot start this application because there's no default stats collector factory defined.");
-          
-      try
+
+      applications = new ArrayList<Application>(applicationDefinitions.size()); 
+      for(ApplicationDefinition appDef: this.applicationDefinitions)
       {
-         applications = new ArrayList<Application>(applicationDefinitions.size()); 
-         for(ApplicationDefinition appDef: this.applicationDefinitions)
+         appDef.initialize();
+         if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
          {
-            appDef.initialize();
-            if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
-            {
-               Application app = new Application(appDef);
-
-               // set the default routing strategy if there isn't one already set.
-               if (appDef.getRoutingStrategy() == null)
-                  appDef.setRoutingStrategy(defaultRoutingStrategy);
-
-               if (appDef.getSerializer() == null)
-                  appDef.setSerializer(defaultSerializer);
-
-               if (appDef.getStatsCollectorFactory() == null)
-                  appDef.setStatsCollectorFactory(defaultStatsCollectorFactory);
-               
-               applications.add(app);
-            }
+            Application app = new Application(appDef);
+            
+            // set the default routing strategy if there isn't one already set.
+            if (appDef.getRoutingStrategy() == null)
+               appDef.setRoutingStrategy(defaultRoutingStrategy);
+            
+            if (appDef.getSerializer() == null)
+               appDef.setSerializer(defaultSerializer);
+            
+            if (appDef.getStatsCollectorFactory() == null)
+               appDef.setStatsCollectorFactory(defaultStatsCollectorFactory);
+            
+            applications.add(app);
          }
-
-         boolean clusterStarted = false;
-         for (Application app : applications)
-            clusterStarted = app.start();
-
-         if(!clusterStarted)
-         {
-            throw new DempsyException("Cannot start this application because cluster defination was not found.");
-         }
-         // if we got to here we can assume we're started
-         synchronized(isRunningEvent) { isRunning = true; }
       }
-      catch (RuntimeException rte)
+      
+      boolean clusterStarted = false;
+      for (Application app : applications)
+         clusterStarted = app.start();
+      
+      if(!clusterStarted)
       {
-         logger.error("Failed to start Dempsy. Attempting to stop.");
-         // if something unpexpected happened then we should attempt to stop
-         try { stop(); } catch (Throwable th) {}
-         throw rte;
+         throw new DempsyException("Cannot start this application because cluster defination was not found.");
       }
+      // if we got to here we can assume we're started
+      synchronized(isRunningEvent) { isRunning = true; }
    }
    
    public synchronized void stop()
@@ -609,7 +628,7 @@ public class Dempsy
       }
    }
    
-   protected static List<Class<?>> getAcceptedMessages(ClusterDefinition clusterDef)
+   private static List<Class<?>> getAcceptedMessages(ClusterDefinition clusterDef)
    {
       List<Class<?>> messageClasses = new ArrayList<Class<?>>();
       Object prototype = clusterDef.getMessageProcessorPrototype();
@@ -628,5 +647,4 @@ public class Dempsy
       }
       return messageClasses;
    }
-   
 }

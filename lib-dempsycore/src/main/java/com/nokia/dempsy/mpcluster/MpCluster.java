@@ -74,7 +74,7 @@ public interface MpCluster<T, N>
     * Every MpCluster instance participating in a cluster will have the 
     * same cluster Id, which identifies the total set of Mps of the same prototype.
     */
-   public ClusterId getClusterId();
+   public ClusterId getClusterId() throws MpClusterException;
    
    /**
     * Sets the cluster level data.

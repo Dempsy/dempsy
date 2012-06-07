@@ -34,9 +34,9 @@ import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.Dempsy;
-import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.Dispatcher;
+import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.config.ApplicationDefinition;
@@ -54,7 +54,8 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.mpcluster.MpCluster;
 import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
-import com.nokia.dempsy.router.RoutingStrategy.Outbound;
+import com.nokia.dempsy.mpcluster.MpClusterSlot;
+import com.nokia.dempsy.mpcluster.MpClusterWatcher;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 
@@ -86,7 +87,7 @@ import com.nokia.dempsy.serialization.Serializer;
  * 
  * <p>A router requires a non-null ApplicationDefinition during construction.</p>
  */
-public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
+public class Router implements Dispatcher
 {
    private static Logger logger = LoggerFactory.getLogger(Router.class);
 
@@ -94,11 +95,9 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
    private ApplicationDefinition applicationDefinition = null;
 
    private ConcurrentHashMap<Class<?>, Set<ClusterRouter>> routerMap = new ConcurrentHashMap<Class<?>, Set<ClusterRouter>>();
+
    // protected for test access
    protected ConcurrentHashMap<Class<?>, Object> missingMsgTypes = new ConcurrentHashMap<Class<?>, Object>();
-   
-   private Set<RoutingStrategy.Outbound> outbounds = new HashSet<RoutingStrategy.Outbound>();
-
    private MpClusterSession<ClusterInformation, SlotInformation> mpClusterSession = null;
    private SenderFactory defaultSenderFactory;
    private ClusterId currentCluster = null;
@@ -162,31 +161,18 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             (currentClusterDef != null && currentClusterDef.hasExplicitDestinations()) ? new HashSet<ClusterId>() : null;
       if (explicitClusterDestinations != null)
          explicitClusterDestinations.addAll(Arrays.asList(currentClusterDef.getDestinations()));
+         
 
-      //-------------------------------------------------------------------------------------
-      // TODO: This loop will eventually be replaced when the instantiation of the Outbound
-      // is driven from cluster information management events (Zookeeper callbacks).
-      //-------------------------------------------------------------------------------------
       // if the currentCluster is set and THAT cluster has explicit destinations
       //  then those are the only ones we want to consider
       for (ClusterDefinition clusterDef : applicationDefinition.getClusterDefinitions())
       {
          if (explicitClusterDestinations == null || explicitClusterDestinations.contains(clusterDef.getClusterId()))
          {
-            RoutingStrategy strategy = (RoutingStrategy)clusterDef.getRoutingStrategy();
-            ClusterId clusterId = clusterDef.getClusterId();
-            if (strategy == null)
-               throw new DempsyException("Could not retrieve the routing strategy for " + SafeString.valueOf(clusterId));
-            
-            MpCluster<ClusterInformation, SlotInformation> cluster = mpClusterSession.getCluster(clusterId);
-
-            // This create will result in a callback on the Router as the Outbound.Coordinator with a 
-            // registration event. The Outbound may (will) call back on the Router to retrieve the 
-            // MpClusterSession and register itself with the appropriate cluster.
-            outbounds.add(strategy.createOutbound(this, cluster));
+            ClusterRouter router = new ClusterRouter(clusterDef);
+            router.setup(false);
          }
       }
-      //-------------------------------------------------------------------------------------
    }
 
    /**
@@ -280,114 +266,102 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
          routers.addAll(curRouters);
       for (ClusterRouter router : routers)
          router.stop();
-      for (RoutingStrategy.Outbound ob : outbounds)
-         ob.stop();
-   }
-
-   @Override
-   public void registerOutbound(RoutingStrategy.Outbound outbound, Collection<Class<?>> classes)
-   {
-      synchronized(outbound)
-      {
-         unregisterOutbound(outbound);
-         
-         ClusterId clusterId = outbound.getClusterId();
-         if (classes != null && classes.size() > 0)
-         {
-            // find the appropriate ClusterDefinition
-            ClusterDefinition curClusterDef = applicationDefinition.getClusterDefinition(clusterId);
-            
-            if (curClusterDef != null)
-            {
-               // create a corresponding ClusterRouter
-               @SuppressWarnings("unchecked")
-               ClusterRouter clusterRouter = new ClusterRouter((Serializer<Object>)curClusterDef.getSerializer(),outbound);
-            
-               for (Class<?> clazz : classes)
-               {
-                  Set<ClusterRouter> cur = Collections.newSetFromMap(new ConcurrentHashMap<ClusterRouter, Boolean>()); // potential
-                  Set<ClusterRouter> tmp = routerMap.putIfAbsent(clazz, cur);
-                  if (tmp != null)
-                     cur = tmp;
-                  cur.add(clusterRouter);
-               }
-            }
-            else
-            {
-               logger.error("Couldn't find the ClusterDefinition for " + clusterId + " while registering the Outbound " + 
-                     SafeString.objectDescription(outbound) + " given the ApplicationDefinition " + applicationDefinition);
-            }
-         }
-      }
-   }
-   
-   @Override
-   public void unregisterOutbound(RoutingStrategy.Outbound outbound)
-   {
-      // we don't want to register and unregister the same Outbound at the same time
-      // but we can handle registering and unregistering different Outbound's
-      synchronized(outbound)
-      {
-         for (Map.Entry<Class<?>,Set<ClusterRouter>> entry : routerMap.entrySet())
-         {
-            Set<ClusterRouter> crs = entry.getValue();
-            for (Iterator<ClusterRouter> iter = crs.iterator(); iter.hasNext(); )
-            {
-               ClusterRouter cur = iter.next();
-               if (cur.strategyOutbound == outbound)
-                  iter.remove();
-            }
-            // we're not going to remove a potentially empty set, or purpose.
-         }
-      }
    }
    
    /**
     * This class routes messages within a particular cluster. It is protected for test 
     * access only. Otherwise it would be private.
     */
-   protected class ClusterRouter
+   protected class ClusterRouter implements MpClusterWatcher
    {
       private Serializer<Object> serializer;
+      private ClusterId clusterId;
+      private MpCluster<ClusterInformation,SlotInformation> clusterHandle;
       private SenderFactory senderFactory = defaultSenderFactory;
+      private volatile boolean isSetup = false;
+      private RoutingStrategy strategy;
       private RoutingStrategy.Outbound strategyOutbound;
       
-      private ClusterRouter(Serializer<Object> serializer, Outbound strategyOutbound)
+      @SuppressWarnings("unchecked")
+      private ClusterRouter(ClusterDefinition clusterDef) throws MpClusterException, DempsyException
       {
-         this.strategyOutbound = strategyOutbound;
-         this.serializer = serializer;
+         this.clusterId = new ClusterId(clusterDef.getClusterId());
+         
+         Object clusterRs = clusterDef.getRoutingStrategy(); 
+         if (clusterRs == null)
+            throw new DempsyException("Could not retrieve the routing strategy for " + SafeString.valueOf(clusterId));
+         strategy = (RoutingStrategy)clusterRs;
+         
+         strategyOutbound = strategy.createOutbound();
+         
+         serializer = (Serializer<Object>)clusterDef.getSerializer();
+         if (serializer == null)
+            throw new DempsyException("Could not retrieve the serializer for " + SafeString.valueOf(clusterId));
       }
       
+      @Override
+      public void process()
+      {
+         // it appears that the cluster configuration has changed.
+         // we need to reset up the distributor
+         try
+         {
+            setup(true);
+         }
+         catch(MpClusterException e)
+         {
+            logger.error("Major problem with the Router. Can't respond to changes in the cluster information:", e);
+         }
+      }
+
       public void route(Object key, Object message)
       {
+         SlotInformation target = null;
          boolean messageFailed = true;
          Sender sender = null;
          try
          {
-            Destination destination = strategyOutbound.selectDestinationForMessage(key, message);
-
-            if (destination == null)
+            target = strategyOutbound.selectSlotForMessageKey(key);
+            if(target == null)
             {
-               logger.error("Couldn't find a destination for " + SafeString.objectDescription(message));
-               return;
+               setup(false);
+               target = strategyOutbound.selectSlotForMessageKey(key);
             }
 
-            sender = senderFactory.getSender(destination);
-            if (sender == null)
-               logger.error("Couldn't figure out a means to send " + SafeString.objectDescription(message) +
-                     " to " + SafeString.valueOf(destination) + "");
+            if(target != null)
+            {
+               Destination destination = target.getDestination();
+
+               if (destination == null)
+               {
+                  logger.error("Couldn't find a destination for " + SafeString.objectDescription(message) + 
+                        " from the cluster slot information selected " + SafeString.objectDescription(target));
+                  return;
+               }
+
+               sender = senderFactory.getSender(destination);
+               if (sender == null)
+                  logger.error("Couldn't figure out a means to send " + SafeString.objectDescription(message) +
+                        " to " + SafeString.valueOf(destination) + "");
+               else
+               {
+                  byte[] data = serializer.serialize(message);
+                  sender.send(data);
+                  messageFailed = false;
+                  if (statsCollector != null) statsCollector.messageSent(message);
+               }
+
+            }
             else
             {
-               byte[] data = serializer.serialize(message);
-               sender.send(data);
-               messageFailed = false;
-               if (statsCollector != null) statsCollector.messageSent(message);
+               logger.warn("No destination found for the message " + SafeString.objectDescription(message) + 
+                     " with the key " + SafeString.objectDescription(key));
             }
          }
          catch(DempsyException e)
          {
             logger.error("Failed to determine the destination for " + SafeString.objectDescription(message) + 
-                  " using the routing strategy " + SafeString.objectDescription(strategyOutbound),e);
+                  " using the routing strategy " + SafeString.objectDescription(strategy),e);
          }
          catch (SerializationException e)
          {
@@ -409,6 +383,52 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
          {
             if (statsCollector != null && messageFailed) 
                statsCollector.messageFailed();
+         }
+      }
+      
+      public void setup(boolean force) throws MpClusterException
+      {
+         if (!isSetup || force)
+         {
+            synchronized(this)
+            {
+               if (!isSetup || force) // double checked locking
+               {
+                  isSetup = false;
+                  clusterHandle = mpClusterSession.getCluster(clusterId);
+                  clusterHandle.addWatcher(this);
+                  strategyOutbound.resetCluster(clusterHandle);
+
+                  Set<Class<?>> messageClasses = new HashSet<Class<?>>();
+
+                  Collection<MpClusterSlot<SlotInformation>> nodes = clusterHandle.getActiveSlots();
+                  if(nodes != null)
+                  {
+                     Set<Class<?>> msgClass = null;
+                     for(MpClusterSlot<SlotInformation> node: nodes)
+                     {
+                        SlotInformation slotInfo = node.getSlotInformation();
+                        if(slotInfo != null)
+                        {
+                           msgClass = slotInfo.getMessageClasses();
+                           if (msgClass != null)
+                              messageClasses.addAll(msgClass);
+                        }
+                     }
+                     
+                     // now we may have new messageClasses so we need to register with the Router
+                     for (Class<?> clazz : messageClasses)
+                     {
+                        Set<ClusterRouter> cur = Collections.newSetFromMap(new ConcurrentHashMap<ClusterRouter, Boolean>()); // potential
+                        Set<ClusterRouter> tmp = routerMap.putIfAbsent(clazz, cur);
+                        if (tmp != null)
+                           cur = tmp;
+                        cur.add(this);
+                     }
+
+                  }
+               }
+            }
          }
       }
       
