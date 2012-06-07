@@ -24,8 +24,6 @@ import java.util.HashSet;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import junit.framework.Assert;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -230,29 +228,6 @@ public class TestMpContainer
       assertTrue("second MP sent output", messageKeys.contains("bar"));
    }
 
-   @Test
-   public void testInvokeOutputScheduler()
-   throws Exception
-   {
-      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
-      ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
-      assertTrue("messages received", (out1 != null) );
-
-      assertEquals("number of MP instances", 1, container.getProcessorCount());
-      assertTrue("queue is empty", outputQueue.isEmpty());
-
-      container.setOutPutPass(100, TimeUnit.MILLISECONDS);
-
-      OutputMessage out2 = null;
-      for(int i=0; i<10; i++)
-      {
-         byte[] out = (byte[]) outputQueue.poll(10000, TimeUnit.MILLISECONDS);
-         assertNotNull(out);
-         out2 = (OutputMessage)serializer.deserialize(out);
-         Assert.assertNotNull(out2);
-      }
-      Assert.assertTrue(out2.outputCount>8);
-   }
 
    @Test
    public void testOutputInvoker() throws Exception {
@@ -266,9 +241,7 @@ public class TestMpContainer
    }
    
    @Test
-   public void testEvictable()
-   throws Exception
-   {
+   public void testEvictable() throws Exception {
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
       outputQueue.poll(1000, TimeUnit.MILLISECONDS);
 
@@ -287,11 +260,10 @@ public class TestMpContainer
       int tmpCloneCount = TestProcessor.cloneCount;
       
       mp.evict = true;
+      container.evict();
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
       outputQueue.poll(1000, TimeUnit.MILLISECONDS);
 
       assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount);
-
    }
-
 }

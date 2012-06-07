@@ -73,19 +73,22 @@ public class StatsCollectorCoda implements StatsCollector {
 	private Meter messagesUnsent;
 	private AtomicInteger inProcessMessages;
 	@SuppressWarnings("unused")
-   private Gauge<Integer> messagesInProcess;
+	private Gauge<Integer> messagesInProcess;
 	private AtomicLong numberOfMPs;
 	private Meter mpsCreated;
 	private Meter mpsDeleted;
 	@SuppressWarnings("unused")
-   private Gauge<Long> messageProcessors;
+	private Gauge<Long> messageProcessors;
 	private String scope;
-	
+
 	private Timer preInstantiationDuration;
 	private TimerContext preInstantiationDurationContext;
-	
+
 	private Timer outputInvokeDuration;
-  private TimerContext outputInvokeDurationContext;
+	private TimerContext outputInvokeDurationContext;
+	
+	private Timer evictionInvokeDuration;
+	private TimerContext evictionInvokeDurationContext;
   
 
 	public StatsCollectorCoda(ClusterId clusterId)
@@ -130,9 +133,12 @@ public class StatsCollectorCoda implements StatsCollector {
 	   
 	   preInstantiationDuration = Metrics.newTimer(Dempsy.class, "pre-instantiation-duration",
 	         scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
-	   
+
 	   outputInvokeDuration = Metrics.newTimer(Dempsy.class, "outputInvoke-duration",
        scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+	   
+	   evictionInvokeDuration = Metrics.newTimer(Dempsy.class, "evictionInvoke-duration",
+		       scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 	   
 	}
 	
@@ -275,4 +281,19 @@ public class StatsCollectorCoda implements StatsCollector {
   {
      return outputInvokeDuration.meanRate();
   }
+
+	@Override
+	public void evictionPassStarted() {
+		evictionInvokeDurationContext = evictionInvokeDuration.time();
+	}
+
+	@Override
+	public void evictionPassCompleted() {
+		evictionInvokeDurationContext.stop();
+	}
+
+	@Override
+	public double getEvictionDuration() {
+		return evictionInvokeDuration.meanRate();
+	}
 }

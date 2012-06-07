@@ -34,6 +34,7 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.container.MpContainer.InstanceWrapper;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
@@ -247,7 +248,7 @@ public class TestInstanceManager
       assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
       MessageOne message = new MessageOne(123);
-      MpContainer.InstanceWrapper wrapper = manager.getInstanceForDispatch(message);
+      InstanceWrapper wrapper = manager.getInstanceForDispatch(message);
       assertEquals("instance was created", 1, manager.getProcessorCount());
 
       CombinedMP instance = (CombinedMP)wrapper.getInstance();
@@ -286,7 +287,7 @@ public class TestInstanceManager
       assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
       MessageOne message1 = new MessageOne(123);
-      MpContainer.InstanceWrapper wrapper1 = manager.getInstanceForDispatch(message1);
+      InstanceWrapper wrapper1 = manager.getInstanceForDispatch(message1);
       manager.dispatch(message1, false);
       CombinedMP instance = (CombinedMP)wrapper1.getInstance();
 
@@ -300,7 +301,7 @@ public class TestInstanceManager
       assertEquals("MessageOne",dispatcher.lastDispatched);
 
       MessageOne message2 = new MessageOne(123);
-      MpContainer.InstanceWrapper wrapper2 = manager.getInstanceForDispatch(message2);
+      InstanceWrapper wrapper2 = manager.getInstanceForDispatch(message2);
       manager.dispatch(message2, false);
       assertSame("same wrapper returned for second message", wrapper1, wrapper2);
       assertEquals("no other instance was created", 1, manager.getProcessorCount());
@@ -324,7 +325,7 @@ public class TestInstanceManager
       assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
       MessageOne message1 = new MessageOne(123);
-      MpContainer.InstanceWrapper wrapper = manager.getInstanceForDispatch(message1);
+      InstanceWrapper wrapper = manager.getInstanceForDispatch(message1);
       manager.dispatch(message1,false);
       assertEquals("instance was created", 1, manager.getProcessorCount());
       MessageOne message2 = new MessageOne(123);
@@ -356,7 +357,7 @@ public class TestInstanceManager
       assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
       MessageOne message1 = new MessageOne(123);
-      MpContainer.InstanceWrapper wrapper = manager.getInstanceForDispatch(message1);
+      InstanceWrapper wrapper = manager.getInstanceForDispatch(message1);
       manager.dispatch(message1, true);
       CombinedMP instance = (CombinedMP)wrapper.getInstance();
 
@@ -393,12 +394,12 @@ public class TestInstanceManager
       assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
       MessageOne message1 = new MessageOne(123);
-      MpContainer.InstanceWrapper wrapper1 = manager.getInstanceForDispatch(message1);
+      InstanceWrapper wrapper1 = manager.getInstanceForDispatch(message1);
       manager.dispatch(message1, true);
       CombinedMP instance1 = (CombinedMP)wrapper1.getInstance();
 
       MessageOne message2 = new MessageOne(456);
-      MpContainer.InstanceWrapper wrapper2 = manager.getInstanceForDispatch(message2);
+      InstanceWrapper wrapper2 = manager.getInstanceForDispatch(message2);
       manager.dispatch(message2, false);
       CombinedMP instance2 = (CombinedMP)wrapper2.getInstance();
 
@@ -424,10 +425,10 @@ public class TestInstanceManager
 
       // we need to dispatch messages to create MP instances
       MessageOne message1 = new MessageOne(1);
-      MpContainer.InstanceWrapper wrapper1 = instanceManager.getInstanceForDispatch(message1);
+      InstanceWrapper wrapper1 = instanceManager.getInstanceForDispatch(message1);
       instanceManager.dispatch(message1, true);
       MessageOne message2 = new MessageOne(2);
-      MpContainer.InstanceWrapper wrapper2 = instanceManager.getInstanceForDispatch(message2);
+      InstanceWrapper wrapper2 = instanceManager.getInstanceForDispatch(message2);
       instanceManager.dispatch(message2, true);
       assertEquals("MessageOne",dispatcher.lastDispatched);
 
@@ -491,7 +492,7 @@ public class TestInstanceManager
       MpContainer manager = setupContainer(prototype);
 
       MessageOne message = new MessageOne(123);
-      MpContainer.InstanceWrapper wrapper = manager.getInstanceForDispatch(message);
+      InstanceWrapper wrapper = manager.getInstanceForDispatch(message);
       manager.dispatch(message, false);
       assertEquals("instance was created", 1, manager.getProcessorCount());
 
