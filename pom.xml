@@ -5,7 +5,7 @@
 
   <groupId>net.dempsy</groupId>
   <artifactId>dempsy-parent</artifactId>
-  <version>0.7-SNAPSHOT</version>
+  <version>0.7</version>
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>
 
@@ -256,7 +256,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <ignore></ignore>
+                    <ignore />
                   </action>
                 </pluginExecution>
               </pluginExecutions>
