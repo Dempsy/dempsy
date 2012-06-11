@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy.mpcluster.zookeeper;
 
+import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -39,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.tcp.TcpTransport;
@@ -82,19 +84,6 @@ public class TestZookeeperClusterResilience
          called.set(true);
       }
       
-   }
-   
-   private interface Condition<T>
-   {
-      public boolean conditionMet(T o);
-   }
-
-   public static <T> boolean poll(long timeoutMillis, T userObject, Condition<T> condition) throws InterruptedException
-   {
-      for (long endTime = System.currentTimeMillis() + timeoutMillis;
-            endTime > System.currentTimeMillis() && !condition.conditionMet(userObject);)
-         Thread.sleep(1);
-      return condition.conditionMet(userObject);
    }
    
    @Test
@@ -374,6 +363,7 @@ public class TestZookeeperClusterResilience
       ZookeeperSession session = null;
       final AtomicLong processCount = new AtomicLong(0);
       
+      Dempsy[] dempsy = new Dempsy[3];
       try
       {
          server = new ZookeeperTestServer();
@@ -400,7 +390,6 @@ public class TestZookeeperClusterResilience
          ApplicationDefinition ad = app.getTopology();
 
          assertEquals(0,processCount.intValue()); // no calls yet
-         Dempsy[] dempsy = new Dempsy[3];
 
          dempsy[0] = getDempsyFor(new ClusterId(FullApplication.class.getSimpleName(),FullApplication.MyAdaptor.class.getSimpleName()),ad);
          dempsy[0].setClusterSessionFactory(new ZookeeperSessionFactory<ClusterInformation, SlotInformation>("127.0.0.1:" + port,5000));
@@ -468,6 +457,10 @@ public class TestZookeeperClusterResilience
          
          if (session != null)
             session.stop();
+         
+         for (int i = 0; i < 3; i++)
+            if (dempsy[i] != null)
+               dempsy[i].stop();
       }
    }
 

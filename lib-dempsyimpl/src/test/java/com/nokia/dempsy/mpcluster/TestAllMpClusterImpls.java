@@ -21,6 +21,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static com.nokia.dempsy.TestUtils.*;
+
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -90,19 +92,6 @@ public class TestAllMpClusterImpls
          actx.stop();
          actx.destroy();
       }
-   }
-   
-   private interface Condition<T>
-   {
-      public boolean conditionMet(T o);
-   }
-
-   public static <T> boolean poll(long timeoutMillis, T userObject, Condition<T> condition) throws InterruptedException
-   {
-      for (long endTime = System.currentTimeMillis() + timeoutMillis;
-            endTime > System.currentTimeMillis() && !condition.conditionMet(userObject);)
-         Thread.sleep(1);
-      return condition.conditionMet(userObject);
    }
    
    @Test

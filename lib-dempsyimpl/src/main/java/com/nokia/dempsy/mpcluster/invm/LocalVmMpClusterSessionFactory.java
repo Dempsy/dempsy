@@ -239,7 +239,46 @@ public class LocalVmMpClusterSessionFactory<T,N> implements MpClusterSessionFact
          
       } // end cluster definition
       
-      private final void callUpdateWatchersForCluster(ClusterId clusterId) { updateClusterWatchers(clusterId); }
+      private volatile boolean inProcess = false;
+      private volatile boolean recursionAttempt = false;
+      
+      private final void callUpdateWatchersForCluster(ClusterId clusterId)
+      {
+         // this needs to avoid recursion but if there is a recursion attempt it
+         // needs to execute another process call at the end.
+         LocalVmMpSession.LocalVmMpCluster cluster = (LocalVmMpSession.LocalVmMpCluster)cache.get(clusterId);
+         if (cluster != null)
+         {
+            synchronized(cluster.processLock)
+            {
+               if (inProcess)
+               {
+                  recursionAttempt = true;
+                  return;
+               }
+               
+               do
+               {
+                  recursionAttempt = false;
+                  inProcess = true;
+                  
+                  for(MpClusterWatcher watcher: cluster.watchers)
+                  {
+                     try
+                     {
+                        watcher.process();
+                     }
+                     catch (RuntimeException e)
+                     {
+                        logger.error("Failed to handle process for watcher " + SafeString.objectDescription(watcher),e);
+                     }
+                  }
+               } while (recursionAttempt);
+               
+               inProcess = false;
+            }
+         }
+      }
       
       private final void callUpdateWatchersForApplication(String applicationId)
       {

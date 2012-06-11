@@ -24,4 +24,9 @@
          </list>
       </property>
    </bean>
+
+	<bean name="latch" class="java.util.concurrent.CountDownLatch">
+		<constructor-arg value="4" />
+	</bean>
+   
 </beans>

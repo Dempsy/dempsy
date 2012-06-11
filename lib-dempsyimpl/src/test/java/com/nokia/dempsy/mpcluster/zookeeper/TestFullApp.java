@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy.mpcluster.zookeeper;
 
+import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -36,6 +37,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
@@ -57,11 +59,6 @@ public class TestFullApp
    private static final String transport = "testDempsy/Transport-TcpActx.xml";
    private static final long baseTimeoutMillis = 10000;
    
-   private interface Condition
-   {
-      public boolean conditionMet(Object o);
-   }
-
    private static String[] ctx = new String[4];
    static {
       ctx[0] = dempsyConfig;
@@ -88,14 +85,6 @@ public class TestFullApp
       zkServer.stop();
    }
    
-   public static boolean poll(long timeoutMillis, Object userObject, Condition condition) throws InterruptedException
-   {
-      for (long endTime = System.currentTimeMillis() + timeoutMillis;
-            endTime > System.currentTimeMillis() && !condition.conditionMet(userObject);)
-         Thread.sleep(1);
-      return condition.conditionMet(userObject);
-   }
-   
    @Test
    public void testStartStop() throws Throwable
    {
@@ -114,7 +103,7 @@ public class TestFullApp
          final FullApplication app = (FullApplication)actx.getBean("app");
 
          // this checks that the throughput works.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -182,7 +171,7 @@ public class TestFullApp
          final StatsCollector collector = node.getStatsCollector();
 
          // this checks that the throughput works.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -226,7 +215,7 @@ public class TestFullApp
          final long interimMessageCount = prototype.myMpReceived.get();
 
          // and now we should eventually get more as the session recovers.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -297,7 +286,7 @@ public class TestFullApp
          cluster.instantiateAndStartAnotherNodeForTesting(); // the code for start instantiates a new node
 
          // this checks that the throughput works.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -342,7 +331,7 @@ public class TestFullApp
          final long interimMessageCount = prototype.myMpReceived.get();
 
          // and now we should eventually get more as the session recovers.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -423,7 +412,7 @@ public class TestFullApp
          final FullApplication app = (FullApplication)actx.getBean("app");
 
          // this checks that the throughput works.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -480,7 +469,7 @@ public class TestFullApp
          final FullApplication app = (FullApplication)actx.getBean("app");
 
          // this checks that the throughput works.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -519,7 +508,7 @@ public class TestFullApp
          final long originalNumMessages = originalprototype.myMpReceived.get();
          
          // makes sure the message count is still advancing
-         assertTrue(poll(baseTimeoutMillis, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
@@ -544,7 +533,7 @@ public class TestFullApp
          // now we wait until at least numMillisecondsWithoutAMessage goes by without the myMpReceived
          //  being incremented. This must happen within the baseTimeoutMillis or this check is
          //   considered failed.
-         poll(baseTimeoutMillis + numMillisecondsWithoutAMessage, originalprototype, new Condition()
+         poll(baseTimeoutMillis + numMillisecondsWithoutAMessage, originalprototype, new Condition<Object>()
          {
             long startCheckingTime = System.currentTimeMillis();
             long lastMessage = originalprototype.myMpReceived.get();
@@ -564,7 +553,7 @@ public class TestFullApp
          });
          
          // now check to see if the new one picked up.
-         assertTrue(poll(baseTimeoutMillis, app, new Condition()
+         assertTrue(poll(baseTimeoutMillis, app, new Condition<Object>()
          {
             @Override
             public boolean conditionMet(Object o)
