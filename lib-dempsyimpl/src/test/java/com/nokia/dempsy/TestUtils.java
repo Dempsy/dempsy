@@ -1,5 +1,8 @@
 package com.nokia.dempsy;
 
+import org.junit.Ignore;
+
+@Ignore
 public class TestUtils
 {
    public static interface Condition<T>
