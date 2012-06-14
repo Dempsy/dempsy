@@ -28,7 +28,6 @@
          <bean class="com.nokia.dempsy.router.DefaultRoutingStrategy" >
             <constructor-arg name="defaultTotalSlots" type="int" value="20" />
             <constructor-arg name="defaultNumNodes" type="int" value="1" />
-            <property name="latch" ref="latch" />
          </bean>
       </property>
       <property name="defaultSerializer">

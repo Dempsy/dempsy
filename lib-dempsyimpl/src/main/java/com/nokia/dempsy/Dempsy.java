@@ -261,7 +261,7 @@ public class Dempsy
          } // end Node definition
          
          private List<Node> nodes = new ArrayList<Node>(1);
-         private ClusterDefinition clusterDefinition;
+         protected ClusterDefinition clusterDefinition;
          
          private Cluster(ClusterDefinition clusterDefinition)
          {
@@ -298,8 +298,8 @@ public class Dempsy
          
       } // end Cluster Definition
       
-      private ApplicationDefinition applicationDefinition;
-      private List<Cluster> appClusters = new ArrayList<Cluster>();
+      protected ApplicationDefinition applicationDefinition;
+      protected List<Cluster> appClusters = new ArrayList<Cluster>();
       private List<AdaptorThread> adaptorThreads = new ArrayList<AdaptorThread>();
       
       public Application(ApplicationDefinition applicationDefinition)
@@ -430,9 +430,9 @@ public class Dempsy
    }
 
    private List<ApplicationDefinition> applicationDefinitions = null;
-   private List<Application> applications = null;
+   protected List<Application> applications = null;
    private CurrentClusterCheck clusterCheck = null;
-   private MpClusterSessionFactory<ClusterInformation, SlotInformation> clusterSessionFactory = null;
+   protected MpClusterSessionFactory<ClusterInformation, SlotInformation> clusterSessionFactory = null;
    private RoutingStrategy defaultRoutingStrategy = null;
    private Serializer<Object> defaultSerializer = null;
    private Transport transport = null;

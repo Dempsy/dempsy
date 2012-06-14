@@ -53,6 +53,7 @@ import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.mpcluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
+import com.nokia.dempsy.router.DefaultRoutingStrategy;
 
 public class TestDempsy
 {
@@ -246,6 +247,8 @@ public class TestDempsy
                   logger.debug(" test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport);
                   logger.debug("*****************************************************************");
 
+                  DefaultRoutingStrategy.resetOutboundsChecking();
+                  
                   String[] ctx = new String[4];
                   ctx[0] = dempsyConfig;
                   ctx[1] = clusterManager;
@@ -256,13 +259,9 @@ public class TestDempsy
                   ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
                   actx.registerShutdownHook();
                   
-                  CountDownLatch startupLatch = (CountDownLatch)actx.getBean("latch");
-                  // if there was a latch set then we should validate that 
-                  //  everything has started before continuing.
-                  if (startupLatch != null)
-                     assertTrue(startupLatch.await(10, TimeUnit.SECONDS));
-
                   Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
+                  
+                  assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, 20, dempsy));
 
                   WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
                   Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
@@ -304,12 +303,6 @@ public class TestDempsy
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();
-      CountDownLatch startupLatch = (CountDownLatch)actx.getBean("latch");
-      assertTrue(poll(baseTimeoutMillis,startupLatch,new Condition<CountDownLatch>()
-      {
-         @Override
-         public boolean conditionMet(CountDownLatch o) { return o.getCount() <= 15; }
-      }));
       
       Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
       assertNotNull(dempsy);

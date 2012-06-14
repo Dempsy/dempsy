@@ -171,7 +171,8 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
       //  then those are the only ones we want to consider
       for (ClusterDefinition clusterDef : applicationDefinition.getClusterDefinitions())
       {
-         if (explicitClusterDestinations == null || explicitClusterDestinations.contains(clusterDef.getClusterId()))
+         if ((explicitClusterDestinations == null || explicitClusterDestinations.contains(clusterDef.getClusterId()))
+               && !clusterDef.isRouteAdaptorType())
          {
             RoutingStrategy strategy = (RoutingStrategy)clusterDef.getRoutingStrategy();
             ClusterId clusterId = clusterDef.getClusterId();
