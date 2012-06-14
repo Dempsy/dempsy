@@ -46,7 +46,8 @@ public class TestUtils
                   clusters.add(new ClusterId(cluster.clusterDefinition.getClusterId()));
          }
          
-         return poll(timeoutMillis, dempsy.clusterSessionFactory.createSession(), new Condition<MpClusterSession<ClusterInformation, SlotInformation>>()
+         MpClusterSession<ClusterInformation, SlotInformation> session = dempsy.clusterSessionFactory.createSession();
+         boolean ret = poll(timeoutMillis, session, new Condition<MpClusterSession<ClusterInformation, SlotInformation>>()
          {
             @Override
             public boolean conditionMet(MpClusterSession<ClusterInformation, SlotInformation> session)
@@ -69,6 +70,9 @@ public class TestUtils
                return DefaultRoutingStrategy.allOutboundsInitialized();
             }
          });
+         
+         session.stop();
+         return ret;
       }
       catch (MpClusterException e)
       {
