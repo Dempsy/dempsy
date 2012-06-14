@@ -25,11 +25,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -57,8 +57,15 @@ public class DefaultRoutingStrategy implements RoutingStrategy
    
    private int defaultTotalSlots;
    private int defaultNumNodes;
-   private CountDownLatch injectedLatch = null;
    
+   /*
+    * These is to control the timing in tests
+    */
+   private static AtomicLong numOutbounds = new AtomicLong(0);
+   private static AtomicLong numOutboundsInitialized = new AtomicLong(0);
+   public static boolean allOutboundsInitialized() { return numOutboundsInitialized.get() == numOutbounds.get(); }
+   public static void resetOutboundsChecking() { numOutbounds = new AtomicLong(0); numOutboundsInitialized = new AtomicLong(0); }
+
    public DefaultRoutingStrategy(int defaultTotalSlots, int defaultNumNodes)
    {
       this.defaultTotalSlots = defaultTotalSlots;
@@ -74,10 +81,11 @@ public class DefaultRoutingStrategy implements RoutingStrategy
       private Set<Class<?>> messageTypesHandled = null;
 
       private ScheduledExecutorService scheduler = null;
-
+      
       private Outbound(RoutingStrategy.Outbound.Coordinator coordinator,
             MpCluster<ClusterInformation, SlotInformation> cluster)
       {
+         numOutbounds.incrementAndGet();
          this.coordinator = coordinator;
          this.cluster = cluster;
          this.clusterId = cluster.getClusterId();
@@ -169,10 +177,8 @@ public class DefaultRoutingStrategy implements RoutingStrategy
          return false;
       }
       
-      private void execSetupDestinations(boolean fromProcessParam)
+      private void execSetupDestinations(final boolean fromProcess)
       {
-         final boolean fromProcess = fromProcessParam;
-         
          if (!setupDestinations())
          {
             scheduler = Executors.newScheduledThreadPool(1);
@@ -191,8 +197,9 @@ public class DefaultRoutingStrategy implements RoutingStrategy
                   }
                   else
                   {
-                     if (!fromProcess && injectedLatch != null)
-                        injectedLatch.countDown();
+                     // at this point the initialize has succeeded
+                     if (!fromProcess)
+                        numOutboundsInitialized.incrementAndGet();
                      
                      synchronized(Outbound.this)
                      {
@@ -206,9 +213,12 @@ public class DefaultRoutingStrategy implements RoutingStrategy
                }
             }, resetDelay, TimeUnit.MILLISECONDS);
          }
-         else if (!fromProcess && injectedLatch != null)
-            injectedLatch.countDown();
+         else
+            // at this point the initialize has succeeded
+            if (!fromProcess)
+               numOutboundsInitialized.incrementAndGet();
       }
+
       
    } // end Outbound class definition
    
@@ -240,10 +250,9 @@ public class DefaultRoutingStrategy implements RoutingStrategy
          acquireSlots(true);
       }
       
-      private synchronized void acquireSlots(boolean fromProcessParam)
+      private synchronized void acquireSlots(final boolean fromProcess)
       {
          boolean retry = true;
-         final boolean fromProcess = fromProcessParam;
          
          try
          {
@@ -292,8 +301,6 @@ public class DefaultRoutingStrategy implements RoutingStrategy
             }
             
             retry = false;
-            if (injectedLatch != null && !fromProcess)
-               injectedLatch.countDown();
          }
          catch(MpClusterException e)
          {
@@ -307,8 +314,6 @@ public class DefaultRoutingStrategy implements RoutingStrategy
                   @Override
                   public void run() { acquireSlots(fromProcess); }
                }, resetDelay, TimeUnit.MILLISECONDS);
-            else if (injectedLatch != null && !fromProcess)
-               injectedLatch.countDown();
          }
       }
       
@@ -348,11 +353,6 @@ public class DefaultRoutingStrategy implements RoutingStrategy
       return new Outbound(coordinator,cluster);
    }
    
-   /**
-    * This method is to allow the tests a mechanism to know when the strategy 
-    */
-   public void setLatch(CountDownLatch latch) { this.injectedLatch = latch; }
-
    static class DefaultRouterSlotInfo extends SlotInformation
    {
       private static final long serialVersionUID = 1L;
@@ -423,6 +423,11 @@ public class DefaultRoutingStrategy implements RoutingStrategy
 
       if(slotsFromClusterManager != null)
       {
+         // zero is valid but we only want to set it if we are not 
+         // going to enter into the loop below.
+         if (slotsFromClusterManager.size() == 0)
+            totalAddressCounts = 0;
+         
          for(MpClusterSlot<SlotInformation> node: slotsFromClusterManager)
          {
             DefaultRouterSlotInfo slotInfo = (DefaultRouterSlotInfo)node.getSlotInformation();
