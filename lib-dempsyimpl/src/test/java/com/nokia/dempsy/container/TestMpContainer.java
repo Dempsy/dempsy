@@ -59,6 +59,7 @@ public class TestMpContainer
    private Serializer<Object> serializer = new JavaSerializer<Object>();
 
    private ClassPathXmlApplicationContext context;
+   private long baseTimeoutMillis = 2000;
 
    public static class DummyDispatcher implements Dispatcher
    {
@@ -243,7 +244,7 @@ public class TestMpContainer
    @Test
    public void testEvictable() throws Exception {
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
-      outputQueue.poll(1000, TimeUnit.MILLISECONDS);
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
 
       assertEquals("did not create MP", 1, container.getProcessorCount());
 
@@ -253,7 +254,7 @@ public class TestMpContainer
       assertEquals("invocation count, 1st message", 1, mp.invocationCount);
 
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
-      outputQueue.poll(1000, TimeUnit.MILLISECONDS);
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
 
       assertEquals("activation count, 2nd message", 1, mp.activationCount);
       assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
@@ -262,7 +263,7 @@ public class TestMpContainer
       mp.evict = true;
       container.evict();
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
-      outputQueue.poll(1000, TimeUnit.MILLISECONDS);
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
 
       assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount);
    }
