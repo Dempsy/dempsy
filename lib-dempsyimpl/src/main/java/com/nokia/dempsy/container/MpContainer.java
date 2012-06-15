@@ -385,7 +385,21 @@ public class MpContainer implements Listener, OutputInvoker
 							wrapper.markPassivated();
 							instances.remove(key);
 						}
-					} catch (Throwable e) {
+					} 
+					catch (InvocationTargetException e)
+					{
+					   logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+					         " resulted in an exception.",e.getCause());
+					}
+					catch (IllegalAccessException e)
+					{
+                  logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
+                        " is not defined correctly. Is it visible?",e);
+					}
+					catch (RuntimeException e)
+					{
+                  logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                        " resulted in an exception.",e);
 					}
 				}
 			} finally {
