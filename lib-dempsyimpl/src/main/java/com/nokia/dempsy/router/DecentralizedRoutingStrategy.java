@@ -49,11 +49,11 @@ import com.nokia.dempsy.router.RoutingStrategy.Outbound.Coordinator;
  * This Routing Strategy uses the {@link MpCluster} to negotiate with other instances in the 
  * cluster.
  */
-public class DefaultRoutingStrategy implements RoutingStrategy
+public class DecentralizedRoutingStrategy implements RoutingStrategy
 {
    private static final int resetDelay = 500;
    
-   private static Logger logger = LoggerFactory.getLogger(DefaultRoutingStrategy.class);
+   private static Logger logger = LoggerFactory.getLogger(DecentralizedRoutingStrategy.class);
    
    private int defaultTotalSlots;
    private int defaultNumNodes;
@@ -66,7 +66,7 @@ public class DefaultRoutingStrategy implements RoutingStrategy
    public static boolean allOutboundsInitialized() { return numOutboundsInitialized.get() == numOutbounds.get(); }
    public static void resetOutboundsChecking() { numOutbounds = new AtomicLong(0); numOutboundsInitialized = new AtomicLong(0); }
 
-   public DefaultRoutingStrategy(int defaultTotalSlots, int defaultNumNodes)
+   public DecentralizedRoutingStrategy(int defaultTotalSlots, int defaultNumNodes)
    {
       this.defaultTotalSlots = defaultTotalSlots;
       this.defaultNumNodes = defaultNumNodes;

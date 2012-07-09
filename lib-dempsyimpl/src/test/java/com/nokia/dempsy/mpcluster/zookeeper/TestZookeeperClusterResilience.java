@@ -40,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterId;
@@ -51,7 +52,7 @@ import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
 import com.nokia.dempsy.mpcluster.MpClusterWatcher;
 import com.nokia.dempsy.router.ClusterInformation;
-import com.nokia.dempsy.router.DefaultRoutingStrategy;
+import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
 import com.nokia.dempsy.router.SlotInformation;
 import com.nokia.dempsy.router.SpecificClusterCheck;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
@@ -192,13 +193,17 @@ public class TestZookeeperClusterResilience
          server.start();
          
          // wait until this works.
-         for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && !callback.called.get();)
-            Thread.sleep(1);
+         assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new Condition<TestWatcher>() {
+            @Override public boolean conditionMet(TestWatcher o){  return o.called.get(); }
+         }));
          
-         assertTrue(callback.called.get());
          callback.called.set(false); // reset the callbacker ...
          
          // now see if the cluster works.
+         assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new Condition<TestWatcher>() {
+            @Override public boolean conditionMet(TestWatcher o){  return !o.called.get(); }
+         }));
+
          cluster.getActiveSlots();
          
          // now we should be all happycakes ... but with the server running lets sever the connection
@@ -211,9 +216,9 @@ public class TestZookeeperClusterResilience
          killer.close(); // tricks the server into expiring the other session
          
          // wait for the callback
-         for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && !callback.called.get();)
-            Thread.sleep(10);
-         assertTrue(callback.called.get());
+         assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new Condition<TestWatcher>() {
+            @Override public boolean conditionMet(TestWatcher o){  return o.called.get(); }
+         }));
          
          // unfortunately I cannot check the getActiveSlots for failure because there's a race condition I can't fix.
          //  No matter how fast I check it's possible that it's okay again OR that allSlots hasn't been cleared.
@@ -344,7 +349,7 @@ public class TestZookeeperClusterResilience
       Dempsy dempsy = new Dempsy();
       dempsy.setApplicationDefinitions(ads);
       dempsy.setClusterCheck(new SpecificClusterCheck(clusterId));
-      dempsy.setDefaultRoutingStrategy(new DefaultRoutingStrategy(20, 1));
+      dempsy.setDefaultRoutingStrategy(new DecentralizedRoutingStrategy(20, 1));
       dempsy.setDefaultSerializer(new JavaSerializer<Object>());
       dempsy.setDefaultStatsCollectorFactory(new StatsCollectorFactoryCoda());
       dempsy.setDefaultTransport(new TcpTransport());

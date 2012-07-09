@@ -53,7 +53,7 @@ import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.mpcluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
-import com.nokia.dempsy.router.DefaultRoutingStrategy;
+import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
 
 public class TestDempsy
 {
@@ -244,7 +244,7 @@ public class TestDempsy
                   logger.debug(" test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport);
                   logger.debug("*****************************************************************");
 
-                  DefaultRoutingStrategy.resetOutboundsChecking();
+                  DecentralizedRoutingStrategy.resetOutboundsChecking();
                   
                   String[] ctx = new String[4];
                   ctx[0] = dempsyConfig;

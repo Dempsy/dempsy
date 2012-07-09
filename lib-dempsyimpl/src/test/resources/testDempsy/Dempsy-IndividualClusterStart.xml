@@ -25,7 +25,7 @@
 			</bean>
 		</property>
       <property name="defaultRoutingStrategy">
-         <bean class="com.nokia.dempsy.router.DefaultRoutingStrategy" >
+         <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
             <constructor-arg name="defaultTotalSlots" type="int" value="20" />
             <constructor-arg name="defaultNumNodes" type="int" value="1" />
          </bean>

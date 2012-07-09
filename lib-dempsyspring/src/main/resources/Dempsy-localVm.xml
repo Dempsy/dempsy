@@ -17,7 +17,7 @@
          <bean class="com.nokia.dempsy.router.AlwaysInCurrentCluster" />
       </property>
       <property name="defaultRoutingStrategy">
-         <bean class="com.nokia.dempsy.router.DefaultRoutingStrategy" >
+         <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
             <constructor-arg type="int" value="1" />
             <constructor-arg type="int" value="1" />
          </bean>

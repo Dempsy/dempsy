@@ -12,7 +12,7 @@ import com.nokia.dempsy.mpcluster.MpClusterException;
 import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.mpcluster.MpClusterSlot;
 import com.nokia.dempsy.router.ClusterInformation;
-import com.nokia.dempsy.router.DefaultRoutingStrategy;
+import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
 import com.nokia.dempsy.router.SlotInformation;
 
 @Ignore
@@ -67,7 +67,7 @@ public class TestUtils
                   return false;
                }
 
-               return DefaultRoutingStrategy.allOutboundsInitialized();
+               return DecentralizedRoutingStrategy.allOutboundsInitialized();
             }
          });
          

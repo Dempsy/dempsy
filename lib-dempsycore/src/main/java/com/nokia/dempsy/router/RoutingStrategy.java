@@ -58,7 +58,7 @@ import com.nokia.dempsy.router.RoutingStrategy.Outbound.Coordinator;
  * and are therefore defined in the {@link ApplicationDefinition} using a single {@link RoutingStrategy} as
  * part of the {@link ClusterDefinition} that defines <code>Stage2</code>
  * 
- * <p>As an example, the DefaultRoutingStrategy's Inbound and Outbound coordinate
+ * <p>As an example, the DecentralizedRoutingStrategy's Inbound and Outbound coordinate
  * through the cluster. The Inbound side negotiates for slot ownership and those
  * slots contain enough information for the Outbound side </p>
  * 

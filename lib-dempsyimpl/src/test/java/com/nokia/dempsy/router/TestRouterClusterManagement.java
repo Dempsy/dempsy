@@ -58,7 +58,7 @@ public class TestRouterClusterManagement
       final ClusterId clusterId = new ClusterId("test", "test-slot");
       Destination destination = new Destination() {};
       ApplicationDefinition app = new ApplicationDefinition(clusterId.getApplicationName());
-      DefaultRoutingStrategy strategy = new DefaultRoutingStrategy(1, 1);
+      DecentralizedRoutingStrategy strategy = new DecentralizedRoutingStrategy(1, 1);
       app.setRoutingStrategy(strategy);
       app.setSerializer(new JavaSerializer<Object>());
       ClusterDefinition cd = new ClusterDefinition(clusterId.getMpClusterName());
@@ -115,7 +115,7 @@ public class TestRouterClusterManagement
       MpClusterSessionFactory<ClusterInformation, SlotInformation> factory = dempsy.getClusterSessionFactory();
       MpClusterSession<ClusterInformation, SlotInformation> session = factory.createSession();
       MpCluster<ClusterInformation, SlotInformation> ch = session.getCluster(new ClusterId("test-app", "test-cluster1"));
-      ch.setClusterData(new DefaultRoutingStrategy.DefaultRouterClusterInfo(20,2));
+      ch.setClusterData(new DecentralizedRoutingStrategy.DefaultRouterClusterInfo(20,2));
       session.stop();
       dempsy.stop();
    }
