@@ -12,7 +12,7 @@
 
    <bean id="Dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType" init-method="start" destroy-method="stop">
       <property name="clusterSessionFactory">
-         <bean class="com.nokia.dempsy.mpcluster.zookeeper.ZookeeperSessionFactory">
+         <bean class="com.nokia.dempsy.cluster.zookeeper.ZookeeperSessionFactory">
             <constructor-arg type="java.lang.String" value="${zk_connect}" />
             <constructor-arg type="int" value="${zk_session_timeout}" />
          </bean>

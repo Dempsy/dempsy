@@ -5,5 +5,5 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-	<bean name="clusterSessionFactory" class="com.nokia.dempsy.mpcluster.invm.LocalVmMpClusterSessionFactory" />
+	<bean name="clusterSessionFactory" class="com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory" />
 </beans>

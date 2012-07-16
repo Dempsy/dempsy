@@ -39,6 +39,8 @@ import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.Dispatcher;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
+import com.nokia.dempsy.cluster.ClusterInfoException;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
@@ -51,9 +53,6 @@ import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
 import com.nokia.dempsy.monitoring.StatsCollector;
-import com.nokia.dempsy.mpcluster.MpCluster;
-import com.nokia.dempsy.mpcluster.MpClusterException;
-import com.nokia.dempsy.mpcluster.MpClusterSession;
 import com.nokia.dempsy.router.RoutingStrategy.Outbound;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
@@ -99,14 +98,14 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
    
    private Set<RoutingStrategy.Outbound> outbounds = new HashSet<RoutingStrategy.Outbound>();
 
-   private MpClusterSession<ClusterInformation, SlotInformation> mpClusterSession = null;
+   private ClusterInfoSession mpClusterSession = null;
    private SenderFactory defaultSenderFactory;
    private ClusterId currentCluster = null;
    private StatsCollector statsCollector = null;
    
    protected Set<Class<?>> stopTryingToSendTheseTypes = Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
    
-   public Router(ApplicationDefinition applicationDefinition) throws MpClusterException
+   public Router(ApplicationDefinition applicationDefinition)
    {
       if (applicationDefinition == null)
          throw new IllegalArgumentException("Can't pass a null applicationDefinition to a " + SafeString.valueOfClass(this));
@@ -116,7 +115,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
    /**
     * Provide the handle to the cluster factory so that each visible cluster can be reached.
     */
-   public void setClusterSession(MpClusterSession<ClusterInformation, SlotInformation> factory) { mpClusterSession = factory; }
+   public void setClusterSession(ClusterInfoSession factory) { mpClusterSession = factory; }
    
    /**
     * Tell the {@link Router} what the current cluster is. This is typically determined by
@@ -137,7 +136,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
    /**
     * Prior to the {@link Router} being used it needs to be initialized.
     */
-   public void initialize() throws MpClusterException, DempsyException
+   public void initialize() throws ClusterInfoException,DempsyException
    {
       // applicationDefinition cannot be null because the constructor checks
       
@@ -179,12 +178,10 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             if (strategy == null)
                throw new DempsyException("Could not retrieve the routing strategy for " + SafeString.valueOf(clusterId));
             
-            MpCluster<ClusterInformation, SlotInformation> cluster = mpClusterSession.getCluster(clusterId);
-
             // This create will result in a callback on the Router as the Outbound.Coordinator with a 
             // registration event. The Outbound may (will) call back on the Router to retrieve the 
             // MpClusterSession and register itself with the appropriate cluster.
-            outbounds.add(strategy.createOutbound(this, cluster));
+            outbounds.add(strategy.createOutbound(this, mpClusterSession,clusterId));
          }
       }
       //-------------------------------------------------------------------------------------
@@ -342,6 +339,9 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
          }
       }
    }
+
+   // This should only be called from tests
+   public Set<Outbound> dnuobtuOteg() { return outbounds; }
    
    /**
     * This class routes messages within a particular cluster. It is protected for test 

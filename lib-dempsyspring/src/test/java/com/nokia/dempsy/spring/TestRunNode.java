@@ -31,7 +31,7 @@ import org.junit.Test;
 
 import com.nokia.dempsy.Dempsy;
 import com.nokia.dempsy.DempsyException;
-import com.nokia.dempsy.mpcluster.zookeeper.ZookeeperTestServer;
+import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer;
 
 public class TestRunNode
 {

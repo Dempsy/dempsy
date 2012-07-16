@@ -9,7 +9,7 @@
    <bean id="properties"
       class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" />
 
-   <bean id="localVMContainerClusterSessionFactory" class="com.nokia.dempsy.mpcluster.invm.LocalVmMpClusterSessionFactory"/>
+   <bean id="localVMContainerClusterSessionFactory" class="com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory"/>
 
    <bean id="Dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType" init-method="start" destroy-method="stop">
       <property name="clusterSessionFactory" ref="localVMContainerClusterSessionFactory"/>

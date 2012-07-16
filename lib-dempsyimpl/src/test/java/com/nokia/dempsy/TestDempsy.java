@@ -51,9 +51,8 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
+import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.mpcluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
-import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
 
 public class TestDempsy
 {
@@ -63,7 +62,7 @@ public class TestDempsy
    
    String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
    
-   String[] clusterManagers = new String[]{ "testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/ClusterManager-LocalVmActx.xml" };
+   String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
    String[][] transports = new String[][] {
          { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
@@ -75,10 +74,10 @@ public class TestDempsy
          // this is a hack ... use a ClusterId as a String tuple for comparison
          
          // the passthrough Destination is not serializable but zookeeper requires it to be
-         new ClusterId("testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
+         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
          
          // the blockingqueue Destination is not serializable but zookeeper requires it to be
-         new ClusterId("testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
+         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
    });
  
    private static InitZookeeperServerBean zkServer = null;
@@ -244,8 +243,6 @@ public class TestDempsy
                   logger.debug(" test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport);
                   logger.debug("*****************************************************************");
 
-                  DecentralizedRoutingStrategy.resetOutboundsChecking();
-                  
                   String[] ctx = new String[4];
                   ctx[0] = dempsyConfig;
                   ctx[1] = clusterManager;
@@ -296,7 +293,7 @@ public class TestDempsy
       ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(
             "testDempsy/Dempsy-IndividualClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
-            "testDempsy/ClusterManager-LocalVmActx.xml",
+            "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();
@@ -330,7 +327,7 @@ public class TestDempsy
       new ClassPathXmlApplicationContext(
             "testDempsy/Dempsy-InValidClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
-            "testDempsy/ClusterManager-LocalVmActx.xml",
+            "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
    }
@@ -347,7 +344,7 @@ public class TestDempsy
          actx = new ClassPathXmlApplicationContext(
                "testDempsy/Dempsy.xml",
                "testDempsy/Transport-PassthroughActx.xml",
-               "testDempsy/ClusterManager-LocalVmActx.xml",
+               "testDempsy/ClusterInfo-LocalActx.xml",
                "testDempsy/SimpleMultistageApplicationActx.xml"
                );
          actx.registerShutdownHook();

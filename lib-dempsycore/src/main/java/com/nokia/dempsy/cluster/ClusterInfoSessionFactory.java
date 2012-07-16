@@ -14,13 +14,9 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.mpcluster;
+package com.nokia.dempsy.cluster;
 
-public interface MpClusterWatcher
+public interface ClusterInfoSessionFactory
 {
-   /**
-    * This callback will be executed whenever there's a change to the {@link MpCluster} or 
-    * {@link MpApplication} that this {@link MpClusterWatcher} is added to.
-    */
-   public void process();
+   public ClusterInfoSession createSession() throws ClusterInfoException;
 }

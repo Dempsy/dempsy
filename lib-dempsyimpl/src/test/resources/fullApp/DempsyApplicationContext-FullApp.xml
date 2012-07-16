@@ -5,7 +5,7 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-   <bean id="app" class="com.nokia.dempsy.mpcluster.zookeeper.FullApplication" />
+   <bean id="app" class="com.nokia.dempsy.cluster.zookeeper.FullApplication" />
    
    <bean id="applicationDef" factory-bean="app" factory-method="getTopology" />
       

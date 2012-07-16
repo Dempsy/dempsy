@@ -29,20 +29,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.DempsyException;
+import com.nokia.dempsy.cluster.ClusterInfoException;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.ClusterInfoWatcher;
+import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
-import com.nokia.dempsy.mpcluster.MpCluster;
-import com.nokia.dempsy.mpcluster.MpClusterException;
-import com.nokia.dempsy.mpcluster.MpClusterSlot;
-import com.nokia.dempsy.mpcluster.MpClusterWatcher;
 import com.nokia.dempsy.router.RoutingStrategy.Outbound.Coordinator;
 
 /**
@@ -58,38 +57,28 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    private int defaultTotalSlots;
    private int defaultNumNodes;
    
-   /*
-    * These is to control the timing in tests
-    */
-   private static AtomicLong numOutbounds = new AtomicLong(0);
-   private static AtomicLong numOutboundsInitialized = new AtomicLong(0);
-   public static boolean allOutboundsInitialized() { return numOutboundsInitialized.get() == numOutbounds.get(); }
-   public static void resetOutboundsChecking() { numOutbounds = new AtomicLong(0); numOutboundsInitialized = new AtomicLong(0); }
-
    public DecentralizedRoutingStrategy(int defaultTotalSlots, int defaultNumNodes)
    {
       this.defaultTotalSlots = defaultTotalSlots;
       this.defaultNumNodes = defaultNumNodes;
    }
    
-   private class Outbound implements RoutingStrategy.Outbound, MpClusterWatcher
+   private class Outbound implements RoutingStrategy.Outbound, ClusterInfoWatcher
    {
       private AtomicReference<Destination[]> destinations = new AtomicReference<Destination[]>();
       private RoutingStrategy.Outbound.Coordinator coordinator;
-      private MpCluster<ClusterInformation, SlotInformation> cluster;
+      private ClusterInfoSession clusterSession;
       private ClusterId clusterId;
       private Set<Class<?>> messageTypesHandled = null;
 
       private ScheduledExecutorService scheduler = null;
       
-      private Outbound(RoutingStrategy.Outbound.Coordinator coordinator,
-            MpCluster<ClusterInformation, SlotInformation> cluster)
+      private Outbound(RoutingStrategy.Outbound.Coordinator coordinator, ClusterInfoSession cluster, ClusterId clusterId)
       {
-         numOutbounds.incrementAndGet();
          this.coordinator = coordinator;
-         this.cluster = cluster;
-         this.clusterId = cluster.getClusterId();
-         cluster.addWatcher(this);
+         this.clusterSession = cluster;
+         this.clusterId = clusterId;
+         // TODO: need to subscribe
          execSetupDestinations(false);
       }
 
@@ -123,8 +112,23 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       }
       
       /**
+       * This makes sure all of the destinations are full.
+       */
+      @Override
+      public boolean completeInitialization()
+      {
+         Destination[] ds = destinations.get();
+         if (ds == null)
+            return false;
+         for (Destination d : ds)
+            if (d == null)
+               return false;
+         return true;
+      }
+      
+      /**
        * This method is protected for testing purposes. Otherwise it would be private.
-      * @return whether or not the setup was successful.
+       * @return whether or not the setup was successful.
        */
       protected synchronized boolean setupDestinations()
       {
@@ -134,10 +138,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                logger.trace("Resetting Outbound Strategy for cluster " + clusterId);
 
             Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
-            int newtotalAddressCounts = fillMapFromActiveSlots(slotNumbersToSlots,cluster);
-            if (newtotalAddressCounts == 0)
-               throw new MpClusterException("The cluster " + cluster.getClusterId() + 
-                     " seems to have invalid slot information. Someone has set the total number of slots to zero.");
+            int newtotalAddressCounts = fillMapFromActiveSlots(slotNumbersToSlots,clusterSession,clusterId,this);
+//            if (newtotalAddressCounts == 0)
+//               throw new ClusterInfoException("The cluster " + clusterId + 
+//                     " seems to have invalid slot information. Someone has set the total number of slots to zero.");
             if (newtotalAddressCounts > 0)
             {
                Destination[] newDestinations = new Destination[newtotalAddressCounts];
@@ -165,7 +169,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             
             return destinations.get() != null;
          }
-         catch(MpClusterException e)
+         catch(ClusterInfoException e)
          {
             destinations.set(null);
             logger.warn("Failed to set up the Outbound for " + clusterId, e);
@@ -200,10 +204,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                      }
                      else
                      {
-                        // at this point the initialize has succeeded
-                        if (!fromProcess)
-                           numOutboundsInitialized.incrementAndGet();
-                        
                         synchronized(Outbound.this)
                         {
                            if (scheduler != null)
@@ -217,34 +217,27 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                }, resetDelay, TimeUnit.MILLISECONDS);
             }
          }
-         else
-            // at this point the initialize has succeeded
-            if (!fromProcess)
-               numOutboundsInitialized.incrementAndGet();
       }
-
-      
    } // end Outbound class definition
    
-   private class Inbound implements RoutingStrategy.Inbound, MpClusterWatcher
+   private class Inbound implements RoutingStrategy.Inbound, ClusterInfoWatcher
    {
       private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
       private List<Integer> destinationsAcquired = new ArrayList<Integer>();
-      private MpCluster<ClusterInformation, SlotInformation> cluster;
+      private ClusterInfoSession cluster;
       private Collection<Class<?>> messageTypes;
       private Destination thisDestination;
       private ClusterId clusterId;
       
-      private Inbound(MpCluster<ClusterInformation, SlotInformation> cluster, 
-            Collection<Class<?>> messageTypes,
-            Destination thisDestination)
+      private Inbound(ClusterInfoSession cluster, ClusterId clusterId,
+            Collection<Class<?>> messageTypes, Destination thisDestination)
       {
          this.cluster = cluster;
          this.messageTypes = messageTypes;
          this.thisDestination = thisDestination;
-         this.clusterId = cluster.getClusterId();
-         this.cluster.addWatcher(this);
+         this.clusterId = clusterId;
+//TODO: need to register as a watcher
          acquireSlots(false);
       }
 
@@ -270,7 +263,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             //==============================================================================
             // need to verify that the existing slots in destinationsAcquired are still ours
             Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
-            fillMapFromActiveSlots(slotNumbersToSlots,cluster);
+            fillMapFromActiveSlots(slotNumbersToSlots,cluster, clusterId,this);
             Collection<Integer> slotsToReaquire = new ArrayList<Integer>();
             for (Integer destinationSlot : destinationsAcquired)
             {
@@ -286,7 +279,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             for (Integer slotToReaquire : slotsToReaquire)
             {
                if (!acquireSlot(slotToReaquire, totalAddressNeeded,
-                     cluster, messageTypes, thisDestination))
+                     cluster, clusterId, messageTypes, thisDestination))
                {
                   // in this case, see if I already own it...
                   logger.warn("Cannot reaquire the slot " + slotToReaquire + " for the cluster " + clusterId);
@@ -300,13 +293,13 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                if(destinationsAcquired.contains(randomValue))
                   continue;
                if (acquireSlot(randomValue, totalAddressNeeded,
-                     cluster, messageTypes, thisDestination))
+                     cluster, clusterId, messageTypes, thisDestination))
                   destinationsAcquired.add(randomValue);                  
             }
             
             retry = false;
          }
-         catch(MpClusterException e)
+         catch(ClusterInfoException e)
          {
             destinationsAcquired.clear();
          }
@@ -327,10 +320,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          scheduler.shutdown();
       }
       
-      private boolean needToGrabMoreSlots(MpCluster<ClusterInformation, SlotInformation> clusterHandle,
-            int minNodeCount, int totalAddressNeeded) throws MpClusterException
+      private boolean needToGrabMoreSlots(ClusterInfoSession clusterHandle,
+            int minNodeCount, int totalAddressNeeded) throws ClusterInfoException
       {
-         int addressInUse = clusterHandle.getActiveSlots().size();
+         int addressInUse = clusterHandle.getSubdirs(clusterId.asPath(), null).size();
          int maxSlotsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)minNodeCount);
          return addressInUse < totalAddressNeeded && destinationsAcquired.size() < maxSlotsForOneNode;
       }
@@ -344,17 +337,16 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    } // end Inbound class definition
    
    @Override
-   public RoutingStrategy.Inbound createInbound(MpCluster<ClusterInformation, SlotInformation> cluster, 
-         Collection<Class<?>> messageTypes,
-         Destination thisDestination)
+   public RoutingStrategy.Inbound createInbound(ClusterInfoSession cluster, ClusterId clusterId,
+         Collection<Class<?>> messageTypes, Destination thisDestination)
    {
-      return new Inbound(cluster,messageTypes,thisDestination);
+      return new Inbound(cluster,clusterId,messageTypes,thisDestination);
    }
 
    @Override
-   public RoutingStrategy.Outbound createOutbound(Coordinator coordinator, MpCluster<ClusterInformation, SlotInformation> cluster)
+   public RoutingStrategy.Outbound createOutbound(Coordinator coordinator, ClusterInfoSession cluster, ClusterId clusterId)
    {
-      return new Outbound(coordinator,cluster);
+      return new Outbound(coordinator,cluster,clusterId);
    }
    
    static class DefaultRouterSlotInfo extends SlotInformation
@@ -418,12 +410,22 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
     * Fill the map of slots to slotinfos for internal use. 
     * @return the totalAddressCount from each slot. These are supposed to be repeated.
     */
-   private static int fillMapFromActiveSlots(Map<Integer,DefaultRouterSlotInfo> mapToFill, 
-         MpCluster<ClusterInformation, SlotInformation> clusterHandle)
-   throws MpClusterException
+   private static int fillMapFromActiveSlots(Map<Integer,DefaultRouterSlotInfo> mapToFill, ClusterInfoSession session,
+         ClusterId clusterId, ClusterInfoWatcher watcher) throws ClusterInfoException
    {
       int totalAddressCounts = -1;
-      Collection<MpClusterSlot<SlotInformation>> slotsFromClusterManager = clusterHandle.getActiveSlots();
+      Collection<String> slotsFromClusterManager;
+      try
+      {
+         slotsFromClusterManager = session.getSubdirs(clusterId.asPath(), watcher);
+      }
+      catch (ClusterInfoException.NoNodeException e)
+      {
+         // mkdir and retry
+         session.mkdir("/" + clusterId.getApplicationName(),DirMode.PERSISTENT);
+         session.mkdir(clusterId.asPath(),DirMode.PERSISTENT);
+         slotsFromClusterManager = session.getSubdirs(clusterId.asPath(), watcher);
+      }
 
       if(slotsFromClusterManager != null)
       {
@@ -432,9 +434,9 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          if (slotsFromClusterManager.size() == 0)
             totalAddressCounts = 0;
          
-         for(MpClusterSlot<SlotInformation> node: slotsFromClusterManager)
+         for(String node: slotsFromClusterManager)
          {
-            DefaultRouterSlotInfo slotInfo = (DefaultRouterSlotInfo)node.getSlotInformation();
+            DefaultRouterSlotInfo slotInfo = (DefaultRouterSlotInfo)session.getData(clusterId.asPath() + "/" + node, null);
             if(slotInfo != null)
             {
                mapToFill.put(slotInfo.getSlotIndex(), slotInfo);
@@ -442,7 +444,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   totalAddressCounts = slotInfo.getTotalAddress();
                else if (totalAddressCounts != slotInfo.getTotalAddress())
                   logger.error("There is a problem with the slots taken by the cluster manager for the cluster " + 
-                        clusterHandle.getClusterId() + ". Slot " + slotInfo.getSlotIndex() +
+                        clusterId + ". Slot " + slotInfo.getSlotIndex() +
                         " from " + SafeString.objectDescription(slotInfo.getDestination()) + 
                         " thinks the total number of slots for this cluster it " + slotInfo.getTotalAddress() +
                         " but a former slot said the total was " + totalAddressCounts);
@@ -453,23 +455,26 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    }
    
    private static boolean acquireSlot(int slotNum, int totalAddressNeeded,
-         MpCluster<ClusterInformation, SlotInformation> clusterHandle,
-         Collection<Class<?>> messagesTypes, Destination destination) throws MpClusterException
+         ClusterInfoSession clusterHandle, ClusterId clusterId, 
+         Collection<Class<?>> messagesTypes, Destination destination) throws ClusterInfoException
    {
-      MpClusterSlot<SlotInformation> slot = clusterHandle.join(String.valueOf(slotNum));
-      if(slot == null)
-         return false;
-      DefaultRouterSlotInfo dest = (DefaultRouterSlotInfo)slot.getSlotInformation();
-      if(dest == null)
+      String slotPath = clusterId.asPath() + "/" + String.valueOf(slotNum);
+      if (clusterHandle.mkdir(slotPath,DirMode.EPHEMERAL) != null)
       {
-         dest = new DefaultRouterSlotInfo();
-         dest.setDestination(destination);
-         dest.setSlotIndex(slotNum);
-         dest.setTotalAddress(totalAddressNeeded);
-         dest.setMessageClasses(messagesTypes);
-         slot.setSlotInformation(dest);
+         DefaultRouterSlotInfo dest = (DefaultRouterSlotInfo)clusterHandle.getData(slotPath, null);
+         if(dest == null)
+         {
+            dest = new DefaultRouterSlotInfo();
+            dest.setDestination(destination);
+            dest.setSlotIndex(slotNum);
+            dest.setTotalAddress(totalAddressNeeded);
+            dest.setMessageClasses(messagesTypes);
+            clusterHandle.setData(slotPath, dest);
+         }
+         return true;
       }
-      return true;
+      else
+         return false;
    }
 
 }

@@ -14,9 +14,22 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.mpcluster;
+package com.nokia.dempsy.cluster;
 
-public interface MpClusterSessionFactory<T,N>
+public class ClusterInfoException extends Exception
 {
-   public MpClusterSession<T,N> createSession() throws MpClusterException;
+   private static final long serialVersionUID = 1L;
+
+   public ClusterInfoException(String message) { super(message); }
+   
+   public ClusterInfoException(String message, Throwable cause) { super(message,cause); }
+   
+   public static class NoNodeException extends ClusterInfoException
+   {
+      private static final long serialVersionUID = 1L;
+
+      public NoNodeException(String message) { super(message); }
+      
+      public NoNodeException(String message, Throwable cause) { super(message,cause); }
+   }
 }

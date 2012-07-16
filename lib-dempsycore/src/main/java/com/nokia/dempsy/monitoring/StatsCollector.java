@@ -56,7 +56,7 @@ public interface StatsCollector {
 	
 	/**
 	 *  The dispatcher calls this method in its <code>onMessage</code> handler
-	 *  when it discards a message.statCollector
+	 *  when it discards a message.
 	 */
 	void messageDiscarded(Object message);
 	
