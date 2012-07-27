@@ -78,7 +78,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          this.coordinator = coordinator;
          this.clusterSession = cluster;
          this.clusterId = clusterId;
-         // TODO: need to subscribe
          execSetupDestinations(false);
       }
 
@@ -237,7 +236,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          this.messageTypes = messageTypes;
          this.thisDestination = thisDestination;
          this.clusterId = clusterId;
-//TODO: need to register as a watcher
          acquireSlots(false);
       }
 
