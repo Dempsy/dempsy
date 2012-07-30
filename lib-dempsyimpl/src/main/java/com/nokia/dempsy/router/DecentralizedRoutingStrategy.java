@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy.router;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -384,7 +385,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       }
    }
    
-   static class DefaultRouterClusterInfo extends ClusterInformation
+   static class DefaultRouterClusterInfo implements Serializable
    {
       private static final long serialVersionUID = 1L;
 
