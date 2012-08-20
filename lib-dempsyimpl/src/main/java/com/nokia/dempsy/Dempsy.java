@@ -161,7 +161,8 @@ public class Dempsy
                        outputExecuter.setOutputInvoker(container);
                     }
                  }
-
+                  
+                  container.startEvictionThread(Cluster.this.clusterDefinition.getEvictionFrequency(), Cluster.this.clusterDefinition.getEvictionTimeUnit());
                   
                   final KeySource<?> keySource = clusterDefinition.getKeySource();
                   if(keySource != null)
