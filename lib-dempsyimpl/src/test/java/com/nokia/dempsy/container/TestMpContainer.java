@@ -23,6 +23,8 @@ import static org.junit.Assert.assertTrue;
 import java.util.HashSet;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
 import org.junit.Before;
@@ -129,14 +131,14 @@ public class TestMpContainer
       public volatile int activationCount;
       public volatile int invocationCount;
       public volatile int outputCount;
-      public volatile boolean evict = false;
-      public static int cloneCount;
+      public volatile AtomicBoolean evict = new AtomicBoolean(false);
+      public static AtomicInteger cloneCount = new AtomicInteger(0);
 
       @Override
       public TestProcessor clone()
       throws CloneNotSupportedException
       {
-         cloneCount++;
+         cloneCount.incrementAndGet();
          return (TestProcessor)super.clone();
       }
 
@@ -157,7 +159,7 @@ public class TestMpContainer
       }
       
       @Evictable
-      public boolean isEvictable(){ return evict; }
+      public boolean isEvictable(){ return evict.get(); }
 
       @Output
       public OutputMessage doOutput()
@@ -258,13 +260,13 @@ public class TestMpContainer
 
       assertEquals("activation count, 2nd message", 1, mp.activationCount);
       assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
-      int tmpCloneCount = TestProcessor.cloneCount;
+      int tmpCloneCount = TestProcessor.cloneCount.intValue();
       
-      mp.evict = true;
+      mp.evict.set(true);
       container.evict();
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
       assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
 
-      assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount);
+      assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount.intValue());
    }
 }
