@@ -412,9 +412,14 @@ public class MpContainer implements Listener, OutputInvoker
 	}
 
 	public void startEvictionThread(long evictionFrequency, TimeUnit timeUnit) {
-		if (prototype != null && prototype.isEvictableSupported()){
+		if (0 == evictionFrequency || null == timeUnit) {
+			logger.warn("Eviction Thread cannot start with zero frequency or null TimeUnit {} {}", evictionFrequency, timeUnit);
+			return;
+		}
+			
+		if (prototype != null && prototype.isEvictableSupported()) {
 			evictionScheduler = Executors.newSingleThreadScheduledExecutor();
-			evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, 0, evictionFrequency, timeUnit);
+			evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, evictionFrequency, evictionFrequency, timeUnit);
 		}
 	}
    
