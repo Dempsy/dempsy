@@ -303,8 +303,8 @@ public class TestMpContainer
       int tmpCloneCount = TestProcessor.cloneCount.intValue();
       
       // invocation count should go to 2
-      TestUtils.poll(baseTimeoutMillis, mp, new TestUtils.Condition<TestProcessor>() 
-            { @Override public boolean conditionMet(TestProcessor o) { return o.invocationCount == 2; } });
+      assertTrue(TestUtils.poll(baseTimeoutMillis, mp, new TestUtils.Condition<TestProcessor>() 
+            { @Override public boolean conditionMet(TestProcessor o) { return o.invocationCount == 2; } }));
       
       assertNull(outputQueue.peek()); // this is a double check that no message got all the way 
       
@@ -321,8 +321,8 @@ public class TestMpContainer
       mp.latch.countDown(); // this lets it go
       
       // wait until the eviction completes
-      TestUtils.poll(baseTimeoutMillis, evictIsComplete, new TestUtils.Condition<AtomicBoolean>() 
-            { @Override public boolean conditionMet(AtomicBoolean o) { return o.get(); } });
+      assertTrue(TestUtils.poll(baseTimeoutMillis, evictIsComplete, new TestUtils.Condition<AtomicBoolean>() 
+            { @Override public boolean conditionMet(AtomicBoolean o) { return o.get(); } }));
 
       // now it comes through.
       assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
