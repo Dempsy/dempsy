@@ -17,9 +17,12 @@
 package com.nokia.dempsy.container;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -370,42 +373,67 @@ public class MpContainer implements Listener, OutputInvoker
 
 		statCollector.evictionPassStarted();
 		
-		for (Iterator<Object> keys = instances.keySet().iterator(); keys.hasNext();) {
-			Object key = keys.next();
-			InstanceWrapper wrapper = instances.get(key);
-			boolean gotLock = false;
-			try {
-				gotLock = wrapper.tryLock();
-				if (gotLock) {
-					Object instance = wrapper.getInstance();
-					try {
-						if (prototype.invokeEvictable(instance)) {
-							wrapper.markEvicted();
-							prototype.passivate(wrapper.getInstance());
-							wrapper.markPassivated();
-							instances.remove(key);
-						}
-					} 
-					catch (InvocationTargetException e)
-					{
-					   logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-					         " resulted in an exception.",e.getCause());
-					}
-					catch (IllegalAccessException e)
-					{
-                  logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
-                        " is not defined correctly. Is it visible?",e);
-					}
-					catch (RuntimeException e)
-					{
-                  logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-                        " resulted in an exception.",e);
-					}
-				}
-			} finally {
-				if (gotLock)
-					wrapper.releaseLock();
-			}
+		// we need to make a copy of the instances in order to make sure
+		// the eviction check is done at once.
+		Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
+		instancesToEvict.putAll(instances);
+		
+		while (instancesToEvict.size() > 0 && instances.size() > 0)
+		{
+         // store off anything that passes for later removal. This is to avoid a
+         // ConcurrentModificationException.
+         Set<Object> keysToRemove = new HashSet<Object>();
+         
+		   for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
+		   {
+		      Object key = entry.getKey();
+		      InstanceWrapper wrapper = entry.getValue();
+		      boolean gotLock = false;
+		      try {
+		         gotLock = wrapper.tryLock();
+		         if (gotLock) {
+		            
+		            // since we got here we're done with this instance,
+		            // so add it's key to the list of keys we plan don't
+		            // need to return to.
+		            keysToRemove.add(key);
+		            
+		            Object instance = wrapper.getInstance();
+		            try {
+		               if (prototype.invokeEvictable(instance)) {
+		                  wrapper.markEvicted();
+		                  prototype.passivate(wrapper.getInstance());
+		                  wrapper.markPassivated();
+		                  instances.remove(key);
+		               }
+		            } 
+		            catch (InvocationTargetException e)
+		            {
+		               logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+		                     " resulted in an exception.",e.getCause());
+		            }
+		            catch (IllegalAccessException e)
+		            {
+		               logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
+		                     " is not defined correctly. Is it visible?",e);
+		            }
+		            catch (RuntimeException e)
+		            {
+		               logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+		                     " resulted in an exception.",e);
+		            }
+		         }
+		      } finally {
+		         if (gotLock)
+		            wrapper.releaseLock();
+		      }
+		      
+		   }
+		   
+         // now clean up everything we managed to get hold of
+		   for (Object key : keysToRemove)
+		      instancesToEvict.remove(key);
+
 		}
 		
 		statCollector.evictionPassCompleted();
