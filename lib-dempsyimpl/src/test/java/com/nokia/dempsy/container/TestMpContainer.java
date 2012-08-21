@@ -18,10 +18,13 @@ package com.nokia.dempsy.container;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 import java.util.HashSet;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,6 +35,7 @@ import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dispatcher;
+import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.annotations.Activation;
 import com.nokia.dempsy.annotations.Evictable;
 import com.nokia.dempsy.annotations.MessageHandler;
@@ -133,6 +137,7 @@ public class TestMpContainer
       public volatile int outputCount;
       public volatile AtomicBoolean evict = new AtomicBoolean(false);
       public static AtomicInteger cloneCount = new AtomicInteger(0);
+      public volatile CountDownLatch latch = new CountDownLatch(0);
 
       @Override
       public TestProcessor clone()
@@ -149,10 +154,12 @@ public class TestMpContainer
       }
 
       @MessageHandler
-      public ContainerTestMessage handle(ContainerTestMessage message)
+      public ContainerTestMessage handle(ContainerTestMessage message) throws InterruptedException
       {
          myKey = message.getKey();
          invocationCount++;
+         
+         latch.await();
 
          // put it on output queue so that we can synchronize test
          return message;
@@ -269,4 +276,64 @@ public class TestMpContainer
 
       assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount.intValue());
    }
+   
+   @Test
+   public void testEvictableWithBusyMp() throws Exception
+   {
+      // This forces the instantiation of an Mp
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      // Once the poll finishes the Mp is instantiated and handling messages.
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("did not create MP", 1, container.getProcessorCount());
+
+      TestProcessor mp = (TestProcessor)container.getMessageProcessor("foo");
+      assertNotNull("MP not associated with expected key", mp);
+      assertEquals("activation count, 1st message", 1, mp.activationCount);
+      assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+      
+      // now we're going to cause the processing to be held up.
+      mp.latch = new CountDownLatch(1);
+      mp.evict.set(true); // allow eviction
+
+      // sending it a message will now cause it to hang up while processing
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+
+      // keep track of the cloneCount for later checking
+      int tmpCloneCount = TestProcessor.cloneCount.intValue();
+      
+      // invocation count should go to 2
+      TestUtils.poll(baseTimeoutMillis, mp, new TestUtils.Condition<TestProcessor>() 
+            { @Override public boolean conditionMet(TestProcessor o) { return o.invocationCount == 2; } });
+      
+      assertNull(outputQueue.peek()); // this is a double check that no message got all the way 
+      
+      // now kick off the evict in a separate thread since we expect it to hang
+      // until the mp becomes unstuck.
+      final AtomicBoolean evictIsComplete = new AtomicBoolean(false); // this will allow us to see the evict pass complete
+      Thread thread = new Thread(new Runnable() { @Override public void run() { container.evict(); evictIsComplete.set(true); } });
+      thread.start();
+      
+      // now check to make sure eviction doesn't complete.
+      Thread.sleep(50); // just a little to give any mistakes a change to work themselves through
+      assertFalse(evictIsComplete.get()); // make sure eviction didn't finish
+      
+      mp.latch.countDown(); // this lets it go
+      
+      // wait until the eviction completes
+      TestUtils.poll(baseTimeoutMillis, evictIsComplete, new TestUtils.Condition<AtomicBoolean>() 
+            { @Override public boolean conditionMet(AtomicBoolean o) { return o.get(); } });
+
+      // now it comes through.
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("activation count, 2nd message", 1, mp.activationCount);
+      assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
+      
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount.intValue());
+   }
+
 }
