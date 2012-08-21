@@ -64,14 +64,12 @@ public class TestDempsy
    String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
    
    String[] clusterManagers = new String[]{ "testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/ClusterManager-LocalVmActx.xml" };
-   String[] transports = new String[]
-         { "testDempsy/Transport-PassthroughActx.xml", 
-         "testDempsy/Transport-BlockingQueueActx.xml", 
-         null // this means use the alternatingTransports
-         };
+   String[][] transports = new String[][] {
+         { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
+         { "testDempsy/Transport-BlockingQueueActx.xml" }, 
+         { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml" }
+   };
    
-   String[] alternatingTransports = { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml" };
-
    // bad combinations.
    List<ClusterId> badCombos = Arrays.asList(new ClusterId[] {
          // this is a hack ... use a ClusterId as a String tuple for comparison
@@ -230,11 +228,10 @@ public class TestDempsy
       int runCount = 0;
       for (String clusterManager : clusterManagers)
       {
-         for (String transport : transports)
+         for (String[] alternatingTransports : transports)
          {
             // select one of the alternatingTransports
-            if (transport == null)
-               transport = alternatingTransports[runCount % alternatingTransports.length];
+            String transport = alternatingTransports[runCount % alternatingTransports.length];
 
             // alternate the dempsy configs
             String dempsyConfig = dempsyConfigs[runCount % dempsyConfigs.length];
