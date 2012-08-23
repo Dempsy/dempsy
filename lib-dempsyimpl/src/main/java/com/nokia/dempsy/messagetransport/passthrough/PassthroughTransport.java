@@ -19,6 +19,7 @@ package com.nokia.dempsy.messagetransport.passthrough;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
@@ -29,15 +30,23 @@ import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
 
+/**
+ * This transport is basically an inVM transport where the call-stack becomes 
+ * the transport mechanism. It's primarily for testing when completely deterministic 
+ * behavior is required.
+ * 
+ * When the 'send' call simply directly calls the {@link Listener} on the receive
+ * side. As a result the thread will basically block in the 'send' until that message 
+ * is handled, by the {@link Listener} in the same thread the 'send' was called in.
+ * 
+ * When an inVM Dempsy application is using this transport the effect is that the
+ * initial {@link Adaptor}'s call to 'send' will not return until that message is
+ * processed and any resulting messages are passed on to the next Mp in the processing 
+ * chain and those are processed.
+ */
 public class PassthroughTransport implements Transport
 {
-
-   private static class PassthroughDestination implements Destination
-   {
-      Sender sender;
-      
-      PassthroughDestination(Sender sender) { this.sender = sender; }
-   }
+   private boolean failFast = true;
    
    @Override
    public SenderFactory createOutbound() throws MessageTransportException
@@ -74,7 +83,7 @@ public class PassthroughTransport implements Transport
             public void send(byte[] messageBytes) throws MessageTransportException
             {
                for (Listener listener : listeners)
-                  listener.onMessage(messageBytes, true);
+                  listener.onMessage(messageBytes, failFast);
             }
          };
          
@@ -103,5 +112,34 @@ public class PassthroughTransport implements Transport
    {
       throw new UnsupportedOperationException();
    }
-
+   
+   /**
+    * <p>Failfast is set to true by default. This means that if the Mp is busy 
+    * that is the target for the sent message it busy, it will simply dicard
+    * the message being sent.</p>
+    * 
+    * <p>Setting 'failFast' to 'false' allows multi-threaded {@link Adaptor}'s
+    * to use the passthough in a more deterministic fashion than would otherwise
+    * be allowed.</p>
+    */
+   public void setFailFast(boolean failFast) { this.failFast = failFast; }
+   
+   /**
+    * <p>Failfast is set to true by default. This means that if the Mp is busy 
+    * that is the target for the sent message it busy, it will simply dicard
+    * the message being sent.</p>
+    * 
+    * <p>Setting 'failFast' to 'false' allows multi-threaded {@link Adaptor}'s
+    * to use the passthough in a more deterministic fashion than would otherwise
+    * be allowed.</p>
+    */
+   public boolean getFailFast() { return failFast; }
+   
+   private static class PassthroughDestination implements Destination
+   {
+      Sender sender;
+      
+      PassthroughDestination(Sender sender) { this.sender = sender; }
+   }
+   
 }
