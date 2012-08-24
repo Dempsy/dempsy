@@ -187,11 +187,11 @@ public class MpContainer implements Listener, OutputInvoker
    }
    
    public LifecycleHelper getLifecycleHelper() {
-	   return prototype;
+     return prototype;
    }
    
    public Map<Object,InstanceWrapper> getInstances() {
-	   return instances;
+     return instances;
    }
 
    public void setDispatcher(Dispatcher dispatcher)
@@ -205,7 +205,7 @@ public class MpContainer implements Listener, OutputInvoker
     * StatsCollector with only the default JMX reporters.  Production
     * environments will likely want to export stats to a centralized
     * monitor like Graphite or Ganglia.
- 	*/
+   */
    public void setStatCollector(StatsCollector collector)
    {
       this.statCollector = collector;
@@ -274,7 +274,7 @@ public class MpContainer implements Listener, OutputInvoker
    public void shutdown()
    {      
       if (evictionScheduler != null)
-    	  evictionScheduler.shutdownNow();
+        evictionScheduler.shutdownNow();
       
       // the following will close up any output executor that might be running
       setConcurrency(-1);
@@ -319,52 +319,52 @@ public class MpContainer implements Listener, OutputInvoker
 //  Internals
 //----------------------------------------------------------------------------
 
-	// this is called directly from tests but shouldn't be accessed otherwise.
-	protected boolean dispatch(Object message, boolean block) throws ContainerException {
-		if (message == null)
-			return false; // No. We didn't process the null message
+  // this is called directly from tests but shouldn't be accessed otherwise.
+  protected boolean dispatch(Object message, boolean block) throws ContainerException {
+    if (message == null)
+      return false; // No. We didn't process the null message
 
-		InstanceWrapper wrapper;
-		wrapper = getInstanceForDispatch(message);
+    InstanceWrapper wrapper;
+    wrapper = getInstanceForDispatch(message);
 
-		boolean ret = false;
+    boolean ret = false;
 
-		// wrapper cannot be null ... look at the getInstanceForDispatch method
-		boolean gotLock = false;
-		
-		if(wrapper.isEvicted()){
-			logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
-					+ " due to eviction");
-			statCollector.messageDiscarded(message);
-			return ret;
-		}
+    // wrapper cannot be null ... look at the getInstanceForDispatch method
+    boolean gotLock = false;
+    
+    if(wrapper.isEvicted()){
+      logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
+          + " due to eviction");
+      statCollector.messageDiscarded(message);
+      return ret;
+    }
 
-		try {
-			Object instance = wrapper.getExclusive(block);
-			if (instance != null) // null indicates we didn't get the lock
-			{
-				if(wrapper.isEvicted()){
-					logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
-							+ " due to eviction");
-					statCollector.messageDiscarded(message);
-					return ret;
-				}
+    try {
+      Object instance = wrapper.getExclusive(block);
+      if (instance != null) // null indicates we didn't get the lock
+      {
+        if(wrapper.isEvicted()){
+          logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
+              + " due to eviction");
+          statCollector.messageDiscarded(message);
+          return ret;
+        }
 
-				gotLock = true;
-				invokeOperation(wrapper.getInstance(), Operation.handle, message);
-				ret = true;
-			} else {
-				if (logger.isTraceEnabled())
-					logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
-				statCollector.messageDiscarded(message);
-			}
-		} finally {
-			if (gotLock)
-				wrapper.releaseLock();
-		}
+        gotLock = true;
+        invokeOperation(wrapper.getInstance(), Operation.handle, message);
+        ret = true;
+      } else {
+        if (logger.isTraceEnabled())
+          logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
+        statCollector.messageDiscarded(message);
+      }
+    } finally {
+      if (gotLock)
+        wrapper.releaseLock();
+    }
 
-		return ret;
-	}
+    return ret;
+  }
    
    /**
     *  Returns the instance associated with the given message, creating it if
@@ -385,101 +385,101 @@ public class MpContainer implements Listener, OutputInvoker
       return wrapper;
    }
 
-	public void evict() {
-		if (!prototype.isEvictableSupported() || !isRunning)
-			return;
+  public void evict() {
+    if (!prototype.isEvictableSupported() || !isRunning)
+      return;
 
-		statCollector.evictionPassStarted();
-		
-		// we need to make a copy of the instances in order to make sure
-		// the eviction check is done at once.
-		Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
-		instancesToEvict.putAll(instances);
-		
-		while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
-		{
+    statCollector.evictionPassStarted();
+    
+    // we need to make a copy of the instances in order to make sure
+    // the eviction check is done at once.
+    Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
+    instancesToEvict.putAll(instances);
+    
+    while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
+    {
          // store off anything that passes for later removal. This is to avoid a
          // ConcurrentModificationException.
          Set<Object> keysToRemove = new HashSet<Object>();
          
-		   for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
-		   {
-		      Object key = entry.getKey();
-		      InstanceWrapper wrapper = entry.getValue();
-		      boolean gotLock = false;
-		      try {
-		         gotLock = wrapper.tryLock();
-		         if (gotLock) {
-		            
-		            // since we got here we're done with this instance,
-		            // so add it's key to the list of keys we plan don't
-		            // need to return to.
-		            keysToRemove.add(key);
-		            
-		            Object instance = wrapper.getInstance();
-		            try {
-		               if (prototype.invokeEvictable(instance)) {
-		                  wrapper.markEvicted();
-		                  prototype.passivate(wrapper.getInstance());
-		                  wrapper.markPassivated();
-		                  instances.remove(key);
-		               }
-		            } 
-		            catch (InvocationTargetException e)
-		            {
-		               logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-		                     " resulted in an exception.",e.getCause());
-		            }
-		            catch (IllegalAccessException e)
-		            {
-		               logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
-		                     " is not defined correctly. Is it visible?",e);
-		            }
-		            catch (RuntimeException e)
-		            {
-		               logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-		                     " resulted in an exception.",e);
-		            }
-		         }
-		      } finally {
-		         if (gotLock)
-		            wrapper.releaseLock();
-		      }
-		      
-		   }
-		   
+       for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
+       {
+          Object key = entry.getKey();
+          InstanceWrapper wrapper = entry.getValue();
+          boolean gotLock = false;
+          try {
+             gotLock = wrapper.tryLock();
+             if (gotLock) {
+                
+                // since we got here we're done with this instance,
+                // so add it's key to the list of keys we plan don't
+                // need to return to.
+                keysToRemove.add(key);
+                
+                Object instance = wrapper.getInstance();
+                try {
+                   if (prototype.invokeEvictable(instance)) {
+                      wrapper.markEvicted();
+                      prototype.passivate(wrapper.getInstance());
+                      wrapper.markPassivated();
+                      instances.remove(key);
+                   }
+                } 
+                catch (InvocationTargetException e)
+                {
+                   logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                         " resulted in an exception.",e.getCause());
+                }
+                catch (IllegalAccessException e)
+                {
+                   logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
+                         " is not defined correctly. Is it visible?",e);
+                }
+                catch (RuntimeException e)
+                {
+                   logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                         " resulted in an exception.",e);
+                }
+             }
+          } finally {
+             if (gotLock)
+                wrapper.releaseLock();
+          }
+          
+       }
+       
          // now clean up everything we managed to get hold of
-		   for (Object key : keysToRemove)
-		      instancesToEvict.remove(key);
+       for (Object key : keysToRemove)
+          instancesToEvict.remove(key);
 
-		}
-		
-		statCollector.evictionPassCompleted();
-	}
+    }
+    
+    statCollector.evictionPassCompleted();
+  }
 
-	public void startEvictionThread(long evictionFrequency, TimeUnit timeUnit) {
-		if (0 == evictionFrequency || null == timeUnit) {
-			logger.warn("Eviction Thread cannot start with zero frequency or null TimeUnit {} {}", evictionFrequency, timeUnit);
-			return;
-		}
-			
-		if (prototype != null && prototype.isEvictableSupported()) {
-			evictionScheduler = Executors.newSingleThreadScheduledExecutor();
-			evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, evictionFrequency, evictionFrequency, timeUnit);
-		}
-	}
-	
-	private ExecutorService outputExecutorService = null;
-	private int outputConcurrency = -1;
-	private Object lockForExecutorServiceSetter = new Object();
-	
-	@Override
-	public void setConcurrency(int concurrency)
-	{
-	   if (prototype.isOutputSupported() && isRunning)
-	   {
-	      synchronized(lockForExecutorServiceSetter)
-	      {
+  public void startEvictionThread(long evictionFrequency, TimeUnit timeUnit) {
+    if (0 == evictionFrequency || null == timeUnit) {
+      logger.warn("Eviction Thread cannot start with zero frequency or null TimeUnit {} {}", evictionFrequency, timeUnit);
+      return;
+    }
+      
+    if (prototype != null && prototype.isEvictableSupported()) {
+      evictionScheduler = Executors.newSingleThreadScheduledExecutor();
+      evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, evictionFrequency, evictionFrequency, timeUnit);
+    }
+  }
+  
+  private ExecutorService outputExecutorService = null;
+  private int outputConcurrency = -1;
+  private Object lockForExecutorServiceSetter = new Object();
+  
+  @Override
+  public void setConcurrency(int concurrency)
+  {
+     if (prototype.isOutputSupported() && isRunning)
+     {
+        synchronized(lockForExecutorServiceSetter)
+        {
             outputConcurrency = concurrency;
             if (outputConcurrency > 1)
                outputExecutorService = Executors.newFixedThreadPool(concurrency);
@@ -489,70 +489,70 @@ public class MpContainer implements Listener, OutputInvoker
                   outputExecutorService.shutdown();
                outputExecutorService = null;
             }
-	      }
-	   }
-	}
+        }
+     }
+  }
    
-	// This method MUST NOT THROW
-	public void outputPass() {
-		if (!prototype.isOutputSupported())
-			return;
+  // This method MUST NOT THROW
+  public void outputPass() {
+    if (!prototype.isOutputSupported())
+      return;
 
-		// take a snapshot of the current container state.
-		LinkedList<InstanceWrapper> toOutput = new LinkedList<InstanceWrapper>(instances.values());
-		
-		Executor executorService = null;
+    // take a snapshot of the current container state.
+    LinkedList<InstanceWrapper> toOutput = new LinkedList<InstanceWrapper>(instances.values());
+    
+    Executor executorService = null;
       Semaphore taskLock = null;
-		synchronized(lockForExecutorServiceSetter)
-		{
-		   executorService = outputExecutorService;
-		   if (executorService != null)
-		      taskLock = new Semaphore(outputConcurrency);
-		}
-		
-		// A condition variable for making sure that
-		// everything is done prior to this method returning.
-		final ReentrantLock allDoneLock = new ReentrantLock();
-		final Condition allDoneCv = allDoneLock.newCondition();
-		final AtomicLong numExecutingOutputs = new AtomicLong(0);
+    synchronized(lockForExecutorServiceSetter)
+    {
+       executorService = outputExecutorService;
+       if (executorService != null)
+          taskLock = new Semaphore(outputConcurrency);
+    }
+    
+    // A condition variable for making sure that
+    // everything is done prior to this method returning.
+    final ReentrantLock allDoneLock = new ReentrantLock();
+    final Condition allDoneCv = allDoneLock.newCondition();
+    final AtomicLong numExecutingOutputs = new AtomicLong(0);
 
-		// keep going until all of the outputs have been invoked
-		while (toOutput.size() > 0 && isRunning)
-		{
-			for (final Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) 
-			{
-				final InstanceWrapper wrapper = iter.next();
-				boolean gotLock = false;
+    // keep going until all of the outputs have been invoked
+    while (toOutput.size() > 0 && isRunning)
+    {
+      for (final Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) 
+      {
+        final InstanceWrapper wrapper = iter.next();
+        boolean gotLock = false;
 
-				gotLock = wrapper.tryLock();
+        gotLock = wrapper.tryLock();
 
-				if (gotLock) 
-				{
-				   // If we've been evicted then we're on our way out
-				   // so don't do anything else with this.
-	            if (wrapper.isEvicted())
-	            {
-	               iter.remove();
-	               wrapper.releaseLock();
-	               continue;
-	            } 
+        if (gotLock) 
+        {
+           // If we've been evicted then we're on our way out
+           // so don't do anything else with this.
+              if (wrapper.isEvicted())
+              {
+                 iter.remove();
+                 wrapper.releaseLock();
+                 continue;
+              } 
 
-	            final Object instance = wrapper.getInstance(); // only called while holding the lock
-				   final Semaphore taskSepaphore = taskLock;
-				   
-				   // This task will release the wrapper's lock.
-				   Runnable task = new Runnable()
-				   {
-				      @Override
-				      public void run()
-				      {
-				         try
-				         {
-				            if (isRunning && !wrapper.isEvicted()) 
-				               invokeOperation(instance, Operation.output, null); 
-				         }
-				         finally 
-				         {
+              final Object instance = wrapper.getInstance(); // only called while holding the lock
+           final Semaphore taskSepaphore = taskLock;
+           
+           // This task will release the wrapper's lock.
+           Runnable task = new Runnable()
+           {
+              @Override
+              public void run()
+              {
+                 try
+                 {
+                    if (isRunning && !wrapper.isEvicted()) 
+                       invokeOperation(instance, Operation.output, null); 
+                 }
+                 finally 
+                 {
                         wrapper.releaseLock();
 
                         // this signals that we're done.
@@ -561,77 +561,77 @@ public class MpContainer implements Listener, OutputInvoker
                         allDoneCv.signalAll(); 
                         allDoneLock.unlock();
                         
-				            if (taskSepaphore != null) taskSepaphore.release(); 
-				         }
-				      }
-				   };
+                    if (taskSepaphore != null) taskSepaphore.release(); 
+                 }
+              }
+           };
 
-				   allDoneLock.lock();
+           allDoneLock.lock();
                numExecutingOutputs.incrementAndGet();
                allDoneLock.unlock();
                
                if (executorService != null)
-				   {
-				      try
-				      {
-				         taskSepaphore.acquire();
-				         executorService.execute(task);
-				      }
-				      catch (RejectedExecutionException e)
-				      {
-				         // this may happen because of a race condition between the 
-				         taskSepaphore.release();
-				      }
-				      catch (InterruptedException e)
-				      {
-				         // this can happen while blocked in the semaphore.acquire.
-				         // if we're no longer running we should just get out
-				         // of here.
-				      }
-				   }
-				   else
-				      task.run();
+           {
+              try
+              {
+                 taskSepaphore.acquire();
+                 executorService.execute(task);
+              }
+              catch (RejectedExecutionException e)
+              {
+                 // this may happen because of a race condition between the 
+                 taskSepaphore.release();
+              }
+              catch (InterruptedException e)
+              {
+                 // this can happen while blocked in the semaphore.acquire.
+                 // if we're no longer running we should just get out
+                 // of here.
+              }
+           }
+           else
+              task.run();
 
-				   iter.remove();
-				} // end if we got the lock
-			} // end loop over every Mp
-		} // end while there are still Mps that haven't had output invoked.
-		
-		// =======================================================
-		// now make sure all of the running tasks have completed
-		allDoneLock.lock();
-		try
-		{
-		   while (numExecutingOutputs.get() > 0)
-		   {
-		      try { allDoneCv.await(); }
-		      catch (InterruptedException e)
-		      {
-		         // if we were interupted for a shutdown then just stop
-		         // waiting for all of the threads to finish
-		         if (!isRunning)
-		            break;
-		         // otherwise continue checking.
-		      }
-		   }
-		}
-		finally
-		{
-		   allDoneLock.unlock();
-		}
+           iter.remove();
+        } // end if we got the lock
+      } // end loop over every Mp
+    } // end while there are still Mps that haven't had output invoked.
+    
+    // =======================================================
+    // now make sure all of the running tasks have completed
+    allDoneLock.lock();
+    try
+    {
+       while (numExecutingOutputs.get() > 0)
+       {
+          try { allDoneCv.await(); }
+          catch (InterruptedException e)
+          {
+             // if we were interupted for a shutdown then just stop
+             // waiting for all of the threads to finish
+             if (!isRunning)
+                break;
+             // otherwise continue checking.
+          }
+       }
+    }
+    finally
+    {
+       allDoneLock.unlock();
+    }
       // =======================================================
-	}
+  }
 
-	@Override
-	public void invokeOutput() {
-		statCollector.outputInvokeStarted();
-		outputPass();
-		statCollector.outputInvokeCompleted();
-	}
+  @Override
+  public void invokeOutput() {
+    statCollector.outputInvokeStarted();
+    outputPass();
+    statCollector.outputInvokeCompleted();
+  }
 
-	//----------------------------------------------------------------------------
-	// Internals
-	//----------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
+  // Internals
+  //----------------------------------------------------------------------------
 
   private Object getKeyFromMessage(Object message) throws ContainerException
   {
@@ -672,14 +672,14 @@ public class MpContainer implements Listener, OutputInvoker
      // common case has "no" contention
      InstanceWrapper wrapper = instances.get(key);
      if(wrapper != null)
-    	 return wrapper;
+       return wrapper;
      
      // otherwise we'll do an atomic check-and-update
      synchronized (this)
      {
         wrapper = instances.get(key); // double checked lock?????
         if (wrapper != null)
-        	return wrapper;
+          return wrapper;
 
         Object instance = null;
         try
