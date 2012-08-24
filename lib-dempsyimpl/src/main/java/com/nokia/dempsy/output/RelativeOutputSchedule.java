@@ -46,6 +46,19 @@ public class RelativeOutputSchedule implements OutputExecuter {
   
   /** The scheduler. */
   private Scheduler scheduler;
+  
+  /** Contains the number of threads to set on the {@link OutputInvoker} */
+  private int concurrency = -1;
+
+  public int getConcurrency()
+  {
+     return concurrency;
+  }
+
+  public void setConcurrency(int concurrency)
+  {
+     this.concurrency = concurrency;
+  }
 
   /**
    * Instantiates a new relative output schedule.
@@ -64,6 +77,9 @@ public class RelativeOutputSchedule implements OutputExecuter {
   @Override
   public void setOutputInvoker(OutputInvoker outputInvoker) {
     this.outputInvoker = outputInvoker;
+
+    if (concurrency > 1)
+       outputInvoker.setConcurrency(concurrency);
   }
  
 /**

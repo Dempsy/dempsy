@@ -28,6 +28,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.After;
 import org.junit.Before;
@@ -138,6 +139,9 @@ public class TestMpContainer
       public volatile AtomicBoolean evict = new AtomicBoolean(false);
       public static AtomicInteger cloneCount = new AtomicInteger(0);
       public volatile CountDownLatch latch = new CountDownLatch(0);
+      
+      public static AtomicLong numOutputExecutions = new AtomicLong(0);
+      public static CountDownLatch blockAllOutput = new CountDownLatch(0);
 
       @Override
       public TestProcessor clone()
@@ -169,9 +173,18 @@ public class TestMpContainer
       public boolean isEvictable(){ return evict.get(); }
 
       @Output
-      public OutputMessage doOutput()
+      public OutputMessage doOutput() throws InterruptedException
       {
-         return new OutputMessage(myKey, activationCount, invocationCount, outputCount++);
+         numOutputExecutions.incrementAndGet();
+         try
+         {
+            blockAllOutput.await();
+            return new OutputMessage(myKey, activationCount, invocationCount, outputCount++);
+         }
+         finally
+         {
+            numOutputExecutions.decrementAndGet();
+         }
       }
    }
 
@@ -236,6 +249,30 @@ public class TestMpContainer
       messageKeys.add(out2.getKey());
       assertTrue("first MP sent output", messageKeys.contains("foo"));
       assertTrue("second MP sent output", messageKeys.contains("bar"));
+   }
+
+   @Test
+   public void testMtInvokeOutput()
+   throws Exception
+   {
+      final int numInstances = 20;
+      final int concurrency = 5;
+      
+      container.setConcurrency(concurrency);
+      
+      for (int i = 0; i < numInstances; i++)
+         inputQueue.put(serializer.serialize(new ContainerTestMessage("foo" + i)));
+      for (int i = 0; i < numInstances; i++)
+         assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("number of MP instances", numInstances, container.getProcessorCount());
+      assertTrue("queue is empty", outputQueue.isEmpty());
+
+      container.outputPass();
+      for (int i = 0; i < numInstances; i++)
+         assertNotNull(serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS)));
+
+      assertEquals("no more messages in queue", 0, outputQueue.size());
    }
 
 

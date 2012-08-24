@@ -24,11 +24,16 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
@@ -83,12 +88,14 @@ public class MpContainer implements Listener, OutputInvoker
    // The ClusterId is set for the sake of error messages.
    private ClusterId clusterId;
    
+   private volatile boolean isRunning = true;
+   
    public MpContainer(ClusterId clusterId) { this.clusterId = clusterId; }
    
    protected static class InstanceWrapper
    {
       private Object instance;
-      private Lock lock = new ReentrantLock(true);
+      private Semaphore lock = new Semaphore(1,true); // basically a mutex
       private AtomicBoolean evicted = new AtomicBoolean(false);
       
       /**
@@ -104,10 +111,16 @@ public class MpContainer implements Listener, OutputInvoker
       public Object getExclusive(boolean block)
       {
          if (block)
-            lock.lock();
+         {
+            boolean gotLock = false;
+            while (!gotLock)
+            {
+               try { lock.acquire(); gotLock = true; } catch (InterruptedException e) { }
+            }
+         }
          else
          {
-            if (!lock.tryLock())
+            if (!lock.tryAcquire())
                return null;
          }
          
@@ -121,12 +134,12 @@ public class MpContainer implements Listener, OutputInvoker
        */
       public void releaseLock()
       {
-         lock.unlock();
+         lock.release();
       }
       
       public boolean tryLock()
       {
-         return lock.tryLock();
+         return lock.tryAcquire();
       }
       
       /**
@@ -252,14 +265,19 @@ public class MpContainer implements Listener, OutputInvoker
    @Override
    public void shuttingDown()
    {
+      isRunning = false;
       shutdown();
       // we don't care about the transport shutting down (currently)
+      
    }
    
    public void shutdown()
    {      
       if (evictionScheduler != null)
     	  evictionScheduler.shutdownNow();
+      
+      // the following will close up any output executor that might be running
+      setConcurrency(-1);
    }
 
 
@@ -368,7 +386,7 @@ public class MpContainer implements Listener, OutputInvoker
    }
 
 	public void evict() {
-		if (!prototype.isEvictableSupported())
+		if (!prototype.isEvictableSupported() || !isRunning)
 			return;
 
 		statCollector.evictionPassStarted();
@@ -378,7 +396,7 @@ public class MpContainer implements Listener, OutputInvoker
 		Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
 		instancesToEvict.putAll(instances);
 		
-		while (instancesToEvict.size() > 0 && instances.size() > 0)
+		while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
 		{
          // store off anything that passes for later removal. This is to avoid a
          // ConcurrentModificationException.
@@ -450,6 +468,30 @@ public class MpContainer implements Listener, OutputInvoker
 			evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, evictionFrequency, evictionFrequency, timeUnit);
 		}
 	}
+	
+	private ExecutorService outputExecutorService = null;
+	private int outputConcurrency = -1;
+	private Object lockForExecutorServiceSetter = new Object();
+	
+	@Override
+	public void setConcurrency(int concurrency)
+	{
+	   if (prototype.isOutputSupported() && isRunning)
+	   {
+	      synchronized(lockForExecutorServiceSetter)
+	      {
+            outputConcurrency = concurrency;
+            if (outputConcurrency > 1)
+               outputExecutorService = Executors.newFixedThreadPool(concurrency);
+            else
+            {
+               if (outputExecutorService != null)
+                  outputExecutorService.shutdown();
+               outputExecutorService = null;
+            }
+	      }
+	   }
+	}
    
 	// This method MUST NOT THROW
 	public void outputPass() {
@@ -458,41 +500,126 @@ public class MpContainer implements Listener, OutputInvoker
 
 		// take a snapshot of the current container state.
 		LinkedList<InstanceWrapper> toOutput = new LinkedList<InstanceWrapper>(instances.values());
+		
+		Executor executorService = null;
+      Semaphore taskLock = null;
+		synchronized(lockForExecutorServiceSetter)
+		{
+		   executorService = outputExecutorService;
+		   if (executorService != null)
+		      taskLock = new Semaphore(outputConcurrency);
+		}
+		
+		// A condition variable for making sure that
+		// everything is done prior to this method returning.
+		final ReentrantLock allDoneLock = new ReentrantLock();
+		final Condition allDoneCv = allDoneLock.newCondition();
+		final AtomicLong numExecutingOutputs = new AtomicLong(0);
 
 		// keep going until all of the outputs have been invoked
-		while (toOutput.size() > 0) {
-			for (Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) {
-				InstanceWrapper wrapper = iter.next();
+		while (toOutput.size() > 0 && isRunning)
+		{
+			for (final Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) 
+			{
+				final InstanceWrapper wrapper = iter.next();
 				boolean gotLock = false;
 
-				if (wrapper.isEvicted()) {
-					iter.remove();
-					continue;
-				}
+				gotLock = wrapper.tryLock();
 
-				try {
-					gotLock = wrapper.tryLock();
+				if (gotLock) 
+				{
+				   // If we've been evicted then we're on our way out
+				   // so don't do anything else with this.
+	            if (wrapper.isEvicted())
+	            {
+	               iter.remove();
+	               wrapper.releaseLock();
+	               continue;
+	            } 
 
-					if (wrapper.isEvicted()) {
-						iter.remove();
-						continue;
-					} else if (gotLock) {
-						Object instance = wrapper.getInstance(); // only called while holding the lock
-						try {
-							invokeOperation(instance, Operation.output, null);
-						} catch (Throwable e) { /*
-												 * The error message is logged
-												 * in invokeOperation
-												 */
-						}
-						iter.remove();
-					}
-				} finally {
-					if (gotLock)
-						wrapper.releaseLock();
-				}
-			}
+	            final Object instance = wrapper.getInstance(); // only called while holding the lock
+				   final Semaphore taskSepaphore = taskLock;
+				   
+				   // This task will release the wrapper's lock.
+				   Runnable task = new Runnable()
+				   {
+				      @Override
+				      public void run()
+				      {
+				         try
+				         {
+				            if (isRunning && !wrapper.isEvicted()) 
+				               invokeOperation(instance, Operation.output, null); 
+				         }
+				         finally 
+				         {
+                        wrapper.releaseLock();
+
+                        // this signals that we're done.
+                        allDoneLock.lock(); 
+                        numExecutingOutputs.decrementAndGet();
+                        allDoneCv.signalAll(); 
+                        allDoneLock.unlock();
+                        
+				            if (taskSepaphore != null) taskSepaphore.release(); 
+				         }
+				      }
+				   };
+
+				   allDoneLock.lock();
+               numExecutingOutputs.incrementAndGet();
+               allDoneLock.unlock();
+               
+               if (executorService != null)
+				   {
+				      try
+				      {
+				         taskSepaphore.acquire();
+				         executorService.execute(task);
+				      }
+				      catch (RejectedExecutionException e)
+				      {
+				         // this may happen because of a race condition between the 
+				         taskSepaphore.release();
+				      }
+				      catch (InterruptedException e)
+				      {
+				         // this can happen while blocked in the semaphore.acquire.
+				         // if we're no longer running we should just get out
+				         // of here.
+				      }
+				   }
+				   else
+				      task.run();
+
+				   iter.remove();
+				} // end if we got the lock
+			} // end loop over every Mp
+		} // end while there are still Mps that haven't had output invoked.
+		
+		// =======================================================
+		// now make sure all of the running tasks have completed
+		allDoneLock.lock();
+		try
+		{
+		   while (numExecutingOutputs.get() > 0)
+		   {
+		      try { allDoneCv.await(); }
+		      catch (InterruptedException e)
+		      {
+		         // if we were interupted for a shutdown then just stop
+		         // waiting for all of the threads to finish
+		         if (!isRunning)
+		            break;
+		         // otherwise continue checking.
+		      }
+		   }
 		}
+		finally
+		{
+		   allDoneLock.unlock();
+		}
+      // =======================================================
 	}
 
 	@Override
@@ -683,4 +810,5 @@ public class MpContainer implements Listener, OutputInvoker
         }
      }
   }
+
 }

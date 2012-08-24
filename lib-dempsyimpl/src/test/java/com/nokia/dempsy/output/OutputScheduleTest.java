@@ -49,6 +49,22 @@ public class OutputScheduleTest {
   }
 
   /**
+   * Test relative schedule with concurrency.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testRelativeScheduleWithConcurrency() throws Exception {
+    RelativeOutputSchedule relativeOutputSchedule = new RelativeOutputSchedule(1, TimeUnit.SECONDS);
+    relativeOutputSchedule.setConcurrency(5);
+    relativeOutputSchedule.setOutputInvoker(mpContainerMock);
+    relativeOutputSchedule.start();
+    Thread.sleep(1000);
+    verify(mpContainerMock, atLeast(1)).invokeOutput();
+    verify(mpContainerMock, atLeast(1)).setConcurrency(5);
+  }
+
+  /**
    * Test cron schedule.
    *
    * @throws Exception the exception
@@ -61,4 +77,21 @@ public class OutputScheduleTest {
     Thread.sleep(1000);
     verify(mpContainerMock, atLeast(1)).invokeOutput();
   }
+  
+  /**
+   * Test cron schedule with concurrency setting
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testCronScheduleWithConcurrencySetting() throws Exception {
+    CronOutputSchedule cronOutputSchedule = new CronOutputSchedule("0/1 * * * * ?");
+    cronOutputSchedule.setConcurrency(5);
+    cronOutputSchedule.setOutputInvoker(mpContainerMock);
+    cronOutputSchedule.start();
+    Thread.sleep(1000);
+    verify(mpContainerMock, atLeast(1)).invokeOutput();
+    verify(mpContainerMock, atLeast(1)).setConcurrency(5);
+  }
+
 }
