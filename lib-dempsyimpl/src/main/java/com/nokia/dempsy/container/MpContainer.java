@@ -33,8 +33,6 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -510,10 +508,12 @@ public class MpContainer implements Listener, OutputInvoker
             taskLock = new Semaphore(outputConcurrency);
       }
 
-      // A condition variable for making sure that
-      // everything is done prior to this method returning.
-      final ReentrantLock allDoneLock = new ReentrantLock();
-      final Condition allDoneCv = allDoneLock.newCondition();
+      // This keeps track of the number of concurrently running
+      // output tasks so that this method can wait until they're
+      // all done to return.
+      //
+      // It's also used as a condition variable signaling on its
+      // own state changes.
       final AtomicLong numExecutingOutputs = new AtomicLong(0);
 
       // keep going until all of the outputs have been invoked
@@ -556,19 +556,20 @@ public class MpContainer implements Listener, OutputInvoker
                         wrapper.releaseLock();
 
                         // this signals that we're done.
-                        allDoneLock.lock(); 
-                        numExecutingOutputs.decrementAndGet();
-                        allDoneCv.signalAll(); 
-                        allDoneLock.unlock();
-
+                        synchronized(numExecutingOutputs)
+                        {
+                           numExecutingOutputs.decrementAndGet();
+                           numExecutingOutputs.notifyAll();
+                        }
                         if (taskSepaphore != null) taskSepaphore.release(); 
                      }
                   }
                };
 
-               allDoneLock.lock();
-               numExecutingOutputs.incrementAndGet();
-               allDoneLock.unlock();
+               synchronized(numExecutingOutputs)
+               {
+                  numExecutingOutputs.incrementAndGet();
+               }
 
                if (executorService != null)
                {
@@ -599,12 +600,11 @@ public class MpContainer implements Listener, OutputInvoker
 
       // =======================================================
       // now make sure all of the running tasks have completed
-      allDoneLock.lock();
-      try
+      synchronized(numExecutingOutputs)
       {
          while (numExecutingOutputs.get() > 0)
          {
-            try { allDoneCv.await(); }
+            try { numExecutingOutputs.wait(); }
             catch (InterruptedException e)
             {
                // if we were interupted for a shutdown then just stop
@@ -614,10 +614,6 @@ public class MpContainer implements Listener, OutputInvoker
                // otherwise continue checking.
             }
          }
-      }
-      finally
-      {
-         allDoneLock.unlock();
       }
       // =======================================================
    }
