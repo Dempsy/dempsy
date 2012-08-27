@@ -16,19 +16,40 @@
 
 package com.nokia.dempsy.output;
 
+import java.util.concurrent.Executor;
+
+import com.nokia.dempsy.annotations.Output;
+
+
 /**
  * This is a server side interface to invoke the @Output methods of MPs.
- * Dempsy will provide an implementation of this interface. During startup, Dempsy will set an instance of OutputInovker to
- * the client output scheduler. Using this instance, client application will  call @Output method of MPs.
- * 
+ * Dempsy will provide an implementation of this interface. During startup, 
+ * Dempsy will set an instance of OutputInovker to the client output scheduler.
+ * Using this instance, client application will  call @Output method of MPs.
  */
 
 public interface OutputInvoker {
 
   /**
-   * This method will be called by client application to invoke the @Output methods of MPs.
-   * Dempsy will execute the @Output method of all MPs. During the Output execution, MP will not receive any incoming message. 
+   * <p>This method will be called by client application to invoke the @Output methods of MPs.
+   * Dempsy will execute the @Output method of all MPs. During the Output execution, MP will not
+   * receive any incoming message.</p>
+   * 
    */
   public void invokeOutput();
+  
+  /**
+   * If the {@link OutputExecuter} wants the container to run the {@link Output} pass in 
+   * a multithreaded manner, then calling this method and setting the <code>concurrency</code>
+   * to greater than <code>1</code> will do that. This method will usually be called
+   * once, at initialization. Each time it's called the {@link Executor} used by the 
+   * container will be recreated with all of its attending threads so this method
+   * should <b>not</b> be called with each invokeOutput call.
+   *  
+   * @param concurrency is the number of threads to allow {@link Output} to be run 
+   * simultaneously.
+   */
+  public void setConcurrency(int concurrency);
+
 }
 

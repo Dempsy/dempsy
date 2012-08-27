@@ -43,8 +43,21 @@ public class CronOutputSchedule implements OutputExecuter {
   
   /** The output invoker. */
   private OutputInvoker outputInvoker;
+  
+  /** Contains the number of threads to set on the {@link OutputInvoker} */
+  private int concurrency = -1;
 
-  /**
+  public int getConcurrency()
+  {
+     return concurrency;
+  }
+
+  public void setConcurrency(int concurrency)
+  {
+     this.concurrency = concurrency;
+  }
+
+/**
    * Instantiates a new cron output scheduler.
    *
    * @param cronExpression the cron expression
@@ -86,6 +99,9 @@ public class CronOutputSchedule implements OutputExecuter {
    */
   public void setOutputInvoker(OutputInvoker outputInvoker) {
     this.outputInvoker = outputInvoker;
+    
+    if (concurrency > 1)
+       outputInvoker.setConcurrency(concurrency);
   }
 
 }
