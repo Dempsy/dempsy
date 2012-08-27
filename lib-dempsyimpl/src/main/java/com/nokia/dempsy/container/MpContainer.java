@@ -177,6 +177,9 @@ public class MpContainer implements Listener, OutputInvoker
    public void setPrototype(Object prototype) throws ContainerException
    {
       this.prototype = new LifecycleHelper(prototype);
+      
+      if (outputConcurrency > 0)
+         setupOutputConcurrency();
    }
 
    public Object getPrototype()
@@ -474,13 +477,22 @@ public class MpContainer implements Listener, OutputInvoker
    @Override
    public void setConcurrency(int concurrency)
    {
+      synchronized(lockForExecutorServiceSetter)
+      {
+         outputConcurrency = concurrency;
+         if (prototype != null) // otherwise this isn't initialized yet
+            setupOutputConcurrency();
+      }
+   }
+   
+   private void setupOutputConcurrency()
+   {
       if (prototype.isOutputSupported() && isRunning)
       {
          synchronized(lockForExecutorServiceSetter)
          {
-            outputConcurrency = concurrency;
             if (outputConcurrency > 1)
-               outputExecutorService = Executors.newFixedThreadPool(concurrency);
+               outputExecutorService = Executors.newFixedThreadPool(outputConcurrency);
             else
             {
                if (outputExecutorService != null)
