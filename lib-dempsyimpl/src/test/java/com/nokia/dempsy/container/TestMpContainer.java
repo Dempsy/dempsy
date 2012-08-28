@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -139,9 +140,9 @@ public class TestMpContainer
       public volatile AtomicBoolean evict = new AtomicBoolean(false);
       public static AtomicInteger cloneCount = new AtomicInteger(0);
       public volatile CountDownLatch latch = new CountDownLatch(0);
-      
       public static AtomicLong numOutputExecutions = new AtomicLong(0);
       public static CountDownLatch blockAllOutput = new CountDownLatch(0);
+
 
       @Override
       public TestProcessor clone()
@@ -372,5 +373,4 @@ public class TestMpContainer
 
       assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount.intValue());
    }
-
 }
