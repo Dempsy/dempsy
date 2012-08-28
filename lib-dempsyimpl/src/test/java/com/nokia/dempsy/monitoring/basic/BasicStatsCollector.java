@@ -122,7 +122,7 @@ public class BasicStatsCollector implements StatsCollector
    }
 
    @Override
-   public void messageProcessorDeleted()
+   public void messageProcessorDeleted(Object key)
    {
       mpsDeleted.incrementAndGet();
       numberOfMPs.decrementAndGet();
