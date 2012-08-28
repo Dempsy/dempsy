@@ -424,6 +424,7 @@ public class MpContainer implements Listener, OutputInvoker
                         prototype.passivate(wrapper.getInstance());
                         wrapper.markPassivated();
                         instances.remove(key);
+                        statCollector.messageProcessorDeleted(key);
                      }
                   } 
                   catch (InvocationTargetException e)

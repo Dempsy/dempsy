@@ -194,7 +194,7 @@ public class StatsCollectorCoda implements StatsCollector {
 	}
 
 	@Override
-	public void messageProcessorDeleted() {
+	public void messageProcessorDeleted(Object key) {
 		mpsDeleted.mark();
 		numberOfMPs.decrementAndGet();
 	}

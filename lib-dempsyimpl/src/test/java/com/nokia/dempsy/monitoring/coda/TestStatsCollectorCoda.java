@@ -100,7 +100,7 @@ public class TestStatsCollectorCoda {
 	@Test
 	public void testMessageProcessorDeleted() {
 		assertEquals("none yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MP_DELETE));
-		stats.messageProcessorDeleted();
+		stats.messageProcessorDeleted("abc");
 		assertEquals("del one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MP_DELETE));
 	}
 
