@@ -56,7 +56,7 @@ public interface StatsCollector {
 	
 	/**
 	 *  The dispatcher calls this method in its <code>onMessage</code> handler
-	 *  when it discards a message.
+	 *  when it discards a message.statCollector
 	 */
 	void messageDiscarded(Object message);
 	
@@ -70,7 +70,7 @@ public interface StatsCollector {
 	 *  The instance manager calls this method when it deletes a message processor
 	 *  instance.
 	 */
-	void messageProcessorDeleted();
+	void messageProcessorDeleted(Object key);
 
 	/**
 	 * Some stats collectors need to be stopped.
