@@ -16,8 +16,6 @@
 
 package com.nokia.dempsy.output;
 
-import java.util.concurrent.Executor;
-
 import com.nokia.dempsy.annotations.Output;
 
 
