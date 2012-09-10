@@ -181,37 +181,41 @@ public class DefaultRoutingStrategy implements RoutingStrategy
       {
          if (!setupDestinations())
          {
-            scheduler = Executors.newScheduledThreadPool(1);
+            synchronized(this)
+            {
+               if (scheduler == null)
+                  scheduler = Executors.newScheduledThreadPool(1);
             
-            scheduler.schedule(new Runnable(){
-               @Override
-               public void run()
-               {
-                  if (!setupDestinations())
+               scheduler.schedule(new Runnable(){
+                  @Override
+                  public void run()
                   {
-                     synchronized(Outbound.this)
+                     if (!setupDestinations())
                      {
-                        if (scheduler != null)
-                           scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
-                     }
-                  }
-                  else
-                  {
-                     // at this point the initialize has succeeded
-                     if (!fromProcess)
-                        numOutboundsInitialized.incrementAndGet();
-                     
-                     synchronized(Outbound.this)
-                     {
-                        if (scheduler != null)
+                        synchronized(Outbound.this)
                         {
-                           scheduler.shutdown();
-                           scheduler = null;
+                           if (scheduler != null)
+                              scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
+                        }
+                     }
+                     else
+                     {
+                        // at this point the initialize has succeeded
+                        if (!fromProcess)
+                           numOutboundsInitialized.incrementAndGet();
+                        
+                        synchronized(Outbound.this)
+                        {
+                           if (scheduler != null)
+                           {
+                              scheduler.shutdown();
+                              scheduler = null;
+                           }
                         }
                      }
                   }
-               }
-            }, resetDelay, TimeUnit.MILLISECONDS);
+               }, resetDelay, TimeUnit.MILLISECONDS);
+            }
          }
          else
             // at this point the initialize has succeeded
