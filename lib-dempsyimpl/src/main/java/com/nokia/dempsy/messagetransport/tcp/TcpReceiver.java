@@ -214,6 +214,9 @@ public class TcpReceiver implements Receiver
       try
       {
          InetAddress inetAddress = useLocalhost ? InetAddress.getLocalHost() : getFirstNonLocalhostInetAddress();
+         if (inetAddress == null)
+            throw new MessageTransportException("Failed to set the Inet Address for this host. Is there a valid network interface?");
+         
          return new TcpDestination(inetAddress, port);
       }
       catch(UnknownHostException e)
