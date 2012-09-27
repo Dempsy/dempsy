@@ -34,7 +34,6 @@ import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.container.ContainerException;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
@@ -134,10 +133,14 @@ public class Dempsy
                   
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
                   
+                  KeySource<?> keySource = clusterDefinition.getKeySource();
+                  if (keySource != null)
+                     container.setKeySource(keySource);
+
                   // there is only an inbound strategy if we have an Mp (that is, we aren't an adaptor) and
                   // we actually accept messages
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
-                     strategyInbound = strategy.createInbound(clusterSession,currentClusterId,acceptedMessageClasses, thisDestination);
+                     strategyInbound = strategy.createInbound(clusterSession,currentClusterId,acceptedMessageClasses, thisDestination,container);
                   
                   // this can fail because of down cluster manager server ... but it should eventually recover.
                   try { router.initialize(); }
@@ -158,46 +161,6 @@ public class Dempsy
                   
                   container.startEvictionThread(Cluster.this.clusterDefinition.getEvictionFrequency(), Cluster.this.clusterDefinition.getEvictionTimeUnit());
                   
-                  final KeySource<?> keySource = clusterDefinition.getKeySource();
-                  if(keySource != null)
-                  {
-                     Thread t = new Thread(new Runnable()
-                     {
-                        @Override
-                        public void run()
-                        {
-                           try{
-                              statsCollector.preInstantiationStarted();
-                              Iterable<?> iterable = keySource.getAllPossibleKeys();
-                              for(Object key: iterable)
-                              {
-                                 try
-                                 {
-                                    if(strategyInbound.doesMessageKeyBelongToNode(key))
-                                    {
-                                          container.getInstanceForKey(key);
-                                    }
-                                 }
-                                 catch(ContainerException e)
-                                 {
-                                    logger.error("Failed to instantiate MP for Key "+key +
-                                          " of type "+key.getClass().getSimpleName(), e);
-                                 }
-                              }
-                           }
-                           catch(Throwable e)
-                           {
-                              logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
-                                    keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
-                           }
-                           finally
-                           {
-                              statsCollector.preInstantiationCompleted();
-                           }
-                        }
-                     }, "Pre-Instantation Thread");
-                     t.start();
-                  }
                }
                catch(RuntimeException e) { throw e; }
                catch(Exception e) { throw new DempsyException(e); }

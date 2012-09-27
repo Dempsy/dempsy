@@ -153,6 +153,17 @@ public interface RoutingStrategy
        * Shut down and reclaim any resources associated with the {@link Inbound} instance.
        */
       public void stop();
+      
+      /**
+       * Since the responsibility for the portion of the keyspace that this node is responsible for
+       * is determined by the Inbound strategy, when that responsibility changes, Dempsy itself
+       * needs to be notified.
+       */
+      public static interface KeyspaceResponsibilityChangeListener
+      {
+         public void keyspaceResponsibilityChanged(Inbound inbound, boolean less, boolean more);
+      }
+      
    }
    
    /**
@@ -168,7 +179,8 @@ public interface RoutingStrategy
     * with 'this' node.
     * @return the {@link Inbound} instance.
     */
-   public Inbound createInbound(ClusterInfoSession cluster, ClusterId clusterId, Collection<Class<?>> messageTypes, Destination thisDestination);
+   public Inbound createInbound(ClusterInfoSession cluster, ClusterId clusterId, Collection<Class<?>> messageTypes,
+                                Destination thisDestination, Inbound.KeyspaceResponsibilityChangeListener listener);
    
    /**
     * The RoutingStrategy needs to create an {@link Outbound} that corresponds to the given cluster. It should do this

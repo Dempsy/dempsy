@@ -38,6 +38,7 @@ import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.router.Router.ClusterRouter;
+import com.nokia.dempsy.router.RoutingStrategy.Inbound;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 public class TestRouterClusterManagement
@@ -74,7 +75,12 @@ public class TestRouterClusterManagement
       // fake the inbound side setup
       inbound = strategy.createInbound(session,clusterId, 
             new Dempsy(){ public List<Class<?>> gm(ClusterDefinition clusterDef) { return super.getAcceptedMessages(clusterDef); }}.gm(cd), 
-         destination);
+         destination,new RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener()
+         {
+            
+            @Override
+            public void keyspaceResponsibilityChanged(Inbound inbound, boolean less, boolean more) { }
+         });
       
       routerFactory = new Router(app);
       routerFactory.setClusterSession(session);

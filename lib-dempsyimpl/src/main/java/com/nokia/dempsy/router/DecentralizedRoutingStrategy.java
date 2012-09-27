@@ -229,10 +229,13 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       private Collection<Class<?>> messageTypes;
       private Destination thisDestination;
       private ClusterId clusterId;
+      private KeyspaceResponsibilityChangeListener listener;
       
       private Inbound(ClusterInfoSession cluster, ClusterId clusterId,
-            Collection<Class<?>> messageTypes, Destination thisDestination)
+            Collection<Class<?>> messageTypes, Destination thisDestination,
+            KeyspaceResponsibilityChangeListener listener)
       {
+         this.listener = listener;
          this.cluster = cluster;
          this.messageTypes = messageTypes;
          this.thisDestination = thisDestination;
@@ -258,6 +261,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             int minNodeCount = defaultNumNodes;
             int totalAddressNeeded = defaultTotalSlots;
             Random random = new Random();
+            boolean moreResponsitiblity = false;
+            boolean lessResponsitiblity = false;
 
             //==============================================================================
             // need to verify that the existing slots in destinationsAcquired are still ours
@@ -280,8 +285,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                if (!acquireSlot(slotToReaquire, totalAddressNeeded,
                      cluster, clusterId, messageTypes, thisDestination))
                {
-                  // in this case, see if I already own it...
-                  logger.warn("Cannot reaquire the slot " + slotToReaquire + " for the cluster " + clusterId);
+                  logger.info("Cannot reaquire the slot " + slotToReaquire + " for the cluster " + clusterId);
+                  // I need to drop the slot from my list of destinations
+                  destinationsAcquired.remove(slotToReaquire);
+                  lessResponsitiblity = true;
                }
             }
             //==============================================================================
@@ -293,14 +300,22 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   continue;
                if (acquireSlot(randomValue, totalAddressNeeded,
                      cluster, clusterId, messageTypes, thisDestination))
-                  destinationsAcquired.add(randomValue);                  
+               {
+                  destinationsAcquired.add(randomValue);
+                  moreResponsitiblity = true;
+               }
             }
             
             retry = false;
+            
+            if (lessResponsitiblity || moreResponsitiblity)
+               listener.keyspaceResponsibilityChanged(this,lessResponsitiblity, moreResponsitiblity);
          }
          catch(ClusterInfoException e)
          {
-            destinationsAcquired.clear();
+// I don't think I want to do this ... if I have a Cluster problem I want to continue on my merry way
+//  until I have confirmation something dramatic has happened.
+//            destinationsAcquired.clear();
          }
          finally
          {
@@ -332,14 +347,14 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       {
          return destinationsAcquired.contains(messageKey.hashCode()%defaultTotalSlots);
       }
-      
+
    } // end Inbound class definition
    
    @Override
    public RoutingStrategy.Inbound createInbound(ClusterInfoSession cluster, ClusterId clusterId,
-         Collection<Class<?>> messageTypes, Destination thisDestination)
+         Collection<Class<?>> messageTypes, Destination thisDestination, Inbound.KeyspaceResponsibilityChangeListener listener)
    {
-      return new Inbound(cluster,clusterId,messageTypes,thisDestination);
+      return new Inbound(cluster,clusterId,messageTypes,thisDestination,listener);
    }
 
    @Override

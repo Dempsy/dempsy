@@ -38,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.Dispatcher;
+import com.nokia.dempsy.KeySource;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.internal.AnnotatedMethodInvoker;
@@ -46,6 +47,7 @@ import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.output.OutputInvoker;
+import com.nokia.dempsy.router.RoutingStrategy;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
@@ -57,7 +59,7 @@ import com.nokia.dempsy.serialization.java.JavaSerializer;
  *  The container is simple in that it does no thread management. When it's called 
  *  it assumes that the transport has provided the thread that's needed 
  */
-public class MpContainer implements Listener, OutputInvoker
+public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener
 {
    private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -85,6 +87,9 @@ public class MpContainer implements Listener, OutputInvoker
 
    // The ClusterId is set for the sake of error messages.
    private ClusterId clusterId;
+   
+   // This holds the keySource for pre(re)-instantiation
+   private KeySource<?> keySource = null;
 
    private volatile boolean isRunning = true;
 
@@ -221,6 +226,8 @@ public class MpContainer implements Listener, OutputInvoker
    public void setSerializer(Serializer<Object> serializer) { this.serializer = serializer; }
 
    public Serializer<Object> getSerializer() { return this.serializer; }
+   
+   public void setKeySource(KeySource<?> keySource) { this.keySource = keySource; }
 
 
    //----------------------------------------------------------------------------
@@ -283,7 +290,7 @@ public class MpContainer implements Listener, OutputInvoker
 
 
    //----------------------------------------------------------------------------
-   // Monitoring and Managmeent
+   // Monitoring and Management
    //----------------------------------------------------------------------------
 
    /**
@@ -292,6 +299,52 @@ public class MpContainer implements Listener, OutputInvoker
    public int getProcessorCount()
    {
       return instances.size();
+   }
+   
+   @Override
+   public void keyspaceResponsibilityChanged(final RoutingStrategy.Inbound strategyInbound, boolean less, boolean more)
+   {
+      // need to handle less by passivating ... but we'll ignore for now.
+      
+      // If more were added and we have a keySource we need to do
+      //  preinstantiation
+      if (more && keySource != null)
+      {
+         Thread t = new Thread(new Runnable()
+         {
+            @Override
+            public void run()
+            {
+               try{
+                  statCollector.preInstantiationStarted();
+                  Iterable<?> iterable = keySource.getAllPossibleKeys();
+                  for(Object key: iterable)
+                  {
+                     try
+                     {
+                        if(strategyInbound.doesMessageKeyBelongToNode(key))
+                           getInstanceForKey(key);
+                     }
+                     catch(ContainerException e)
+                     {
+                        logger.error("Failed to instantiate MP for Key "+key +
+                              " of type "+key.getClass().getSimpleName(), e);
+                     }
+                  }
+               }
+               catch(Throwable e)
+               {
+                  logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
+                        keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
+               }
+               finally
+               {
+                  statCollector.preInstantiationCompleted();
+               }
+            }
+         }, "Pre-Instantation Thread");
+         t.start();
+      }
    }
 
    //----------------------------------------------------------------------------
