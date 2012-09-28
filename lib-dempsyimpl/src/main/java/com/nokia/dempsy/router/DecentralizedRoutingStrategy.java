@@ -139,9 +139,9 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
 
             Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
             int newtotalAddressCounts = fillMapFromActiveSlots(slotNumbersToSlots,clusterSession,clusterId,this);
-//            if (newtotalAddressCounts == 0)
-//               throw new ClusterInfoException("The cluster " + clusterId + 
-//                     " seems to have invalid slot information. Someone has set the total number of slots to zero.");
+            if (newtotalAddressCounts == 0)
+               logger.info("The cluster " + SafeString.valueOf(clusterId) + " seems to be missing from the cluster info manager (zookeeper).");
+            
             if (newtotalAddressCounts > 0)
             {
                Destination[] newDestinations = new Destination[newtotalAddressCounts];
