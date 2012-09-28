@@ -197,6 +197,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
     * injected into {@link Adaptor}s. The implementation of this dispatch routes the message
     * to the appropriate {@link MessageProcessor} in the appropriate {@link ClusterDefinition}
     */
+   @Override
    public void dispatch(Object message)
    {
       if(message == null)
@@ -247,7 +248,12 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             if(routers != null)
             {
                for(ClusterRouter router: routers)
-                  router.route(msgKeysValue,msg);
+               {
+                  if (router.route(msgKeysValue,msg))
+                     statsCollector.messageSent(messageClass);
+                  else
+                     statsCollector.messageNotSent(messageClass);
+               }
             }
             else
             {
@@ -364,7 +370,10 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
          this.serializer = serializer;
       }
       
-      public void route(Object key, Object message)
+      /**
+       * Returns whether or not the message was actually sent. Doesn't touch the statsCollector
+       */
+      public boolean route(Object key, Object message)
       {
          boolean messageFailed = true;
          Sender sender = null;
@@ -375,7 +384,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             if (destination == null)
             {
                logger.error("Couldn't find a destination for " + SafeString.objectDescription(message));
-               return;
+               return false;
             }
 
             sender = senderFactory.getSender(destination);
@@ -387,7 +396,6 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
                byte[] data = serializer.serialize(message);
                sender.send(data);
                messageFailed = false;
-               if (statsCollector != null) statsCollector.messageSent(message);
             }
          }
          catch(DempsyException e)
@@ -411,11 +419,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
                   " using the serializer " + SafeString.objectDescription(serializer) +
                   "\" and using the sender " + SafeString.objectDescription(sender),e);
          }
-         finally
-         {
-            if (statsCollector != null && messageFailed) 
-               statsCollector.messageFailed();
-         }
+         return !messageFailed;
       }
       
       private void stop()
