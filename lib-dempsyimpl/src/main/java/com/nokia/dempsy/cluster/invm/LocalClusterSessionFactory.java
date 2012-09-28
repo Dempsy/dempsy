@@ -38,6 +38,7 @@ import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.cluster.ClusterInfoWatcher;
 import com.nokia.dempsy.cluster.DirMode;
+import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.internal.util.SafeString;
 
 /**
@@ -130,7 +131,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return f.getParent();
    }
    
-   private Entry get(String absolutePath, ClusterInfoWatcher watcher, boolean nodeWatch) throws ClusterInfoException
+   private Entry get(String absolutePath, ClusterInfoWatcher watcher, boolean nodeWatch) throws ClusterInfoException.NoNodeException
    {
       Entry ret;
       ret = entries.get(absolutePath);
@@ -208,7 +209,9 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return pathToUse;
    }
    
-   private void ormdir(String path) throws ClusterInfoException
+   private void ormdir(String path) throws ClusterInfoException {   ormdir(path,true);  }
+   
+   private void ormdir(String path, boolean notifyWatchers) throws ClusterInfoException
    {
       Entry ths;
       Entry parent = null;
@@ -227,9 +230,12 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       {
          int lastSlash = path.lastIndexOf('/');
          parent.children.remove(path.substring(lastSlash + 1));
-         parent.callWatchers(false,true);
+         if (notifyWatchers)
+            parent.callWatchers(false,true);
       }
-      ths.callWatchers(true, true);
+      
+      if (notifyWatchers)
+         ths.callWatchers(true, true);
    }
    
    private synchronized Collection<String> ogetSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
@@ -249,21 +255,16 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return ret;
    }
    
-   public class LocalSession implements ClusterInfoSession
+   public class LocalSession implements ClusterInfoSession, DisruptibleSession
    {
-      private List<String> localEphemeralDirs = new ArrayList<String>();
+      private List<String> localEphemeralDirs = new CopyOnWriteArrayList<String>();
       
       @Override
       public String mkdir(String path, DirMode mode) throws ClusterInfoException
       {
          String ret = omkdir(path,mode);
          if (ret != null && mode.isEphemeral())
-         {
-            synchronized(localEphemeralDirs)
-            {
-               localEphemeralDirs.add(ret);
-            }
-         }
+            localEphemeralDirs.add(ret);
          return ret;
       }
 
@@ -271,10 +272,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       public void rmdir(String path) throws ClusterInfoException
       {
          ormdir(path);
-         synchronized(localEphemeralDirs)
-         {
-            localEphemeralDirs.remove(path);
-         }
+         localEphemeralDirs.remove(path);
       }
 
       @Override
@@ -304,25 +302,56 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       @Override
       public void stop()
       {
-         synchronized(localEphemeralDirs)
+         stop(true);
+      }
+      
+      private void stop(boolean notifyWatchers)
+      {
+         List<String> ldirs = new ArrayList<String>();
+         ldirs.addAll(localEphemeralDirs);
+         for (int i = ldirs.size() - 1; i >= 0; i--)
          {
-            for (int i = localEphemeralDirs.size() - 1; i >= 0; i--)
+            try
             {
-               try
-               {
-                  ormdir(localEphemeralDirs.get(i));
-               }
-               catch (ClusterInfoException cie)
-               {
-                  // this can only happen in an odd race condition but
-                  // it's ok if it does since it means the dir has already
-                  // been removed from another thread.
-               }
+               ormdir(ldirs.get(i),notifyWatchers);
+            }
+            catch (ClusterInfoException cie)
+            {
+               // this can only happen in an odd race condition but
+               // it's ok if it does since it means the dir has already
+               // been removed from another thread.
             }
          }
          currentSessions.remove(this);
       }
+      
+      
+      @Override
+      public void disrupt()
+      {
+         List<String> ldirs = new ArrayList<String>();
+         ldirs.addAll(localEphemeralDirs);
+         
+         // first dump the ephemeral nodes
+         stop(false); // this deletes all of the ephemeral nodes.
+         // now add back this session.
+         currentSessions.add(this);
 
+         // go through all of the nodes that were just deleted and find all unique parents
+         Set<String> parents = new HashSet<String>();
+         for (String path : ldirs)
+            parents.add(parent(path));
+
+         for (String path : parents)
+         {
+            try
+            {
+               Entry e = get(path,null,false);
+               e.callWatchers(false, true);
+            }
+            catch (ClusterInfoException.NoNodeException e) {} // this is fine
+         }
+      }
    } // end session definition
 
 }

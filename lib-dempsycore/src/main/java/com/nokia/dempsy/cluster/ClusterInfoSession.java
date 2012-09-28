@@ -87,5 +87,5 @@ public interface ClusterInfoSession
     * NOTE: stop() must be idempotent.
     */
    public void stop();
-
+   
 }

@@ -79,7 +79,7 @@ public class Dempsy
          {
             protected ClusterDefinition clusterDefinition;
             
-            private Router router = null;
+            Router router = null;
             private MpContainer container = null;
             private RoutingStrategy.Inbound strategyInbound = null;
             List<Class<?>> acceptedMessageClasses = null;

@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import junit.framework.Assert;
 
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -51,6 +53,7 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
+import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
 
@@ -94,6 +97,12 @@ public class TestDempsy
    public static void shutdownZookeeper()
    {
       zkServer.stop();
+   }
+   
+   @Before
+   public void init()
+   {
+      KeySourceImpl.disruptSession = false;
    }
    
    public static class TestMessage implements Serializable
@@ -189,13 +198,61 @@ public class TestDempsy
    
    public static class KeySourceImpl implements KeySource<String>
    {
+      private Dempsy dempsy = null;
+      private ClusterId clusterId = null;
+      public static boolean disruptSession = false;
+      
+      public void setDempsy(Dempsy dempsy) { this.dempsy = dempsy; }
+      
+      public void setClusterId(ClusterId clusterId) { this.clusterId = clusterId; }
+      
       @Override
       public Iterable<String> getAllPossibleKeys()
       {
-         ArrayList<String> keys = new ArrayList<String>();
+         final ArrayList<String> keys = new ArrayList<String>();
          keys.add("test1");
          keys.add("test2");
-         return keys;
+         
+         // The array is proxied to create the ability to rip out the cluster manager
+         // in the middle of iterating over the key source. This is to create the 
+         // condition in which the key source is being iterated while the routing strategy
+         // is attempting to get slots.
+         return new Iterable<String>()
+         {
+            @Override
+            public Iterator<String> iterator()
+            {
+               final Iterator<String> proxy = keys.iterator();
+               
+               return new Iterator<String>()
+               {
+                  int count = 0;
+                  
+                  @Override
+                  public boolean hasNext() { if (count == 1) kickClusterInfoMgr(); return proxy.hasNext();  }
+
+                  @Override
+                  public String next() { count++; return proxy.next();}
+
+                  @Override
+                  public void remove() { proxy.remove(); }
+                  
+                  private void kickClusterInfoMgr() 
+                  {
+                     if (!disruptSession)
+                        return;
+                     Dempsy.Application.Cluster c = dempsy.getCluster(clusterId);
+                     Object session = TestUtils.getSession(c);
+                     if (session instanceof DisruptibleSession)
+                     {
+                        DisruptibleSession dses = (DisruptibleSession)session;
+                        dses.disrupt();
+                     }
+                  }
+               };
+            }
+            
+         };
       }
    }
    
@@ -535,6 +592,18 @@ public class TestDempsy
 
    @Test
    public void testMpKeyStore() throws Throwable
+   {
+      runMpKeyStoreTest();
+   }
+   
+   @Test
+   public void testMpKeyStoreWithFailingClusterManager() throws Throwable
+   {
+      KeySourceImpl.disruptSession = true;
+      runMpKeyStoreTest();
+   }
+   
+   public void runMpKeyStoreTest() throws Throwable
    {
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
           new Checker()   

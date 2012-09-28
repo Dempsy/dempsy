@@ -118,6 +118,11 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
    public void setClusterSession(ClusterInfoSession factory) { mpClusterSession = factory; }
    
    /**
+    * @return a reference to the set ClusterInfoSession
+    */
+   public ClusterInfoSession getClusterSession() { return mpClusterSession; }
+   
+   /**
     * Tell the {@link Router} what the current cluster is. This is typically determined by
     * the {@link Dempsy} orchestrator through the use of the {@link CurrentClusterCheck}.
     */

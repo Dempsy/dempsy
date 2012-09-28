@@ -41,11 +41,12 @@ import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.ClusterInfoWatcher;
 import com.nokia.dempsy.cluster.DirMode;
+import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 
-public class ZookeeperSession implements ClusterInfoSession
+public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
 {
    private static Logger logger = LoggerFactory.getLogger(ZookeeperSession.class);
    
@@ -192,6 +193,12 @@ public class ZookeeperSession implements ClusterInfoSession
       }
 
       try { curZk.get().close(); } catch (Throwable th) { /* let it go otherwise */ }
+   }
+   
+   @Override
+   public void disrupt()
+   {
+      try { if (zkref != null) zkref.get().close(); } catch (Throwable th) { /* let it go otherwise */ }
    }
    
    protected static class ZkWatcher implements Watcher
