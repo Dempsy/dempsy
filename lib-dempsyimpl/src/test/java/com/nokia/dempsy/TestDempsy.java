@@ -56,6 +56,7 @@ import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
 public class TestDempsy
 {
@@ -638,7 +639,7 @@ public class TestDempsy
                   Assert.assertTrue(nodes.size()>0);
                   Node node = nodes.get(0);
                   Assert.assertNotNull(node);
-                  double duration = node.getStatsCollector().getPreInstantiationDuration();
+                  double duration = ((MetricGetters)node.getStatsCollector()).getPreInstantiationDuration();
                   Assert.assertTrue(duration>0.0);
                }
                

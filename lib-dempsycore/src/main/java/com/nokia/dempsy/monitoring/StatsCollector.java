@@ -106,25 +106,4 @@ public interface StatsCollector {
     */
    public TimerContext evictionPassStarted();
    
-	// FIXME
-	/*
-	 *------------------------------------------------------------------------- 
-	 * Methods for testing only.
-	 * Serveral Unit tests read stats, which in the prior MBean implementation
-	 * was a free ride.  We do need to think about how this can be done better.
-	 * Not all implementations would really need to implement these, just one
-	 * for testing.  But for the moment, we'll leave it here and avoid casting
-	 * all over in test cases.
-	 *-------------------------------------------------------------------------
-	 */
-	
-	long getProcessedMessageCount();
-	long getDispatchedMessageCount();
-	long getMessageFailedCount();
-	long getDiscardedMessageCount();
-	int getInFlightMessageCount();
-	double getPreInstantiationDuration();
-	double getOutputInvokeDuration();
-	double getEvictionDuration();
-	
 }

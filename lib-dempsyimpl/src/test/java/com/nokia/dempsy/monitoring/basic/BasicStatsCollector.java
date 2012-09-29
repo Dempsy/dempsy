@@ -19,6 +19,7 @@ package com.nokia.dempsy.monitoring.basic;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
 /**
  * A very basic implementation of StatsCollector.
@@ -26,7 +27,7 @@ import com.nokia.dempsy.monitoring.StatsCollector;
  * implementation does, but useful for testing.
  *
  */
-public class BasicStatsCollector implements StatsCollector
+public class BasicStatsCollector implements StatsCollector, MetricGetters
 {
    private final AtomicLong messagesReceived = new AtomicLong();
    private final AtomicLong messagesDiscarded = new AtomicLong();

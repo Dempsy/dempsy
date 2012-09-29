@@ -39,8 +39,8 @@ import com.yammer.metrics.core.Timer;
  * factor in moving from simple annontated MBeans.
  * 
  */
-public class StatsCollectorCoda implements StatsCollector {
-	
+public class StatsCollectorCoda implements StatsCollector, MetricGetters
+{
    // Metric Names
    public static final String MN_MSG_RCVD = "messages-received";
    public static final String MN_BYTES_RCVD = "bytes-received";

@@ -48,6 +48,7 @@ import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.router.CurrentClusterCheck;
 
 
@@ -181,8 +182,8 @@ public class TestFullApp
 
          assertNotNull(zookeeperCluster);
 
-         assertEquals(0,collector.getDiscardedMessageCount());
-         assertEquals(0,collector.getMessageFailedCount());
+         assertEquals(0,((MetricGetters)collector).getDiscardedMessageCount());
+         assertEquals(0,((MetricGetters)collector).getMessageFailedCount());
 
          // ok ... so now we have stuff going all the way through. let's kick
          // the middle Mp's zookeeper cluster and see what happens.
@@ -296,8 +297,8 @@ public class TestFullApp
 
          assertNotNull(zookeeperCluster);
 
-         assertEquals(0,collector.getDiscardedMessageCount());
-         assertEquals(0,collector.getMessageFailedCount());
+         assertEquals(0,((MetricGetters)collector).getDiscardedMessageCount());
+         assertEquals(0,((MetricGetters)collector).getMessageFailedCount());
 
          // ok ... so now we have stuff going all the way through. let's kick
          // the middle Mp's zookeeper cluster and see what happens.
@@ -498,7 +499,7 @@ public class TestFullApp
          // an alternate way to get it, since with the stats collector rework
          // we no longer use an independent MetricsRegistry per StatsCollector 
          // instance.
-         assertEquals(0,collector.getDispatchedMessageCount());
+         assertEquals(0,((MetricGetters)collector).getDispatchedMessageCount());
          assertEquals(0,spareprototype.myMpReceived.get());
          
          // now bring down the original
