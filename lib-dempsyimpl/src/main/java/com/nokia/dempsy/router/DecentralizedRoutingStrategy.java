@@ -18,11 +18,9 @@ package com.nokia.dempsy.router;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -91,9 +89,11 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          Destination[] destinationArr = destinations.get();
          if (destinationArr == null)
             throw new DempsyException("It appears the Outbound strategy for the message key " + 
-                  SafeString.objectDescription(messageKey) + 
-                  " is being used prior to initialization.");
-         int calculatedModValue = Math.abs(messageKey.hashCode()%destinationArr.length);
+                  SafeString.objectDescription(messageKey) + " is being used prior to initialization.");
+         int length = destinationArr.length;
+         if (length == 0)
+            return null;
+         int calculatedModValue = Math.abs(messageKey.hashCode()%length);
          return destinationArr[calculatedModValue];
       }
       
@@ -123,7 +123,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          for (Destination d : ds)
             if (d == null)
                return false;
-         return true;
+         return ds.length != 0; // this method is only called in tests and this needs to be true there.
       }
       
       /**
@@ -136,11 +136,18 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          {
             if (logger.isTraceEnabled())
                logger.trace("Resetting Outbound Strategy for cluster " + clusterId);
-
+            
             Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
-            int newtotalAddressCounts = fillMapFromActiveSlots(slotNumbersToSlots,clusterSession,clusterId,this);
+            Collection<String> emptySlots = new ArrayList<String>();
+            int newtotalAddressCounts = fillMapFromActiveSlots(slotNumbersToSlots,emptySlots,clusterSession,clusterId,this);
             if (newtotalAddressCounts == 0)
-               logger.info("The cluster " + SafeString.valueOf(clusterId) + " seems to be missing from the cluster info manager (zookeeper).");
+               logger.info("The cluster " + SafeString.valueOf(clusterId) + " doesn't seem to have registered any details yet.");
+            
+            // For now if we hit the race condition between when the target Inbound
+            // has created the slot and when it assigns the slot info, we simply claim
+            // we failed.
+            if (emptySlots.size() > 0)
+               return false;
             
             if (newtotalAddressCounts > 0)
             {
@@ -159,13 +166,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   }
                }
 
-               // now see if anything is changed.
-               Destination[] oldDestinations = destinations.get();
-               if (oldDestinations == null || !Arrays.equals(oldDestinations, newDestinations))
-                  destinations.set(newDestinations);
+               destinations.set(newDestinations);
             }
             else
-               destinations.set(null);
+               destinations.set(new Destination[0]);
             
             return destinations.get() != null;
          }
@@ -224,7 +228,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    {
       private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-      private List<Integer> destinationsAcquired = new ArrayList<Integer>();
+      private Set<Integer> destinationsAcquired = new HashSet<Integer>();
       private ClusterInfoSession cluster;
       private Collection<Class<?>> messageTypes;
       private Destination thisDestination;
@@ -249,15 +253,26 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          acquireSlots(true);
       }
       
+      boolean alreadyHere = false;
+      boolean recurseAttempt = false;
+      
       private synchronized void acquireSlots(final boolean fromProcess)
       {
          boolean retry = true;
          
          try
          {
+            // we need to flatten out recursions
+            if (alreadyHere)
+            {
+               recurseAttempt = true;
+               return;
+            }
+            alreadyHere = true;
+            
             if (logger.isTraceEnabled())
                logger.trace("Resetting Inbound Strategy for cluster " + clusterId);
-
+            
             int minNodeCount = defaultNumNodes;
             int totalAddressNeeded = defaultTotalSlots;
             Random random = new Random();
@@ -267,13 +282,14 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             //==============================================================================
             // need to verify that the existing slots in destinationsAcquired are still ours
             Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
-            fillMapFromActiveSlots(slotNumbersToSlots,cluster, clusterId,this);
+            Collection<String> emptySlots = new HashSet<String>();
+            fillMapFromActiveSlots(slotNumbersToSlots,emptySlots, cluster, clusterId,this);
             Collection<Integer> slotsToReaquire = new ArrayList<Integer>();
             for (Integer destinationSlot : destinationsAcquired)
             {
                // select the coresponding slot information
                DefaultRouterSlotInfo slotInfo = slotNumbersToSlots.get(destinationSlot);
-               if (slotInfo == null || !thisDestination.equals(slotInfo.getDestination()))
+               if (slotInfo == null || !thisDestination.equals(slotInfo.getDestination()) || emptySlots.contains(Integer.toString(destinationSlot)))
                   slotsToReaquire.add(destinationSlot);
             }
             //==============================================================================
@@ -313,13 +329,18 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          }
          catch(ClusterInfoException e)
          {
-// I don't think I want to do this ... if I have a Cluster problem I want to continue on my merry way
-//  until I have confirmation something dramatic has happened.
-//            destinationsAcquired.clear();
+            if (logger.isDebugEnabled())
+               logger.debug("Exception while acquiring micro-shards for " + clusterId, e);
          }
          finally
          {
             // if we never got the destinations set up then kick off a retry
+            if (recurseAttempt)
+               retry = true;
+            
+            recurseAttempt = false;
+            alreadyHere = false;
+            
             if (retry)
                scheduler.schedule(new Runnable(){
                   @Override
@@ -424,8 +445,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
     * Fill the map of slots to slotinfos for internal use. 
     * @return the totalAddressCount from each slot. These are supposed to be repeated.
     */
-   private static int fillMapFromActiveSlots(Map<Integer,DefaultRouterSlotInfo> mapToFill, ClusterInfoSession session,
-         ClusterId clusterId, ClusterInfoWatcher watcher) throws ClusterInfoException
+   private static int fillMapFromActiveSlots(Map<Integer,DefaultRouterSlotInfo> mapToFill, Collection<String> emptySlots, 
+         ClusterInfoSession session, ClusterId clusterId, ClusterInfoWatcher watcher) throws ClusterInfoException
    {
       int totalAddressCounts = -1;
       Collection<String> slotsFromClusterManager;
@@ -462,6 +483,13 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                         " from " + SafeString.objectDescription(slotInfo.getDestination()) + 
                         " thinks the total number of slots for this cluster it " + slotInfo.getTotalAddress() +
                         " but a former slot said the total was " + totalAddressCounts);
+            }
+            else
+            {
+               if (emptySlots != null)
+                  emptySlots.add(node);
+               if (logger.isDebugEnabled())
+                  logger.debug("Retrieved empty slot for cluster " + clusterId + ", slot number " + node);
             }
          }
       }
