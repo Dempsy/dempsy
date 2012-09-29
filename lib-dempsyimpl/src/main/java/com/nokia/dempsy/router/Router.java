@@ -383,7 +383,8 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
 
             if (destination == null)
             {
-               logger.error("Couldn't find a destination for " + SafeString.objectDescription(message));
+               if (logger.isInfoEnabled())
+                  logger.info("Couldn't find a destination for " + SafeString.objectDescription(message));
                return false;
             }
 
