@@ -71,9 +71,14 @@ public class TestStatsCollectorCoda {
 
 	@Test
 	public void testMessageFailed() {
-		assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_FAIL));
-		stats.messageFailed();
-		assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_FAIL));
+      assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_FWFAIL));
+      assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_MPFAIL));
+      stats.messageFailed(true);
+      assertEquals("got one", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_FWFAIL));
+      assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_MPFAIL));
+      stats.messageFailed(false);
+      assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_FWFAIL));
+      assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_MPFAIL));
 	}
 
 	@Test

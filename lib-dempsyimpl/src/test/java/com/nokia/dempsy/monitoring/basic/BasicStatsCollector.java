@@ -95,7 +95,7 @@ public class BasicStatsCollector implements StatsCollector
    }
 
    @Override
-   public void messageFailed()
+   public void messageFailed(boolean mpFailure)
    {
       messagesFailed.incrementAndGet();
       inProcessMessages.decrementAndGet();

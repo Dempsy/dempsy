@@ -41,7 +41,7 @@ public interface StatsCollector {
 	 * MPContainer calls this method when invoking an MP's
 	 * <code>MessageHandler</code> or Output method results in an error.
 	 */
-	void messageFailed();
+	void messageFailed(boolean mpFailure);
 	
 	/**
 	 * Dispatcher calls this method when emitting a message

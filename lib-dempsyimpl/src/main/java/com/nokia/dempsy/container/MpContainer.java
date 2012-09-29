@@ -836,7 +836,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          {
             logger.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " + 
                   SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + SafeString.objectDescription(message)) : ""),e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(false);
          }
          // this is an exception thrown as a result of the reflected call having an illegal argument.
          // This should actually be impossible since the container itself manages the calling.
@@ -844,28 +844,28 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          {
             logger.error("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?", e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(true);
          }
          // can't access the method? Did the app developer annotate it correctly?
          catch(IllegalAccessException e)
          {
             logger.error("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " due an access problem. Is the method public?", e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(true);
          }
          // The app threw an exception.
          catch(InvocationTargetException e)
          {
             logger.warn("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " because an exception was thrown by the Message Processeor itself.", e.getCause() );
-            statCollector.messageFailed();
+            statCollector.messageFailed(true);
          }
          // RuntimeExceptions bookeeping
          catch (RuntimeException e)
          {
             logger.error("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " due to an unknown exception.", e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(false);
 
             if (op == Operation.handle)
                throw e;

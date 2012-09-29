@@ -47,7 +47,8 @@ public class StatsCollectorCoda implements StatsCollector {
    public static final String MN_BYTES_RCVD = "bytes-received";
    public static final String MN_MSG_DISCARD = "messages-discarded";
    public static final String MN_MSG_DISPATCH = "messages-dispatched";
-   public static final String MN_MSG_FAIL = "messages-failed";
+   public static final String MN_MSG_FWFAIL = "messages-dempsy-failed";
+   public static final String MN_MSG_MPFAIL = "messages-mp-failed";
    public static final String MN_MSG_PROC = "messages-processed";
    public static final String MN_MSG_SENT = "messages-sent";
    public static final String MN_BYTES_SENT = "bytes-sent";
@@ -59,7 +60,8 @@ public class StatsCollectorCoda implements StatsCollector {
       MN_BYTES_RCVD,
       MN_MSG_DISCARD,
       MN_MSG_DISPATCH,
-      MN_MSG_FAIL,
+      MN_MSG_FWFAIL,
+      MN_MSG_MPFAIL,
       MN_MSG_PROC,
       MN_MSG_SENT,
       MN_BYTES_SENT,
@@ -72,7 +74,8 @@ public class StatsCollectorCoda implements StatsCollector {
    private Meter bytesReceived;
 	private Meter messagesDiscarded;
 	private Meter messagesDispatched;
-	private Meter messagesFailed;
+   private Meter messagesFwFailed;
+   private Meter messagesMpFailed;
 	private Meter messagesProcessed;
 	private Meter messagesSent;
 	private Meter bytesSent;
@@ -104,7 +107,8 @@ public class StatsCollectorCoda implements StatsCollector {
       bytesReceived = Metrics.newMeter(Dempsy.class, MN_BYTES_RCVD, scope, "bytes", TimeUnit.SECONDS);
 	   messagesDiscarded = Metrics.newMeter(Dempsy.class, MN_MSG_DISCARD, scope, "messages", TimeUnit.SECONDS);
 	   messagesDispatched = Metrics.newMeter(Dempsy.class, MN_MSG_DISPATCH, scope, "messages", TimeUnit.SECONDS);
-	   messagesFailed = Metrics.newMeter(Dempsy.class, MN_MSG_FAIL, scope, "messages", TimeUnit.SECONDS);
+      messagesFwFailed = Metrics.newMeter(Dempsy.class, MN_MSG_FWFAIL, scope, "messages", TimeUnit.SECONDS);
+      messagesMpFailed = Metrics.newMeter(Dempsy.class, MN_MSG_MPFAIL, scope, "messages", TimeUnit.SECONDS);
 	   messagesProcessed = Metrics.newMeter(Dempsy.class, MN_MSG_PROC, scope, "messages", TimeUnit.SECONDS);
 	   messagesSent = Metrics.newMeter(Dempsy.class, MN_MSG_SENT, scope, "messages", TimeUnit.SECONDS);
 	   bytesSent = Metrics.newMeter(Dempsy.class, MN_BYTES_SENT, scope, "bytes", TimeUnit.SECONDS);
@@ -165,8 +169,11 @@ public class StatsCollectorCoda implements StatsCollector {
 	}
 
 	@Override
-	public void messageFailed() {
-		messagesFailed.mark();
+	public void messageFailed(boolean mpFailure) {
+		if (mpFailure)
+		   messagesMpFailed.mark();
+		else
+		   messagesFwFailed.mark();
 		inProcessMessages.decrementAndGet();
 	}
 	
@@ -224,7 +231,7 @@ public class StatsCollectorCoda implements StatsCollector {
 	@Override
 	public long getMessageFailedCount()
 	{
-		return messagesFailed.count();
+		return messagesFwFailed.count() + messagesMpFailed.count();
 	}
 	
 	@Override
