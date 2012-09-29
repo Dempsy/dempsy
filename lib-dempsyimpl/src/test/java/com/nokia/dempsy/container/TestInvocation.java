@@ -31,6 +31,7 @@ import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Passivation;
 import com.nokia.dempsy.container.internal.LifecycleHelper;
+import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
 
 /**
  * Formerly there were tests that checked the invocations via the Command
@@ -214,13 +215,14 @@ public class TestInvocation
       InvocationTestMP prototype = new InvocationTestMP();
       LifecycleHelper invoker = new LifecycleHelper(prototype);
       InvocationTestMP instance = (InvocationTestMP)invoker.newInstance();
+      BasicStatsCollector statsCollector = new BasicStatsCollector();
 
       // pre-condition assertion
       assertNull(prototype.lastStringHandlerValue);
       assertNull(instance.lastStringHandlerValue);
 
       String message = "foo";
-      Object o = invoker.invoke(instance, message);
+      Object o = invoker.invoke(instance, message,statsCollector);
       assertEquals(new Integer(42), o);
 
       // we assert that the prototype is still null to check for bad code
@@ -236,14 +238,15 @@ public class TestInvocation
       InvocationTestMP prototype = new InvocationTestMP();
       LifecycleHelper invoker = new LifecycleHelper(prototype);
       InvocationTestMP instance = (InvocationTestMP)invoker.newInstance();
+      BasicStatsCollector statsCollector = new BasicStatsCollector();
 
       Integer message1 = new Integer(1);
-      Object o = invoker.invoke(instance, message1);
+      Object o = invoker.invoke(instance, message1,statsCollector);
       assertEquals(message1, instance.lastNumberHandlerValue);
       assertNull(o);
 
       Double message2 = new Double(1.5);
-      invoker.invoke(instance, message2);
+      invoker.invoke(instance, message2,statsCollector);
       assertEquals(message2, instance.lastNumberHandlerValue);
    }
 
@@ -255,8 +258,9 @@ public class TestInvocation
       InvocationTestMP prototype = new InvocationTestMP();
       LifecycleHelper invoker = new LifecycleHelper(prototype);
       InvocationTestMP instance = (InvocationTestMP)invoker.newInstance();
+      BasicStatsCollector statsCollector = new BasicStatsCollector();
 
-      invoker.invoke(instance, new Object());
+      invoker.invoke(instance, new Object(),statsCollector);
    }
 
 
@@ -267,8 +271,9 @@ public class TestInvocation
       InvocationTestMP prototype = new InvocationTestMP();
       LifecycleHelper invoker = new LifecycleHelper(prototype);
       InvocationTestMP instance = (InvocationTestMP)invoker.newInstance();
+      BasicStatsCollector statsCollector = new BasicStatsCollector();
 
-      invoker.invoke(instance, null);
+      invoker.invoke(instance, null,statsCollector);
    }
 
 

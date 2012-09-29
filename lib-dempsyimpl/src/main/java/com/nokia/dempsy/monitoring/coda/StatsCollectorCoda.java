@@ -28,7 +28,6 @@ import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricsRegistry;
 import com.yammer.metrics.core.Timer;
-import com.yammer.metrics.core.TimerContext;
 
 /**
  * An implementation of the Dempsy StatsCollector
@@ -55,19 +54,21 @@ public class StatsCollectorCoda implements StatsCollector {
    public static final String MN_MSG_UNSENT = "messages-unsent";
    public static final String MN_MP_CREATE = "message-processors-created";
    public static final String MN_MP_DELETE = "message-processors-deleted";
+   public static final String GAGE_MPS_IN_PROCESS = "messages-in-process";
+   public static final String TM_MP_PREIN = "pre-instantiation-duration";
+   public static final String TM_MP_HANDLE = "mp-handle-message-duration";
+   public static final String TM_MP_OUTPUT = "outputInvoke-duration";
+   public static final String TM_MP_EVIC = "evictionInvoke-duration";
    public static final String[] METRIC_NAMES = {
-      MN_MSG_RCVD,
-      MN_BYTES_RCVD,
-      MN_MSG_DISCARD,
-      MN_MSG_DISPATCH,
-      MN_MSG_FWFAIL,
-      MN_MSG_MPFAIL,
-      MN_MSG_PROC,
-      MN_MSG_SENT,
-      MN_BYTES_SENT,
-      MN_MSG_UNSENT,
-      MN_MP_CREATE,
-      MN_MP_DELETE,
+      MN_MSG_RCVD,         MN_BYTES_RCVD,
+      MN_MSG_DISCARD,      MN_MSG_DISPATCH,
+      MN_MSG_FWFAIL,       MN_MSG_MPFAIL,
+      MN_MSG_PROC,         MN_MSG_SENT,
+      MN_BYTES_SENT,       MN_MSG_UNSENT,
+      MN_MP_CREATE,        MN_MP_DELETE,
+      GAGE_MPS_IN_PROCESS,
+      TM_MP_PREIN,         TM_MP_HANDLE,
+      TM_MP_OUTPUT,        TM_MP_EVIC
    };
    
    private Meter messagesReceived;
@@ -90,14 +91,10 @@ public class StatsCollectorCoda implements StatsCollector {
 	private Gauge<Long> messageProcessors;
 	private String scope;
 
-	private Timer preInstantiationDuration;
-	private TimerContext preInstantiationDurationContext;
-
+   private Timer preInstantiationDuration;
+   private Timer mpHandleMessageDuration;
 	private Timer outputInvokeDuration;
-	private TimerContext outputInvokeDurationContext;
-	
 	private Timer evictionInvokeDuration;
-	private TimerContext evictionInvokeDurationContext;
   
 
 	public StatsCollectorCoda(ClusterId clusterId)
@@ -114,7 +111,7 @@ public class StatsCollectorCoda implements StatsCollector {
 	   bytesSent = Metrics.newMeter(Dempsy.class, MN_BYTES_SENT, scope, "bytes", TimeUnit.SECONDS);
 	   messagesUnsent = Metrics.newMeter(Dempsy.class, MN_MSG_UNSENT, scope, "messsages", TimeUnit.SECONDS);
 	   inProcessMessages = new AtomicInteger();
-	   messagesInProcess = Metrics.newGauge(Dempsy.class, "messages-in-process",
+	   messagesInProcess = Metrics.newGauge(Dempsy.class, GAGE_MPS_IN_PROCESS,
 	         scope, new Gauge<Integer>() {
 	      @Override
 	      public Integer value()
@@ -134,13 +131,16 @@ public class StatsCollectorCoda implements StatsCollector {
 	      }
 	   });
 	   
-	   preInstantiationDuration = Metrics.newTimer(Dempsy.class, "pre-instantiation-duration",
-	         scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      preInstantiationDuration = Metrics.newTimer(Dempsy.class, TM_MP_PREIN,
+            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 
-	   outputInvokeDuration = Metrics.newTimer(Dempsy.class, "outputInvoke-duration",
+      mpHandleMessageDuration = Metrics.newTimer(Dempsy.class, TM_MP_HANDLE,
+            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+
+	   outputInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_OUTPUT,
        scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 	   
-	   evictionInvokeDuration = Metrics.newTimer(Dempsy.class, "evictionInvoke-duration",
+	   evictionInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_EVIC,
 		       scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 	   
 	}
@@ -254,17 +254,21 @@ public class StatsCollectorCoda implements StatsCollector {
 	      Metrics.defaultRegistry().removeMetric(Dempsy.class, name, scope);
 	   }
 	}
+	
+	private static class CodaTimerContext implements StatsCollector.TimerContext
+	{
+	   private com.yammer.metrics.core.TimerContext ctx;
+	   
+	   private CodaTimerContext(com.yammer.metrics.core.TimerContext ctx) { this.ctx = ctx; }
+	   
+      @Override
+      public void stop() { ctx.stop(); }
+	}
 
 	@Override
-	public void preInstantiationStarted()
+	public StatsCollector.TimerContext preInstantiationStarted()
 	{
-	   preInstantiationDurationContext = preInstantiationDuration.time();
-	}
-	
-	@Override
-	public void preInstantiationCompleted()
-	{
-	   preInstantiationDurationContext.stop();
+	   return new CodaTimerContext(preInstantiationDuration.time());
 	}
 	
 	@Override
@@ -273,15 +277,16 @@ public class StatsCollectorCoda implements StatsCollector {
 	   return preInstantiationDuration.meanRate();
 	}
 
-  @Override
-  public void outputInvokeCompleted() {
-    outputInvokeDurationContext.stop();
-    
-  }
+	@Override
+   public StatsCollector.TimerContext handleMessageStarted()
+	{
+	   return new CodaTimerContext(mpHandleMessageDuration.time());
+	}
+
 
   @Override
-  public void outputInvokeStarted() {
-    outputInvokeDurationContext = outputInvokeDuration.time();
+  public StatsCollector.TimerContext outputInvokeStarted() {
+    return new CodaTimerContext(outputInvokeDuration.time());
   }
 	
   @Override
@@ -291,13 +296,8 @@ public class StatsCollectorCoda implements StatsCollector {
   }
 
 	@Override
-	public void evictionPassStarted() {
-		evictionInvokeDurationContext = evictionInvokeDuration.time();
-	}
-
-	@Override
-	public void evictionPassCompleted() {
-		evictionInvokeDurationContext.stop();
+	public StatsCollector.TimerContext evictionPassStarted() {
+		return new CodaTimerContext(evictionInvokeDuration.time());
 	}
 
 	@Override

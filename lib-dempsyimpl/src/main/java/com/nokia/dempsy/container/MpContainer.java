@@ -315,8 +315,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             @Override
             public void run()
             {
+               StatsCollector.TimerContext tcontext = null;
                try{
-                  statCollector.preInstantiationStarted();
+                  tcontext = statCollector.preInstantiationStarted();
                   Iterable<?> iterable = keySource.getAllPossibleKeys();
                   for(Object key: iterable)
                   {
@@ -339,7 +340,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                }
                finally
                {
-                  statCollector.preInstantiationCompleted();
+                  if (tcontext != null) tcontext.stop();
                }
             }
          }, "Pre-Instantation Thread");
@@ -443,73 +444,79 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       if (!prototype.isEvictableSupported() || !isRunning)
          return;
 
-      statCollector.evictionPassStarted();
-
-      // we need to make a copy of the instances in order to make sure
-      // the eviction check is done at once.
-      Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
-      instancesToEvict.putAll(instances);
-
-      while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
+      StatsCollector.TimerContext tctx = null;
+      try
       {
-         // store off anything that passes for later removal. This is to avoid a
-         // ConcurrentModificationException.
-         Set<Object> keysToRemove = new HashSet<Object>();
+         tctx = statCollector.evictionPassStarted();
 
-         for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
+         // we need to make a copy of the instances in order to make sure
+         // the eviction check is done at once.
+         Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
+         instancesToEvict.putAll(instances);
+
+         while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
          {
-            Object key = entry.getKey();
-            InstanceWrapper wrapper = entry.getValue();
-            boolean gotLock = false;
-            try {
-               gotLock = wrapper.tryLock();
-               if (gotLock) {
+            // store off anything that passes for later removal. This is to avoid a
+            // ConcurrentModificationException.
+            Set<Object> keysToRemove = new HashSet<Object>();
 
-                  // since we got here we're done with this instance,
-                  // so add it's key to the list of keys we plan don't
-                  // need to return to.
-                  keysToRemove.add(key);
+            for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
+            {
+               Object key = entry.getKey();
+               InstanceWrapper wrapper = entry.getValue();
+               boolean gotLock = false;
+               try {
+                  gotLock = wrapper.tryLock();
+                  if (gotLock) {
 
-                  Object instance = wrapper.getInstance();
-                  try {
-                     if (prototype.invokeEvictable(instance)) {
-                        wrapper.markEvicted();
-                        prototype.passivate(wrapper.getInstance());
-                        wrapper.markPassivated();
-                        instances.remove(key);
-                        statCollector.messageProcessorDeleted(key);
+                     // since we got here we're done with this instance,
+                     // so add it's key to the list of keys we plan don't
+                     // need to return to.
+                     keysToRemove.add(key);
+
+                     Object instance = wrapper.getInstance();
+                     try {
+                        if (prototype.invokeEvictable(instance)) {
+                           wrapper.markEvicted();
+                           prototype.passivate(wrapper.getInstance());
+                           wrapper.markPassivated();
+                           instances.remove(key);
+                           statCollector.messageProcessorDeleted(key);
+                        }
+                     } 
+                     catch (InvocationTargetException e)
+                     {
+                        logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                              " resulted in an exception.",e.getCause());
                      }
-                  } 
-                  catch (InvocationTargetException e)
-                  {
-                     logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-                           " resulted in an exception.",e.getCause());
+                     catch (IllegalAccessException e)
+                     {
+                        logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
+                              " is not defined correctly. Is it visible?",e);
+                     }
+                     catch (RuntimeException e)
+                     {
+                        logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                              " resulted in an exception.",e);
+                     }
                   }
-                  catch (IllegalAccessException e)
-                  {
-                     logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
-                           " is not defined correctly. Is it visible?",e);
-                  }
-                  catch (RuntimeException e)
-                  {
-                     logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-                           " resulted in an exception.",e);
-                  }
+               } finally {
+                  if (gotLock)
+                     wrapper.releaseLock();
                }
-            } finally {
-               if (gotLock)
-                  wrapper.releaseLock();
+
             }
 
+            // now clean up everything we managed to get hold of
+            for (Object key : keysToRemove)
+               instancesToEvict.remove(key);
+
          }
-
-         // now clean up everything we managed to get hold of
-         for (Object key : keysToRemove)
-            instancesToEvict.remove(key);
-
       }
-
-      statCollector.evictionPassCompleted();
+      finally
+      {
+         if (tctx != null) tctx.stop();
+      }
    }
 
    public void startEvictionThread(long evictionFrequency, TimeUnit timeUnit) {
@@ -686,9 +693,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
 
    @Override
    public void invokeOutput() {
-      statCollector.outputInvokeStarted();
+      StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted();
       outputPass();
-      statCollector.outputInvokeCompleted();
+      tctx.stop();
    }
 
    //----------------------------------------------------------------------------
@@ -825,7 +832,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          try
          {
             statCollector.messageDispatched(message);
-            Object result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message);
+            Object result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message,statCollector);
             statCollector.messageProcessed(message);
             if (result != null)
             {

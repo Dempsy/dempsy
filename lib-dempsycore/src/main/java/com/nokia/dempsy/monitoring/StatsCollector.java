@@ -18,6 +18,15 @@ package com.nokia.dempsy.monitoring;
 
 public interface StatsCollector {
 
+   /**
+    * A timer context is returned from start calls on the Stats collector
+    * to provide a thread-safe context for stopping the started timer. This
+    * is analagous to Yammer Metrics use of Times. 
+    */
+   public static interface TimerContext
+   {
+      public void stop();
+   }
 
    /**
     *  The dispatcher calls this method in its <code>onMessage</code> handler.
@@ -80,34 +89,23 @@ public interface StatsCollector {
    /**
     * Dempsy calls into this just before starting pre-instantiation.
     */
-   public void preInstantiationStarted();
+   public TimerContext preInstantiationStarted();
    
    /**
-    * Dempsy calls into this just after pre-instantiation is complete.
+    * Dempsy calls into this just before invoking an MPs message handler.
     */
-   public void preInstantiationCompleted();
-   
-
-   /**
-    * Dempsy calls into this just before calling @Output methods for MPs.
-    */
-   public void outputInvokeStarted();
-   
-   /**
-    * Dempsy calls into this just after @Output methods for MPs complete.
-    */
-   public void outputInvokeCompleted();
+   public TimerContext handleMessageStarted();
    
    /**
     * Dempsy calls into this just before calling @Output methods for MPs.
     */
-   public void evictionPassStarted();
+   public TimerContext outputInvokeStarted();
    
    /**
-    * Dempsy calls into this just after @Output methods for MPs complete.
+    * Dempsy calls into this just before calling @Output methods for MPs.
     */
-   public void evictionPassCompleted();
-
+   public TimerContext evictionPassStarted();
+   
 	// FIXME
 	/*
 	 *------------------------------------------------------------------------- 

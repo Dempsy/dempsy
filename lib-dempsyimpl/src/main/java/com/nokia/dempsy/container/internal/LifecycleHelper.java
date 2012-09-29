@@ -29,6 +29,7 @@ import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Passivation;
 import com.nokia.dempsy.container.ContainerException;
 import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 /**
  * This class holds the MP prototype, and supports invocation of MP methods on an instance.
@@ -114,13 +115,22 @@ public class LifecycleHelper
     * @throws IllegalAccessException
     * @throws IllegalArgumentException
     */
-   public Object invoke(Object instance, Object message) throws ContainerException, IllegalArgumentException, IllegalAccessException, InvocationTargetException
+   public Object invoke(Object instance, Object message, StatsCollector statsCollector) throws ContainerException, IllegalArgumentException, IllegalAccessException, InvocationTargetException
    {
       Class<?> messageClass = message.getClass();
       if(!isMessageSupported(message))
          throw new ContainerException(mpClassName + ": no handler for messages of type: " + messageClass.getName());
 
-      return invocationMethods.invokeMethod(instance, message);
+      StatsCollector.TimerContext tctx = null;
+      try
+      {
+         tctx = statsCollector.handleMessageStarted();
+         return invocationMethods.invokeMethod(instance, message);
+      }
+      finally
+      {
+         if (tctx != null) tctx.stop();
+      }
    }
 
    public String invokeDescription(MpContainer.Operation op, Object message)
