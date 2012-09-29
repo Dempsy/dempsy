@@ -70,238 +70,238 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       TM_MP_PREIN,         TM_MP_HANDLE,
       TM_MP_OUTPUT,        TM_MP_EVIC
    };
-   
+
    private Meter messagesReceived;
    private Meter bytesReceived;
-	private Meter messagesDiscarded;
-	private Meter messagesDispatched;
+   private Meter messagesDiscarded;
+   private Meter messagesDispatched;
    private Meter messagesFwFailed;
    private Meter messagesMpFailed;
-	private Meter messagesProcessed;
-	private Meter messagesSent;
-	private Meter bytesSent;
-	private Meter messagesUnsent;
-	private AtomicInteger inProcessMessages;
-	@SuppressWarnings("unused")
-	private Gauge<Integer> messagesInProcess;
-	private AtomicLong numberOfMPs;
-	private Meter mpsCreated;
-	private Meter mpsDeleted;
-	@SuppressWarnings("unused")
-	private Gauge<Long> messageProcessors;
-	private String scope;
+   private Meter messagesProcessed;
+   private Meter messagesSent;
+   private Meter bytesSent;
+   private Meter messagesUnsent;
+   private AtomicInteger inProcessMessages;
+   @SuppressWarnings("unused")
+   private Gauge<Integer> messagesInProcess;
+   private AtomicLong numberOfMPs;
+   private Meter mpsCreated;
+   private Meter mpsDeleted;
+   @SuppressWarnings("unused")
+   private Gauge<Long> messageProcessors;
+   private String scope;
 
    private Timer preInstantiationDuration;
    private Timer mpHandleMessageDuration;
-	private Timer outputInvokeDuration;
-	private Timer evictionInvokeDuration;
-  
+   private Timer outputInvokeDuration;
+   private Timer evictionInvokeDuration;
 
-	public StatsCollectorCoda(ClusterId clusterId)
-	{
-	   scope = clusterId.getApplicationName() + "." + clusterId.getMpClusterName();
-	   messagesReceived = Metrics.newMeter(Dempsy.class, MN_MSG_RCVD, scope, "messages", TimeUnit.SECONDS);
+
+   public StatsCollectorCoda(ClusterId clusterId)
+   {
+      scope = clusterId.getApplicationName() + "." + clusterId.getMpClusterName();
+      messagesReceived = Metrics.newMeter(Dempsy.class, MN_MSG_RCVD, scope, "messages", TimeUnit.SECONDS);
       bytesReceived = Metrics.newMeter(Dempsy.class, MN_BYTES_RCVD, scope, "bytes", TimeUnit.SECONDS);
-	   messagesDiscarded = Metrics.newMeter(Dempsy.class, MN_MSG_DISCARD, scope, "messages", TimeUnit.SECONDS);
-	   messagesDispatched = Metrics.newMeter(Dempsy.class, MN_MSG_DISPATCH, scope, "messages", TimeUnit.SECONDS);
+      messagesDiscarded = Metrics.newMeter(Dempsy.class, MN_MSG_DISCARD, scope, "messages", TimeUnit.SECONDS);
+      messagesDispatched = Metrics.newMeter(Dempsy.class, MN_MSG_DISPATCH, scope, "messages", TimeUnit.SECONDS);
       messagesFwFailed = Metrics.newMeter(Dempsy.class, MN_MSG_FWFAIL, scope, "messages", TimeUnit.SECONDS);
       messagesMpFailed = Metrics.newMeter(Dempsy.class, MN_MSG_MPFAIL, scope, "messages", TimeUnit.SECONDS);
-	   messagesProcessed = Metrics.newMeter(Dempsy.class, MN_MSG_PROC, scope, "messages", TimeUnit.SECONDS);
-	   messagesSent = Metrics.newMeter(Dempsy.class, MN_MSG_SENT, scope, "messages", TimeUnit.SECONDS);
-	   bytesSent = Metrics.newMeter(Dempsy.class, MN_BYTES_SENT, scope, "bytes", TimeUnit.SECONDS);
-	   messagesUnsent = Metrics.newMeter(Dempsy.class, MN_MSG_UNSENT, scope, "messsages", TimeUnit.SECONDS);
-	   inProcessMessages = new AtomicInteger();
-	   messagesInProcess = Metrics.newGauge(Dempsy.class, GAGE_MPS_IN_PROCESS,
-	         scope, new Gauge<Integer>() {
-	      @Override
-	      public Integer value()
-	      {
-	         return inProcessMessages.get();
-	      }
-	   });
-	   
-	   numberOfMPs = new AtomicLong();
-	   mpsCreated = Metrics.newMeter(Dempsy.class, MN_MP_CREATE, scope, "instances", TimeUnit.SECONDS);
-	   mpsDeleted = Metrics.newMeter(Dempsy.class, MN_MP_DELETE, scope, "instances", TimeUnit.SECONDS);
-	   messageProcessors = Metrics.newGauge(Dempsy.class, "message-processors",
-	         scope, new Gauge<Long>() {
-	      @Override
-	      public Long value() {
-	         return numberOfMPs.get();
-	      }
-	   });
-	   
+      messagesProcessed = Metrics.newMeter(Dempsy.class, MN_MSG_PROC, scope, "messages", TimeUnit.SECONDS);
+      messagesSent = Metrics.newMeter(Dempsy.class, MN_MSG_SENT, scope, "messages", TimeUnit.SECONDS);
+      bytesSent = Metrics.newMeter(Dempsy.class, MN_BYTES_SENT, scope, "bytes", TimeUnit.SECONDS);
+      messagesUnsent = Metrics.newMeter(Dempsy.class, MN_MSG_UNSENT, scope, "messsages", TimeUnit.SECONDS);
+      inProcessMessages = new AtomicInteger();
+      messagesInProcess = Metrics.newGauge(Dempsy.class, GAGE_MPS_IN_PROCESS,
+            scope, new Gauge<Integer>() {
+         @Override
+         public Integer value()
+         {
+            return inProcessMessages.get();
+         }
+      });
+
+      numberOfMPs = new AtomicLong();
+      mpsCreated = Metrics.newMeter(Dempsy.class, MN_MP_CREATE, scope, "instances", TimeUnit.SECONDS);
+      mpsDeleted = Metrics.newMeter(Dempsy.class, MN_MP_DELETE, scope, "instances", TimeUnit.SECONDS);
+      messageProcessors = Metrics.newGauge(Dempsy.class, "message-processors",
+            scope, new Gauge<Long>() {
+         @Override
+         public Long value() {
+            return numberOfMPs.get();
+         }
+      });
+
       preInstantiationDuration = Metrics.newTimer(Dempsy.class, TM_MP_PREIN,
             scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 
       mpHandleMessageDuration = Metrics.newTimer(Dempsy.class, TM_MP_HANDLE,
             scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 
-	   outputInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_OUTPUT,
-       scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
-	   
-	   evictionInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_EVIC,
-		       scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
-	   
-	}
-	
-	protected MetricsRegistry getMetricsRegistry()
-	{
-	   return Metrics.defaultRegistry();
-	}
-	
+      outputInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_OUTPUT,
+            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+
+      evictionInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_EVIC,
+            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+
+   }
+
+   protected MetricsRegistry getMetricsRegistry()
+   {
+      return Metrics.defaultRegistry();
+   }
+
    @Override
    public void messageReceived(byte[] message) {
       messagesReceived.mark();
       bytesReceived.mark(message.length);
    }
-   
-	@Override
-	public void messageDiscarded(Object message) {
-		messagesDiscarded.mark();
-		inProcessMessages.decrementAndGet();
-	}
 
-	@Override
-	public void messageDispatched(Object message) {
-		messagesDispatched.mark();
-		inProcessMessages.incrementAndGet();
-	}
+   @Override
+   public void messageDiscarded(Object message) {
+      messagesDiscarded.mark();
+      inProcessMessages.decrementAndGet();
+   }
 
-	@Override
-	public void messageFailed(boolean mpFailure) {
-		if (mpFailure)
-		   messagesMpFailed.mark();
-		else
-		   messagesFwFailed.mark();
-		inProcessMessages.decrementAndGet();
-	}
-	
-	@Override
-	public void messageProcessed(Object message) {
-		messagesProcessed.mark();
-		inProcessMessages.decrementAndGet();
-	}
-	
-	@Override
-	public void messageSent(byte[] message) {
-		messagesSent.mark();
-		bytesSent.mark(message.length);
-	}
+   @Override
+   public void messageDispatched(Object message) {
+      messagesDispatched.mark();
+      inProcessMessages.incrementAndGet();
+   }
+
+   @Override
+   public void messageFailed(boolean mpFailure) {
+      if (mpFailure)
+         messagesMpFailed.mark();
+      else
+         messagesFwFailed.mark();
+      inProcessMessages.decrementAndGet();
+   }
+
+   @Override
+   public void messageProcessed(Object message) {
+      messagesProcessed.mark();
+      inProcessMessages.decrementAndGet();
+   }
+
+   @Override
+   public void messageSent(byte[] message) {
+      messagesSent.mark();
+      bytesSent.mark(message.length);
+   }
 
    @Override
    public void messageNotSent(Object message)
    {
       messagesUnsent.mark();
-      
+
    }
-	@Override
-	public void messageProcessorCreated(Object key) {
-		mpsCreated.mark();
-		numberOfMPs.incrementAndGet();
-	}
+   @Override
+   public void messageProcessorCreated(Object key) {
+      mpsCreated.mark();
+      numberOfMPs.incrementAndGet();
+   }
 
-	@Override
-	public void messageProcessorDeleted(Object key) {
-		mpsDeleted.mark();
-		numberOfMPs.decrementAndGet();
-	}
+   @Override
+   public void messageProcessorDeleted(Object key) {
+      mpsDeleted.mark();
+      numberOfMPs.decrementAndGet();
+   }
 
-	
-	/*
-	 *------------------------------------------------------------------------- 
-	 * Methods for enabling testing of the MP container only.
-	 * Serveral Unit tests read stats, which in the prior MBean implementation
-	 * was a free ride.  We do need to think about how this can be done better.
-	 *-------------------------------------------------------------------------
-	 */
-	
-	@Override
-	public long getProcessedMessageCount()
-	{
-		return messagesProcessed.count();
-	}
 
-	@Override
-	public long getDispatchedMessageCount()
-	{
-		return messagesDispatched.count();
-	}
-	
-	@Override
-	public long getMessageFailedCount()
-	{
-		return messagesFwFailed.count() + messagesMpFailed.count();
-	}
-	
-	@Override
-	public long getDiscardedMessageCount()
-	{
-		return messagesDiscarded.count();
-	}
-	
-	@Override
-	public int getInFlightMessageCount()
-	{
-		return inProcessMessages.get();
-	}
-	
-	@Override
-	public void stop()
-	{
-	   Metrics.shutdown();
-	   for (String name: METRIC_NAMES){
-	      Metrics.defaultRegistry().removeMetric(Dempsy.class, name, scope);
-	   }
-	}
-	
-	private static class CodaTimerContext implements StatsCollector.TimerContext
-	{
-	   private com.yammer.metrics.core.TimerContext ctx;
-	   
-	   private CodaTimerContext(com.yammer.metrics.core.TimerContext ctx) { this.ctx = ctx; }
-	   
+   /*
+    *------------------------------------------------------------------------- 
+    * Methods for enabling testing of the MP container only.
+    * Serveral Unit tests read stats, which in the prior MBean implementation
+    * was a free ride.  We do need to think about how this can be done better.
+    *-------------------------------------------------------------------------
+    */
+
+   @Override
+   public long getProcessedMessageCount()
+   {
+      return messagesProcessed.count();
+   }
+
+   @Override
+   public long getDispatchedMessageCount()
+   {
+      return messagesDispatched.count();
+   }
+
+   @Override
+   public long getMessageFailedCount()
+   {
+      return messagesFwFailed.count() + messagesMpFailed.count();
+   }
+
+   @Override
+   public long getDiscardedMessageCount()
+   {
+      return messagesDiscarded.count();
+   }
+
+   @Override
+   public int getInFlightMessageCount()
+   {
+      return inProcessMessages.get();
+   }
+
+   @Override
+   public void stop()
+   {
+      Metrics.shutdown();
+      for (String name: METRIC_NAMES){
+         Metrics.defaultRegistry().removeMetric(Dempsy.class, name, scope);
+      }
+   }
+
+   private static class CodaTimerContext implements StatsCollector.TimerContext
+   {
+      private com.yammer.metrics.core.TimerContext ctx;
+
+      private CodaTimerContext(com.yammer.metrics.core.TimerContext ctx) { this.ctx = ctx; }
+
       @Override
       public void stop() { ctx.stop(); }
-	}
+   }
 
-	@Override
-	public StatsCollector.TimerContext preInstantiationStarted()
-	{
-	   return new CodaTimerContext(preInstantiationDuration.time());
-	}
-	
-	@Override
-	public double getPreInstantiationDuration()
-	{
-	   return preInstantiationDuration.meanRate();
-	}
+   @Override
+   public StatsCollector.TimerContext preInstantiationStarted()
+   {
+      return new CodaTimerContext(preInstantiationDuration.time());
+   }
 
-	@Override
+   @Override
+   public double getPreInstantiationDuration()
+   {
+      return preInstantiationDuration.meanRate();
+   }
+
+   @Override
    public StatsCollector.TimerContext handleMessageStarted()
-	{
-	   return new CodaTimerContext(mpHandleMessageDuration.time());
-	}
+   {
+      return new CodaTimerContext(mpHandleMessageDuration.time());
+   }
 
 
-  @Override
-  public StatsCollector.TimerContext outputInvokeStarted() {
-    return new CodaTimerContext(outputInvokeDuration.time());
-  }
-	
-  @Override
-  public double getOutputInvokeDuration()
-  {
-     return outputInvokeDuration.meanRate();
-  }
+   @Override
+   public StatsCollector.TimerContext outputInvokeStarted() {
+      return new CodaTimerContext(outputInvokeDuration.time());
+   }
 
-	@Override
-	public StatsCollector.TimerContext evictionPassStarted() {
-		return new CodaTimerContext(evictionInvokeDuration.time());
-	}
+   @Override
+   public double getOutputInvokeDuration()
+   {
+      return outputInvokeDuration.meanRate();
+   }
 
-	@Override
-	public double getEvictionDuration() {
-		return evictionInvokeDuration.meanRate();
-	}
+   @Override
+   public StatsCollector.TimerContext evictionPassStarted() {
+      return new CodaTimerContext(evictionInvokeDuration.time());
+   }
+
+   @Override
+   public double getEvictionDuration() {
+      return evictionInvokeDuration.meanRate();
+   }
 }
