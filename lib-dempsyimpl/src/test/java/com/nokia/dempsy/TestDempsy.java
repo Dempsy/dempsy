@@ -78,6 +78,7 @@ public class TestDempsy
          
          // the passthrough Destination is not serializable but zookeeper requires it to be
          new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
+         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml") , 
          
          // the blockingqueue Destination is not serializable but zookeeper requires it to be
          new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
@@ -294,17 +295,14 @@ public class TestDempsy
 
             if (! badCombos.contains(new ClusterId(clusterManager,transport)))
             {
+               String pass = " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport;
                try
                {
                   logger.debug("*****************************************************************");
-                  logger.debug(" test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport);
+                  logger.debug(pass);
                   logger.debug("*****************************************************************");
 
-                  String[] ctx = new String[4];
-                  ctx[0] = dempsyConfig;
-                  ctx[1] = clusterManager;
-                  ctx[2] = transport;
-                  ctx[3] = "testDempsy/" + applicationContext;
+                  String[] ctx = { dempsyConfig, clusterManager, transport, "testDempsy/" + applicationContext };
 
                   logger.debug("Starting up the appliction context ...");
                   ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
@@ -312,7 +310,7 @@ public class TestDempsy
                   
                   Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
                   
-                  assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, 20, dempsy));
+                  assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, 20, dempsy));
 
                   WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
                   Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
@@ -334,7 +332,7 @@ public class TestDempsy
                }
                catch (AssertionError re)
                {
-                  logger.error("***************** FAILED ON: " + clusterManager + ", " + transport);
+                  logger.error("***************** FAILED ON: " + pass);
                   throw re;
                }
                
@@ -555,7 +553,7 @@ public class TestDempsy
                   assertTrue(mp.outputCount.get()>=10);
                }
                
-               public String toString() { return "testOutPutMessage"; }
+               public String toString() { return "testCronOutPutMessage"; }
 
             });
    }
@@ -593,17 +591,17 @@ public class TestDempsy
    @Test
    public void testMpKeyStore() throws Throwable
    {
-      runMpKeyStoreTest();
+      runMpKeyStoreTest("testMpKeyStore");
    }
    
    @Test
    public void testMpKeyStoreWithFailingClusterManager() throws Throwable
    {
       KeySourceImpl.disruptSession = true;
-      runMpKeyStoreTest();
+      runMpKeyStoreTest("testMpKeyStoreWithFailingClusterManager");
    }
    
-   public void runMpKeyStoreTest() throws Throwable
+   public void runMpKeyStoreTest(final String methodName) throws Throwable
    {
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
           new Checker()   
@@ -622,7 +620,7 @@ public class TestDempsy
                   // instead of the latch we are going to poll for the correct result
                   // wait for it to be received.
                   assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
-
+                  
                   TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
                   adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
 
@@ -644,7 +642,7 @@ public class TestDempsy
                   Assert.assertTrue(duration>0.0);
                }
                
-               public String toString() { return "testMPStartMethod"; }
+               public String toString() { return methodName; }
             });
    }   
 

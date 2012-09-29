@@ -85,7 +85,7 @@ public class TestUtils
          }
          
          // This is a bit of a guess here for testing purposes but we're going to assume that 
-         // were initialized when each router except one (the last one wont have anywhere 
+         // we're initialized when each router except one (the last one wont have anywhere 
          // to route messages to) has at least one initialized Outbound
          boolean ret = poll(timeoutMillis, routers, new Condition<List<Router>>()
          {
@@ -102,7 +102,8 @@ public class TestUtils
                      if (!o.completeInitialization())
                         return false;
                   }
-                  numInitializedRouters++;
+                  if (outbounds != null && outbounds.size() > 0)
+                     numInitializedRouters++;
                }
                return numInitializedRouters >= numInitializedRoutersNeeded;
             }
