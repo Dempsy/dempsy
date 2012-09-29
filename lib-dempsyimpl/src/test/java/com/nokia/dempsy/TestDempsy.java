@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -56,6 +55,7 @@ import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
 public class TestDempsy
@@ -105,6 +105,8 @@ public class TestDempsy
    public void init()
    {
       KeySourceImpl.disruptSession = false;
+      KeySourceImpl.infinite = false;
+      KeySourceImpl.pause = new CountDownLatch(0);
    }
    
    public static class TestMessage implements Serializable
@@ -202,59 +204,67 @@ public class TestDempsy
    {
       private Dempsy dempsy = null;
       private ClusterId clusterId = null;
-      public static boolean disruptSession = false;
+      public static volatile boolean disruptSession = false;
+      public static volatile boolean infinite = false;
+      public static volatile CountDownLatch pause = new CountDownLatch(0);
+      public static volatile KSIterable lastCreated = null;
       
       public void setDempsy(Dempsy dempsy) { this.dempsy = dempsy; }
       
       public void setClusterId(ClusterId clusterId) { this.clusterId = clusterId; }
       
+      public class KSIterable implements Iterable<String>
+      {
+         public volatile String lastKey = "";
+         public CountDownLatch m_pause = pause;
+         public volatile boolean m_infinite = infinite;
+
+         {
+            lastCreated = this;
+         }
+
+         @Override
+         public Iterator<String> iterator()
+         {
+            return new Iterator<String>()
+            {
+               long count = 0;
+
+               @Override
+               public boolean hasNext() { if (count >= 1) kickClusterInfoMgr(); return m_infinite ? true : (count < 2);  }
+
+               @Override
+               public String next() { try { m_pause.await(); } catch (InterruptedException ie) {} count++; return (lastKey = "test" + count);}
+
+               @Override
+               public void remove() { throw new UnsupportedOperationException(); }
+
+               private void kickClusterInfoMgr() 
+               {
+                  if (!disruptSession)
+                     return;
+                  disruptSession = false; // one disruptSession
+                  Dempsy.Application.Cluster c = dempsy.getCluster(clusterId);
+                  Object session = TestUtils.getSession(c);
+                  if (session instanceof DisruptibleSession)
+                  {
+                     DisruptibleSession dses = (DisruptibleSession)session;
+                     dses.disrupt();
+                  }
+               }
+            };
+         }
+         
+      }
+      
       @Override
       public Iterable<String> getAllPossibleKeys()
       {
-         final ArrayList<String> keys = new ArrayList<String>();
-         keys.add("test1");
-         keys.add("test2");
-         
          // The array is proxied to create the ability to rip out the cluster manager
          // in the middle of iterating over the key source. This is to create the 
          // condition in which the key source is being iterated while the routing strategy
          // is attempting to get slots.
-         return new Iterable<String>()
-         {
-            @Override
-            public Iterator<String> iterator()
-            {
-               final Iterator<String> proxy = keys.iterator();
-               
-               return new Iterator<String>()
-               {
-                  int count = 0;
-                  
-                  @Override
-                  public boolean hasNext() { if (count == 1) kickClusterInfoMgr(); return proxy.hasNext();  }
-
-                  @Override
-                  public String next() { count++; return proxy.next();}
-
-                  @Override
-                  public void remove() { proxy.remove(); }
-                  
-                  private void kickClusterInfoMgr() 
-                  {
-                     if (!disruptSession)
-                        return;
-                     Dempsy.Application.Cluster c = dempsy.getCluster(clusterId);
-                     Object session = TestUtils.getSession(c);
-                     if (session instanceof DisruptibleSession)
-                     {
-                        DisruptibleSession dses = (DisruptibleSession)session;
-                        dses.disrupt();
-                     }
-                  }
-               };
-            }
-            
-         };
+         return new KSIterable();
       }
    }
    
@@ -645,7 +655,72 @@ public class TestDempsy
                
                public String toString() { return methodName; }
             });
+   }
+   
+   @Test
+   public void testOverlappingKeyStoreCalls() throws Throwable
+   {
+      KeySourceImpl.pause = new CountDownLatch(1);
+      KeySourceImpl.infinite = true;
+
+      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
+          new Checker()   
+            {
+               @Override
+               public void check(ApplicationContext context) throws Throwable
+               {
+                  // wait until the KeySourceImpl has been created
+                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null; } }));
+                  final KeySourceImpl.KSIterable firstCreated = KeySourceImpl.lastCreated;
+                  
+                  // start things and verify that the init method was called
+                  Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+                  TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+
+                  Dempsy.Application.Cluster c = dempsy.getCluster(new ClusterId("test-app","test-cluster1"));
+                  assertNotNull(c);
+                  Dempsy.Application.Cluster.Node node = c.getNodes().get(0);
+                  assertNotNull(node);
+                  
+                  MpContainer container = node.getMpContainer();
+                  
+                  // let it go and wait until there's a few keys.
+                  firstCreated.m_pause.countDown();
+                  
+                  // as the KeySource iterates, this will increase
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get() > 10000; } }));
+
+                  // prepare the next countdown latch
+                  KeySourceImpl.pause = new CountDownLatch(0); // just let the 2nd one go
+                  
+                  // I want the next one to stop at 2
+                  KeySourceImpl.infinite = false;
+
+                  // Now force another call while the first is running
+                  container.keyspaceResponsibilityChanged(node.strategyInbound, false, true);
+                  
+                  // wait until the second one is created
+                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null && firstCreated != KeySourceImpl.lastCreated; } }));
+                  
+                  // now the first one should be done and therefore no longer incrementing.
+                  String lastKeyOfFirstCreated = firstCreated.lastKey;
+
+                  // and the second one should be done also and stopped at 2.
+                  final KeySourceImpl.KSIterable secondCreated = KeySourceImpl.lastCreated;
+                  assertTrue(firstCreated != secondCreated);
+                  
+                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return "test2".equals(secondCreated.lastKey); } }));
+                  
+                  Thread.sleep(50);
+                  assertEquals(lastKeyOfFirstCreated,firstCreated.lastKey); // make sure the first one isn't still moving on
+                  assertEquals("test2",secondCreated.lastKey);
+                  
+                  // prepare for the next run
+                  KeySourceImpl.pause = new CountDownLatch(1);
+                  KeySourceImpl.infinite = true;
+               }
+               
+               public String toString() { return "testOverlappingKeyStoreCalls"; }
+            });
    }   
-
-
 }

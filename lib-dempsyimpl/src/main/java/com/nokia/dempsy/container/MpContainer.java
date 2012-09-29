@@ -301,50 +301,100 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       return instances.size();
    }
    
+   AtomicBoolean isRunningMpInst = new AtomicBoolean(false);
+   AtomicBoolean stopRunningMpInst = new AtomicBoolean(false);
+   Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
+   
    @Override
    public void keyspaceResponsibilityChanged(final RoutingStrategy.Inbound strategyInbound, boolean less, boolean more)
    {
-      // need to handle less by passivating ... but we'll ignore for now.
-      
-      // If more were added and we have a keySource we need to do
-      //  preinstantiation
-      if (more && keySource != null)
+      synchronized(keyspaceResponsibilityChangedLock)
       {
-         Thread t = new Thread(new Runnable()
+         // need to handle less by passivating ... but we'll ignore for now.
+
+         // If more were added and we have a keySource we need to do
+         //  preinstantiation
+         if (more && keySource != null)
          {
-            @Override
-            public void run()
+            // We need to see if we're already executing
+            stopRunningMpInst.set(true); // kick out any running instantiation thread
+            // wait for it to exit, it it's even running
+            synchronized(isRunningMpInst)
             {
-               StatsCollector.TimerContext tcontext = null;
-               try{
-                  tcontext = statCollector.preInstantiationStarted();
-                  Iterable<?> iterable = keySource.getAllPossibleKeys();
-                  for(Object key: iterable)
+               while (isRunningMpInst.get() && isRunning)
+               {
+                  try { isRunningMpInst.wait(); } catch (InterruptedException e) {}
+               }
+            }
+
+            // this flag is used to hold up the calling thread's exit of this method
+            //  until the Runnable is underway.
+            final AtomicBoolean running = new AtomicBoolean(false);
+
+            Thread t = new Thread(new Runnable()
+            {
+               @Override
+               public void run()
+               {
+                  synchronized(isRunningMpInst) { isRunningMpInst.set(true); }
+
+                  stopRunningMpInst.set(false); // reset this flag in case it's been set
+
+                  synchronized(running)
                   {
-                     try
+                     running.set(true);
+                     running.notify();
+                  }
+
+                  StatsCollector.TimerContext tcontext = null;
+                  try{
+                     tcontext = statCollector.preInstantiationStarted();
+                     Iterable<?> iterable = keySource.getAllPossibleKeys();
+                     for(Object key: iterable)
                      {
-                        if(strategyInbound.doesMessageKeyBelongToNode(key))
-                           getInstanceForKey(key);
+                        if (stopRunningMpInst.get() || !isRunning)
+                           break;
+                        try
+                        {
+                           if(strategyInbound.doesMessageKeyBelongToNode(key))
+                              getInstanceForKey(key);
+                        }
+                        catch(ContainerException e)
+                        {
+                           logger.error("Failed to instantiate MP for Key "+key +
+                                 " of type "+key.getClass().getSimpleName(), e);
+                        }
                      }
-                     catch(ContainerException e)
+                  }
+                  catch(Throwable e)
+                  {
+                     logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
+                           keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
+                  }
+                  finally
+                  {
+                     if (tcontext != null) tcontext.stop();
+                     synchronized(isRunningMpInst)
                      {
-                        logger.error("Failed to instantiate MP for Key "+key +
-                              " of type "+key.getClass().getSimpleName(), e);
+                        isRunningMpInst.set(false);
+                        isRunningMpInst.notify();
                      }
                   }
                }
-               catch(Throwable e)
+            }, "Pre-Instantation Thread");
+            t.setDaemon(true);
+            t.start();
+
+
+            // make sure the thread is running before we head out from the synchronized block
+            synchronized(running)
+            {
+               while (running.get() == false && isRunning)
                {
-                  logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
-                        keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
-               }
-               finally
-               {
-                  if (tcontext != null) tcontext.stop();
+                  try { running.wait(); } catch (InterruptedException ie) {}
                }
             }
-         }, "Pre-Instantation Thread");
-         t.start();
+         }
       }
    }
 

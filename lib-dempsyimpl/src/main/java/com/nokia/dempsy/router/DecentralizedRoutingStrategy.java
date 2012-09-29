@@ -324,6 +324,9 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             
             retry = false;
             
+            if (logger.isTraceEnabled())
+               logger.trace("Succesfully reset Inbound Strategy for cluster " + clusterId);
+            
             if (lessResponsitiblity || moreResponsitiblity)
                listener.keyspaceResponsibilityChanged(this,lessResponsitiblity, moreResponsitiblity);
          }

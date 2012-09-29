@@ -80,7 +80,7 @@ public class Dempsy
             
             Router router = null;
             private MpContainer container = null;
-            private RoutingStrategy.Inbound strategyInbound = null;
+            RoutingStrategy.Inbound strategyInbound = null;
             List<Class<?>> acceptedMessageClasses = null;
             Receiver receiver = null;
             StatsCollector statsCollector = null;
