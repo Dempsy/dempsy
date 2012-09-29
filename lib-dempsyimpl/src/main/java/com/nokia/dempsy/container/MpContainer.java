@@ -250,7 +250,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       try
       {
          message = serializer.deserialize(data);
-         statCollector.messageReceived(message);
+         statCollector.messageReceived(data);
          return dispatch(message,!fastfail);
       }
       catch(SerializationException e2)

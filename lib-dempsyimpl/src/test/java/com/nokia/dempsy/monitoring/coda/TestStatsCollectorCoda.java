@@ -50,8 +50,9 @@ public class TestStatsCollectorCoda {
 	@Test
 	public void testMessageReceived() {
 		assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_RCVD));
-		stats.messageReceived("foo");
-		assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_RCVD));
+		stats.messageReceived(new byte[3]);
+      assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_RCVD));
+      assertEquals("got one", 3L, getStatValue(stats, StatsCollectorCoda.MN_BYTES_RCVD));
 	}
 
 	@Test
@@ -85,8 +86,9 @@ public class TestStatsCollectorCoda {
 	@Test
 	public void testMessageSent() {
 		assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_SENT));
-		stats.messageSent("foo");
-		assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_SENT));
+		stats.messageSent(new byte[3]);
+      assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_SENT));
+      assertEquals("got one", 3L, getStatValue(stats, StatsCollectorCoda.MN_BYTES_SENT));
 	}
 
 	@Test

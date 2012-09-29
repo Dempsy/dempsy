@@ -248,12 +248,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             if(routers != null)
             {
                for(ClusterRouter router: routers)
-               {
-                  if (router.route(msgKeysValue,msg))
-                     statsCollector.messageSent(messageClass);
-                  else
-                     statsCollector.messageNotSent(messageClass);
-               }
+                  router.route(msgKeysValue,msg);
             }
             else
             {
@@ -396,6 +391,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             {
                byte[] data = serializer.serialize(message);
                sender.send(data);
+               statsCollector.messageSent(data);
                messageFailed = false;
             }
          }
@@ -420,6 +416,8 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
                   " using the serializer " + SafeString.objectDescription(serializer) +
                   "\" and using the sender " + SafeString.objectDescription(sender),e);
          }
+         if (messageFailed)
+            statsCollector.messageNotSent(message);
          return !messageFailed;
       }
       

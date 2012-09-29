@@ -44,32 +44,38 @@ public class StatsCollectorCoda implements StatsCollector {
 	
    // Metric Names
    public static final String MN_MSG_RCVD = "messages-received";
+   public static final String MN_BYTES_RCVD = "bytes-received";
    public static final String MN_MSG_DISCARD = "messages-discarded";
    public static final String MN_MSG_DISPATCH = "messages-dispatched";
    public static final String MN_MSG_FAIL = "messages-failed";
    public static final String MN_MSG_PROC = "messages-processed";
    public static final String MN_MSG_SENT = "messages-sent";
+   public static final String MN_BYTES_SENT = "bytes-sent";
    public static final String MN_MSG_UNSENT = "messages-unsent";
    public static final String MN_MP_CREATE = "message-processors-created";
    public static final String MN_MP_DELETE = "message-processors-deleted";
    public static final String[] METRIC_NAMES = {
       MN_MSG_RCVD,
+      MN_BYTES_RCVD,
       MN_MSG_DISCARD,
       MN_MSG_DISPATCH,
       MN_MSG_FAIL,
       MN_MSG_PROC,
       MN_MSG_SENT,
+      MN_BYTES_SENT,
       MN_MSG_UNSENT,
       MN_MP_CREATE,
       MN_MP_DELETE,
    };
    
-	private Meter messagesReceived;
+   private Meter messagesReceived;
+   private Meter bytesReceived;
 	private Meter messagesDiscarded;
 	private Meter messagesDispatched;
 	private Meter messagesFailed;
 	private Meter messagesProcessed;
 	private Meter messagesSent;
+	private Meter bytesSent;
 	private Meter messagesUnsent;
 	private AtomicInteger inProcessMessages;
 	@SuppressWarnings("unused")
@@ -94,20 +100,15 @@ public class StatsCollectorCoda implements StatsCollector {
 	public StatsCollectorCoda(ClusterId clusterId)
 	{
 	   scope = clusterId.getApplicationName() + "." + clusterId.getMpClusterName();
-	   messagesReceived = Metrics.newMeter(Dempsy.class, "messages-received",
-	         scope, "messages", TimeUnit.SECONDS);
-	   messagesDiscarded = Metrics.newMeter(Dempsy.class, "messages-discarded",
-	         scope, "messages", TimeUnit.SECONDS);
-	   messagesDispatched = Metrics.newMeter(Dempsy.class, "messages-dispatched",
-	         scope, "messages", TimeUnit.SECONDS);
-	   messagesFailed = Metrics.newMeter(Dempsy.class, "messages-failed",
-	         scope, "messages", TimeUnit.SECONDS);
-	   messagesProcessed = Metrics.newMeter(Dempsy.class, "messages-processed",
-	         scope, "messages", TimeUnit.SECONDS);
-	   messagesSent = Metrics.newMeter(Dempsy.class, "messages-sent",
-	         scope, "messages", TimeUnit.SECONDS);
-	   messagesUnsent = Metrics.newMeter(Dempsy.class, "messages-unsent",
-	         scope, "messsages", TimeUnit.SECONDS);
+	   messagesReceived = Metrics.newMeter(Dempsy.class, MN_MSG_RCVD, scope, "messages", TimeUnit.SECONDS);
+      bytesReceived = Metrics.newMeter(Dempsy.class, MN_BYTES_RCVD, scope, "bytes", TimeUnit.SECONDS);
+	   messagesDiscarded = Metrics.newMeter(Dempsy.class, MN_MSG_DISCARD, scope, "messages", TimeUnit.SECONDS);
+	   messagesDispatched = Metrics.newMeter(Dempsy.class, MN_MSG_DISPATCH, scope, "messages", TimeUnit.SECONDS);
+	   messagesFailed = Metrics.newMeter(Dempsy.class, MN_MSG_FAIL, scope, "messages", TimeUnit.SECONDS);
+	   messagesProcessed = Metrics.newMeter(Dempsy.class, MN_MSG_PROC, scope, "messages", TimeUnit.SECONDS);
+	   messagesSent = Metrics.newMeter(Dempsy.class, MN_MSG_SENT, scope, "messages", TimeUnit.SECONDS);
+	   bytesSent = Metrics.newMeter(Dempsy.class, MN_BYTES_SENT, scope, "bytes", TimeUnit.SECONDS);
+	   messagesUnsent = Metrics.newMeter(Dempsy.class, MN_MSG_UNSENT, scope, "messsages", TimeUnit.SECONDS);
 	   inProcessMessages = new AtomicInteger();
 	   messagesInProcess = Metrics.newGauge(Dempsy.class, "messages-in-process",
 	         scope, new Gauge<Integer>() {
@@ -119,10 +120,8 @@ public class StatsCollectorCoda implements StatsCollector {
 	   });
 	   
 	   numberOfMPs = new AtomicLong();
-	   mpsCreated = Metrics.newMeter(Dempsy.class, "message-processors-created",
-	         scope, "instances", TimeUnit.SECONDS);
-	   mpsDeleted = Metrics.newMeter(Dempsy.class, "message-processors-deleted",
-	         scope, "instances", TimeUnit.SECONDS);
+	   mpsCreated = Metrics.newMeter(Dempsy.class, MN_MP_CREATE, scope, "instances", TimeUnit.SECONDS);
+	   mpsDeleted = Metrics.newMeter(Dempsy.class, MN_MP_DELETE, scope, "instances", TimeUnit.SECONDS);
 	   messageProcessors = Metrics.newGauge(Dempsy.class, "message-processors",
 	         scope, new Gauge<Long>() {
 	      @Override
@@ -147,11 +146,12 @@ public class StatsCollectorCoda implements StatsCollector {
 	   return Metrics.defaultRegistry();
 	}
 	
-	@Override
-	public void messageReceived(Object message) {
-		messagesReceived.mark();
-	}
-	
+   @Override
+   public void messageReceived(byte[] message) {
+      messagesReceived.mark();
+      bytesReceived.mark(message.length);
+   }
+   
 	@Override
 	public void messageDiscarded(Object message) {
 		messagesDiscarded.mark();
@@ -177,8 +177,9 @@ public class StatsCollectorCoda implements StatsCollector {
 	}
 	
 	@Override
-	public void messageSent(Object message) {
+	public void messageSent(byte[] message) {
 		messagesSent.mark();
+		bytesSent.mark(message.length);
 	}
 
    @Override

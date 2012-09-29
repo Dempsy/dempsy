@@ -19,10 +19,10 @@ package com.nokia.dempsy.monitoring;
 public interface StatsCollector {
 
 
-	/**
-	 *  The dispatcher calls this method in its <code>onMessage</code> handler.
-	 */
-	void messageReceived(Object message);
+   /**
+    *  The dispatcher calls this method in its <code>onMessage</code> handler.
+    */
+   void messageReceived(byte[] message);
 
 	/**
 	 * MPContainer calls this method when before invoking an MP's 
@@ -46,7 +46,7 @@ public interface StatsCollector {
 	/**
 	 * Dispatcher calls this method when emitting a message
 	 */
-	void messageSent(Object message);
+	void messageSent(byte[] message);
 	
 	/**
 	 * Dispatcher calls this method when it fails to dispatch

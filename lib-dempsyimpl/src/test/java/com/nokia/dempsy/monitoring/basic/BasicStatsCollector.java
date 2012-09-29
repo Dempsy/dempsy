@@ -129,13 +129,13 @@ public class BasicStatsCollector implements StatsCollector
    }
 
    @Override
-   public void messageReceived(Object message)
+   public void messageReceived(byte[] message)
    {
       messagesReceived.incrementAndGet();
    }
 
    @Override
-   public void messageSent(Object message)
+   public void messageSent(byte[] message)
    {
       messagesSent.incrementAndGet();
    }
