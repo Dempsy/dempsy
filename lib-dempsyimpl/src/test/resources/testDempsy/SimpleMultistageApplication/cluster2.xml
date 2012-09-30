@@ -5,10 +5,12 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-	<bean name="transport"
-		class="com.nokia.dempsy.messagetransport.tcp.TcpTransport" >
-		<property name="overflowHandler" >
-		  <bean class="com.nokia.dempsy.DempsyTestBase$OverflowHandler" />
-		</property>
-    </bean>
+  <bean class="com.nokia.dempsy.config.ClusterDefinition">
+    <constructor-arg name="clusterName" value="test-cluster2" />
+    <property name="messageProcessorPrototype">
+      <bean class="com.nokia.dempsy.DempsyTestBase$TestMp" />
+    </property>
+    <property name="applicationDefinition" ref="appdef" />
+  </bean>
+
 </beans>

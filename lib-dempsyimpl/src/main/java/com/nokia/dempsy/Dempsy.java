@@ -412,7 +412,6 @@ public class Dempsy
    /**
     * This is meant to be autowired by type.
     */
-   @Inject
    public void setClusterDefinitions(List<ClusterDefinition> clusterDefinitions)
    {
       this.clusterDefinitions = clusterDefinitions;
