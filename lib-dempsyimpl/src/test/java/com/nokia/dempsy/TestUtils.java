@@ -84,7 +84,7 @@ public class TestUtils
          List<Router> routers = new ArrayList<Router>();
          
          // find out all of the ClusterIds
-         for (Dempsy.Application app : dempsy.applications)
+         for (Dempsy.Application app : dempsy.applications.values())
          {
             for (Dempsy.Application.Cluster cluster : app.appClusters)
             {

@@ -1033,6 +1033,40 @@ public class TestDempsy
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
       TestMp.activateCheckedException = false;
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
-   }   
+   }
 
+   @Test
+   public void testDynamicTopologyConfig()
+   {
+      ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(
+            "testDempsy/Dempsy-IndividualClusterStart.xml",
+            "testDempsy/Transport-PassthroughActx.xml",
+            "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/DTSimpleMultistageApplicationActx.xml"
+            );
+      actx.registerShutdownHook();
+      
+      Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
+      assertNotNull(dempsy);
+      
+      Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster0"));
+      assertNull(cluster);
+
+      cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster1"));
+      assertNull(cluster);
+
+      cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster2"));
+      assertNotNull(cluster);
+      assertEquals(1,cluster.getNodes().size());
+
+      cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster3"));
+      assertNull(cluster);
+
+      cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster4"));
+      assertNull(cluster);
+
+      actx.stop();
+      actx.destroy();
+
+   }
 }

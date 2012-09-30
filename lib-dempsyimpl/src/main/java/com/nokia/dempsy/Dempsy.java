@@ -95,7 +95,7 @@ public class Dempsy
                      executor.start();
                   ClusterInfoSession clusterSession = clusterSessionFactory.createSession();
                   ClusterId currentClusterId = clusterDefinition.getClusterId();
-                  router = new Router(clusterDefinition.getParentApplicationDefinition());
+                  router = new Router(clusterDefinition.getApplicationDefinition());
                   router.setCurrentCluster(currentClusterId);
                   router.setClusterSession(clusterSession);
                   // get the executor if one is set
@@ -382,7 +382,8 @@ public class Dempsy
    }
 
    private List<ApplicationDefinition> applicationDefinitions = null;
-   protected List<Application> applications = null;
+   private List<ClusterDefinition> clusterDefinitions = null;
+   protected Map<String,Application> applications = null;
    private CurrentClusterCheck clusterCheck = null;
    protected ClusterInfoSessionFactory clusterSessionFactory = null;
    private RoutingStrategy defaultRoutingStrategy = null;
@@ -408,12 +409,40 @@ public class Dempsy
       this.applicationDefinitions = applicationDefinitions;
    }
    
+   /**
+    * This is meant to be autowired by type.
+    */
+   @Inject
+   public void setClusterDefinitions(List<ClusterDefinition> clusterDefinitions)
+   {
+      this.clusterDefinitions = clusterDefinitions;
+   }
+   
+   private Application setupApplicationAndDefinition(ApplicationDefinition appDef) throws DempsyException
+   {
+      Application app = new Application(appDef);
+      applications.put(appDef.getApplicationName(), app);
+
+      // set the default routing strategy if there isn't one already set.
+      if (appDef.getRoutingStrategy() == null)
+         appDef.setRoutingStrategy(defaultRoutingStrategy);
+
+      if (appDef.getSerializer() == null)
+         appDef.setSerializer(defaultSerializer);
+
+      if (appDef.getStatsCollectorFactory() == null)
+         appDef.setStatsCollectorFactory(defaultStatsCollectorFactory);
+
+      return app;
+   }
+   
    public synchronized void start() throws DempsyException
    {
       if (isRunning())
          throw new DempsyException("The Dempsy application " + applicationDefinitions + " has already been started." );
       
-      if (applicationDefinitions == null || applicationDefinitions.size() == 0)
+      if ((applicationDefinitions == null || applicationDefinitions.size() == 0) && 
+            (clusterDefinitions == null || clusterDefinitions.size() == 0))
          throw new DempsyException("Cannot start this application because there are no ApplicationDefinitions");
       
       if (clusterSessionFactory == null)
@@ -437,36 +466,65 @@ public class Dempsy
     
       try
       {
-         applications = new ArrayList<Application>(applicationDefinitions.size()); 
-         for(ApplicationDefinition appDef: this.applicationDefinitions)
+         applications = new HashMap<String,Application>(applicationDefinitions.size());
+         
+         if (applicationDefinitions != null)
          {
-            appDef.initialize();
-            if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
+            for(ApplicationDefinition appDef: this.applicationDefinitions)
             {
-               Application app = new Application(appDef);
-
-               // set the default routing strategy if there isn't one already set.
-               if (appDef.getRoutingStrategy() == null)
-                  appDef.setRoutingStrategy(defaultRoutingStrategy);
-
-               if (appDef.getSerializer() == null)
-                  appDef.setSerializer(defaultSerializer);
-
-               if (appDef.getStatsCollectorFactory() == null)
-                  appDef.setStatsCollectorFactory(defaultStatsCollectorFactory);
-
-               applications.add(app);
+               Application app = applications.get(appDef.getApplicationName());
+               if (app == null)
+               {
+                  if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
+                     app = setupApplicationAndDefinition(appDef);
+               }
+               else
+                  throw new DempsyException("You cannot have two instances of an ApplicationDefinition for the same application. " +
+                        "You appear to have two different ApplicationDefinitions for " + SafeString.valueOf(appDef));
             }
          }
-
+         
+         if (clusterDefinitions != null)
+         {
+            for(ClusterDefinition clusterDef: this.clusterDefinitions)
+            {
+               ApplicationDefinition appDef = clusterDef.getApplicationDefinition();
+               if (appDef == null)
+                  throw new DempsyException("The dynamic cluster defnition " + SafeString.valueOf(clusterDef) + 
+                        " requires a reference to an ApplicationDefinition but none was provided." + 
+                        " Please make sure the ApplicationDefinition for this cluster.");
+               
+               appDef.addDynamicClusterDefinition(clusterDef);
+               
+               if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
+               {
+                  Application app = applications.get(appDef.getApplicationName());
+                  
+                  if (app == null)
+                     setupApplicationAndDefinition(appDef);
+                  else
+                  {
+                     // verify this is the exact same instance of the appDef
+                     if (app.applicationDefinition != appDef)
+                        throw new DempsyException("You cannot have two instances of an ApplicationDefinition for the same application. " +
+                              "You appear to have two different ApplicationDefinitions for " + SafeString.valueOf(appDef) + 
+                              ". One is referenced in the ClusterDefinition " + SafeString.valueOf(clusterDef));
+                  }
+                  
+               }
+            }
+         }
+         
+         for (Application app : applications.values())
+            app.applicationDefinition.initialize();
+         
          boolean clusterStarted = false;
-         for (Application app : applications)
+         for (Application app : applications.values())
             clusterStarted = app.start();
 
          if(!clusterStarted)
-         {
-            throw new DempsyException("Cannot start this application because cluster defination was not found.");
-         }
+            throw new DempsyException("Cannot start this application because cluster definition was not found.");
+
          // if we got to here we can assume we're started
          synchronized(isRunningEvent) { isRunning = true; }
       }
@@ -483,7 +541,7 @@ public class Dempsy
    {
       try
       {
-         for(Application app : applications)
+         for(Application app : applications.values())
             app.stop();
       }
       finally

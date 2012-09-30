@@ -176,7 +176,7 @@ public class TestConfig
       assertEquals(app.getStatsCollectorFactory(), app.getClusterDefinitions().get(1).getStatsCollectorFactory());
       assertEquals(clusScf, app.getClusterDefinitions().get(5).getStatsCollectorFactory());
       
-      assertTrue(app == app.getClusterDefinitions().get(4).getParentApplicationDefinition());
+      assertTrue(app == app.getClusterDefinitions().get(4).getApplicationDefinition());
       
       assertEquals(new ClusterId("test", "test-slot1"),app.getClusterDefinitions().get(0).getClusterId());
    }
@@ -428,6 +428,34 @@ public class TestConfig
       cd.setMessageProcessorPrototype(new mp());
       app.add(cd);
       app.initialize();
+   }
+   
+   @Test
+   public void testConfigWithDynamicClusterDef() throws Throwable
+   {
+      ApplicationDefinition app = new ApplicationDefinition("test");
+      ClusterDefinition cd = new ClusterDefinition("test-slot");
+      cd.setApplicationDefinition(app);
+
+      @MessageProcessor
+      class mp 
+      {
+         @SuppressWarnings("unused")
+         @MessageHandler
+         public void handle(GoodMessage string) {}
+         
+         @SuppressWarnings("unused")
+         @Start
+         public void startMethod() {}
+         
+         @SuppressWarnings("unused")
+         @Evictable
+         public boolean evict1(Object arg){ return false; }
+         
+      }
+      cd.setMessageProcessorPrototype(new mp());
+
+      cd.validate();
    }
 
 }
