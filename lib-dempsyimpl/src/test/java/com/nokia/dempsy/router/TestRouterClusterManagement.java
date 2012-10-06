@@ -27,17 +27,18 @@ import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
+import com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
-import com.nokia.dempsy.mpcluster.MpCluster;
-import com.nokia.dempsy.mpcluster.MpClusterSession;
-import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
-import com.nokia.dempsy.mpcluster.invm.LocalVmMpClusterSessionFactory;
 import com.nokia.dempsy.router.Router.ClusterRouter;
+import com.nokia.dempsy.router.RoutingStrategy.Inbound;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 public class TestRouterClusterManagement
@@ -58,7 +59,7 @@ public class TestRouterClusterManagement
       final ClusterId clusterId = new ClusterId("test", "test-slot");
       Destination destination = new Destination() {};
       ApplicationDefinition app = new ApplicationDefinition(clusterId.getApplicationName());
-      DefaultRoutingStrategy strategy = new DefaultRoutingStrategy(1, 1);
+      DecentralizedRoutingStrategy strategy = new DecentralizedRoutingStrategy(1, 1);
       app.setRoutingStrategy(strategy);
       app.setSerializer(new JavaSerializer<Object>());
       ClusterDefinition cd = new ClusterDefinition(clusterId.getMpClusterName());
@@ -66,13 +67,20 @@ public class TestRouterClusterManagement
       app.add(cd);
       app.initialize();
       
-      LocalVmMpClusterSessionFactory<ClusterInformation, SlotInformation> mpfactory = new LocalVmMpClusterSessionFactory<ClusterInformation, SlotInformation>();
-      MpClusterSession<ClusterInformation, SlotInformation> session = mpfactory.createSession();
+      LocalClusterSessionFactory mpfactory = new LocalClusterSessionFactory();
+      ClusterInfoSession session = mpfactory.createSession();
+      
+      TestUtils.createClusterLevel(clusterId, session);
 
       // fake the inbound side setup
-      inbound = strategy.createInbound(session.getCluster(clusterId), 
+      inbound = strategy.createInbound(session,clusterId, 
             new Dempsy(){ public List<Class<?>> gm(ClusterDefinition clusterDef) { return super.getAcceptedMessages(clusterDef); }}.gm(cd), 
-         destination);
+         destination,new RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener()
+         {
+            
+            @Override
+            public void keyspaceResponsibilityChanged(Inbound inbound, boolean less, boolean more) { }
+         });
       
       routerFactory = new Router(app);
       routerFactory.setClusterSession(session);
@@ -109,13 +117,14 @@ public class TestRouterClusterManagement
    {
       // check that the message didn't go through.
       ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
-            "testDempsy/Dempsy.xml", "testDempsy/ClusterManager-LocalVmActx.xml",
+            "testDempsy/Dempsy.xml", "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/Transport-PassthroughActx.xml", "testDempsy/SimpleMultistageApplicationActx.xml" );
       Dempsy dempsy = (Dempsy)context.getBean("dempsy");
-      MpClusterSessionFactory<ClusterInformation, SlotInformation> factory = dempsy.getClusterSessionFactory();
-      MpClusterSession<ClusterInformation, SlotInformation> session = factory.createSession();
-      MpCluster<ClusterInformation, SlotInformation> ch = session.getCluster(new ClusterId("test-app", "test-cluster1"));
-      ch.setClusterData(new DefaultRoutingStrategy.DefaultRouterClusterInfo(20,2));
+      ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+      ClusterInfoSession session = factory.createSession();
+      ClusterId curCluster = new ClusterId("test-app", "test-cluster1");
+      TestUtils.createClusterLevel(curCluster, session);
+      session.setData(curCluster.asPath(), new DecentralizedRoutingStrategy.DefaultRouterClusterInfo(20,2));
       session.stop();
       dempsy.stop();
    }

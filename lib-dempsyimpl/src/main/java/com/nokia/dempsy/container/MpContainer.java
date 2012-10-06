@@ -38,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.Dispatcher;
+import com.nokia.dempsy.KeySource;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.internal.AnnotatedMethodInvoker;
@@ -46,6 +47,7 @@ import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.output.OutputInvoker;
+import com.nokia.dempsy.router.RoutingStrategy;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
@@ -57,7 +59,7 @@ import com.nokia.dempsy.serialization.java.JavaSerializer;
  *  The container is simple in that it does no thread management. When it's called 
  *  it assumes that the transport has provided the thread that's needed 
  */
-public class MpContainer implements Listener, OutputInvoker
+public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener
 {
    private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -85,6 +87,9 @@ public class MpContainer implements Listener, OutputInvoker
 
    // The ClusterId is set for the sake of error messages.
    private ClusterId clusterId;
+   
+   // This holds the keySource for pre(re)-instantiation
+   private KeySource<?> keySource = null;
 
    private volatile boolean isRunning = true;
 
@@ -221,6 +226,8 @@ public class MpContainer implements Listener, OutputInvoker
    public void setSerializer(Serializer<Object> serializer) { this.serializer = serializer; }
 
    public Serializer<Object> getSerializer() { return this.serializer; }
+   
+   public void setKeySource(KeySource<?> keySource) { this.keySource = keySource; }
 
 
    //----------------------------------------------------------------------------
@@ -243,7 +250,7 @@ public class MpContainer implements Listener, OutputInvoker
       try
       {
          message = serializer.deserialize(data);
-         statCollector.messageReceived(message);
+         statCollector.messageReceived(data);
          return dispatch(message,!fastfail);
       }
       catch(SerializationException e2)
@@ -283,7 +290,7 @@ public class MpContainer implements Listener, OutputInvoker
 
 
    //----------------------------------------------------------------------------
-   // Monitoring and Managmeent
+   // Monitoring and Management
    //----------------------------------------------------------------------------
 
    /**
@@ -292,6 +299,103 @@ public class MpContainer implements Listener, OutputInvoker
    public int getProcessorCount()
    {
       return instances.size();
+   }
+   
+   AtomicBoolean isRunningMpInst = new AtomicBoolean(false);
+   AtomicBoolean stopRunningMpInst = new AtomicBoolean(false);
+   Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
+   
+   @Override
+   public void keyspaceResponsibilityChanged(final RoutingStrategy.Inbound strategyInbound, boolean less, boolean more)
+   {
+      synchronized(keyspaceResponsibilityChangedLock)
+      {
+         // need to handle less by passivating ... but we'll ignore for now.
+
+         // If more were added and we have a keySource we need to do
+         //  preinstantiation
+         if (more && keySource != null)
+         {
+            // We need to see if we're already executing
+            stopRunningMpInst.set(true); // kick out any running instantiation thread
+            // wait for it to exit, it it's even running
+            synchronized(isRunningMpInst)
+            {
+               while (isRunningMpInst.get() && isRunning)
+               {
+                  try { isRunningMpInst.wait(); } catch (InterruptedException e) {}
+               }
+            }
+
+            // this flag is used to hold up the calling thread's exit of this method
+            //  until the Runnable is underway.
+            final AtomicBoolean running = new AtomicBoolean(false);
+
+            Thread t = new Thread(new Runnable()
+            {
+               @Override
+               public void run()
+               {
+                  synchronized(isRunningMpInst) { isRunningMpInst.set(true); }
+
+                  stopRunningMpInst.set(false); // reset this flag in case it's been set
+
+                  synchronized(running)
+                  {
+                     running.set(true);
+                     running.notify();
+                  }
+
+                  StatsCollector.TimerContext tcontext = null;
+                  try{
+                     tcontext = statCollector.preInstantiationStarted();
+                     Iterable<?> iterable = keySource.getAllPossibleKeys();
+                     for(Object key: iterable)
+                     {
+                        if (stopRunningMpInst.get() || !isRunning)
+                           break;
+                        try
+                        {
+                           if(strategyInbound.doesMessageKeyBelongToNode(key))
+                              getInstanceForKey(key);
+                        }
+                        catch(ContainerException e)
+                        {
+                           logger.error("Failed to instantiate MP for Key "+key +
+                                 " of type "+key.getClass().getSimpleName(), e);
+                        }
+                     }
+                  }
+                  catch(Throwable e)
+                  {
+                     logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
+                           keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
+                  }
+                  finally
+                  {
+                     if (tcontext != null) tcontext.stop();
+                     synchronized(isRunningMpInst)
+                     {
+                        isRunningMpInst.set(false);
+                        isRunningMpInst.notify();
+                     }
+                  }
+               }
+            }, "Pre-Instantation Thread");
+            t.setDaemon(true);
+            t.start();
+
+
+            // make sure the thread is running before we head out from the synchronized block
+            synchronized(running)
+            {
+               while (running.get() == false && isRunning)
+               {
+                  try { running.wait(); } catch (InterruptedException ie) {}
+               }
+            }
+         }
+      }
    }
 
    //----------------------------------------------------------------------------
@@ -390,73 +494,79 @@ public class MpContainer implements Listener, OutputInvoker
       if (!prototype.isEvictableSupported() || !isRunning)
          return;
 
-      statCollector.evictionPassStarted();
-
-      // we need to make a copy of the instances in order to make sure
-      // the eviction check is done at once.
-      Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
-      instancesToEvict.putAll(instances);
-
-      while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
+      StatsCollector.TimerContext tctx = null;
+      try
       {
-         // store off anything that passes for later removal. This is to avoid a
-         // ConcurrentModificationException.
-         Set<Object> keysToRemove = new HashSet<Object>();
+         tctx = statCollector.evictionPassStarted();
 
-         for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
+         // we need to make a copy of the instances in order to make sure
+         // the eviction check is done at once.
+         Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
+         instancesToEvict.putAll(instances);
+
+         while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
          {
-            Object key = entry.getKey();
-            InstanceWrapper wrapper = entry.getValue();
-            boolean gotLock = false;
-            try {
-               gotLock = wrapper.tryLock();
-               if (gotLock) {
+            // store off anything that passes for later removal. This is to avoid a
+            // ConcurrentModificationException.
+            Set<Object> keysToRemove = new HashSet<Object>();
 
-                  // since we got here we're done with this instance,
-                  // so add it's key to the list of keys we plan don't
-                  // need to return to.
-                  keysToRemove.add(key);
+            for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
+            {
+               Object key = entry.getKey();
+               InstanceWrapper wrapper = entry.getValue();
+               boolean gotLock = false;
+               try {
+                  gotLock = wrapper.tryLock();
+                  if (gotLock) {
 
-                  Object instance = wrapper.getInstance();
-                  try {
-                     if (prototype.invokeEvictable(instance)) {
-                        wrapper.markEvicted();
-                        prototype.passivate(wrapper.getInstance());
-                        wrapper.markPassivated();
-                        instances.remove(key);
-                        statCollector.messageProcessorDeleted(key);
+                     // since we got here we're done with this instance,
+                     // so add it's key to the list of keys we plan don't
+                     // need to return to.
+                     keysToRemove.add(key);
+
+                     Object instance = wrapper.getInstance();
+                     try {
+                        if (prototype.invokeEvictable(instance)) {
+                           wrapper.markEvicted();
+                           prototype.passivate(wrapper.getInstance());
+                           wrapper.markPassivated();
+                           instances.remove(key);
+                           statCollector.messageProcessorDeleted(key);
+                        }
+                     } 
+                     catch (InvocationTargetException e)
+                     {
+                        logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                              " resulted in an exception.",e.getCause());
                      }
-                  } 
-                  catch (InvocationTargetException e)
-                  {
-                     logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-                           " resulted in an exception.",e.getCause());
+                     catch (IllegalAccessException e)
+                     {
+                        logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
+                              " is not defined correctly. Is it visible?",e);
+                     }
+                     catch (RuntimeException e)
+                     {
+                        logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                              " resulted in an exception.",e);
+                     }
                   }
-                  catch (IllegalAccessException e)
-                  {
-                     logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
-                           " is not defined correctly. Is it visible?",e);
-                  }
-                  catch (RuntimeException e)
-                  {
-                     logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-                           " resulted in an exception.",e);
-                  }
+               } finally {
+                  if (gotLock)
+                     wrapper.releaseLock();
                }
-            } finally {
-               if (gotLock)
-                  wrapper.releaseLock();
+
             }
 
+            // now clean up everything we managed to get hold of
+            for (Object key : keysToRemove)
+               instancesToEvict.remove(key);
+
          }
-
-         // now clean up everything we managed to get hold of
-         for (Object key : keysToRemove)
-            instancesToEvict.remove(key);
-
       }
-
-      statCollector.evictionPassCompleted();
+      finally
+      {
+         if (tctx != null) tctx.stop();
+      }
    }
 
    public void startEvictionThread(long evictionFrequency, TimeUnit timeUnit) {
@@ -595,12 +705,18 @@ public class MpContainer implements Listener, OutputInvoker
                   {
                      // this may happen because of a race condition between the 
                      taskSepaphore.release();
+                     wrapper.releaseLock(); // we never got into the run so we need to release the lock
                   }
                   catch (InterruptedException e)
                   {
                      // this can happen while blocked in the semaphore.acquire.
                      // if we're no longer running we should just get out
                      // of here.
+                     //
+                     // Not releasing the taskSepaphore assumes the acquire never executed.
+                     // if (since) the acquire never executed we also need to release the
+                     //  wrapper lock or that Mp will never be usable again.
+                     wrapper.releaseLock(); // we never got into the run so we need to release the lock
                   }
                }
                else
@@ -633,9 +749,9 @@ public class MpContainer implements Listener, OutputInvoker
 
    @Override
    public void invokeOutput() {
-      statCollector.outputInvokeStarted();
+      StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted();
       outputPass();
-      statCollector.outputInvokeCompleted();
+      tctx.stop();
    }
 
    //----------------------------------------------------------------------------
@@ -772,7 +888,7 @@ public class MpContainer implements Listener, OutputInvoker
          try
          {
             statCollector.messageDispatched(message);
-            Object result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message);
+            Object result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message,statCollector);
             statCollector.messageProcessed(message);
             if (result != null)
             {
@@ -783,7 +899,7 @@ public class MpContainer implements Listener, OutputInvoker
          {
             logger.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " + 
                   SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + SafeString.objectDescription(message)) : ""),e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(false);
          }
          // this is an exception thrown as a result of the reflected call having an illegal argument.
          // This should actually be impossible since the container itself manages the calling.
@@ -791,28 +907,28 @@ public class MpContainer implements Listener, OutputInvoker
          {
             logger.error("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?", e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(true);
          }
          // can't access the method? Did the app developer annotate it correctly?
          catch(IllegalAccessException e)
          {
             logger.error("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " due an access problem. Is the method public?", e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(true);
          }
          // The app threw an exception.
          catch(InvocationTargetException e)
          {
             logger.warn("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " because an exception was thrown by the Message Processeor itself.", e.getCause() );
-            statCollector.messageFailed();
+            statCollector.messageFailed(true);
          }
          // RuntimeExceptions bookeeping
          catch (RuntimeException e)
          {
             logger.error("the container for " + clusterId + " failed when trying to invoke " + prototype.invokeDescription(op,message) + 
                   " due to an unknown exception.", e);
-            statCollector.messageFailed();
+            statCollector.messageFailed(false);
 
             if (op == Operation.handle)
                throw e;

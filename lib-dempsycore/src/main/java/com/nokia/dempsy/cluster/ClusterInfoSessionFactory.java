@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.router;
+package com.nokia.dempsy.cluster;
 
-import java.io.Serializable;
-
-public class ClusterInformation implements Serializable
+public interface ClusterInfoSessionFactory
 {
-   private static final long serialVersionUID = 1L;
+   public ClusterInfoSession createSession() throws ClusterInfoException;
 }

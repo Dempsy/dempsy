@@ -36,6 +36,7 @@ import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.MpContainer.InstanceWrapper;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
@@ -460,7 +461,7 @@ public class TestInstanceManager
       assertEquals("MessageOne",dispatcher.lastDispatched);
       
       instanceManager.outputPass();
-      assertEquals("number of processed messages should include outputs.", 4, instanceManager.getStatsCollector().getProcessedMessageCount());
+      assertEquals("number of processed messages should include outputs.", 4, ((MetricGetters)instanceManager.getStatsCollector()).getProcessedMessageCount());
    }
 
 
@@ -480,7 +481,7 @@ public class TestInstanceManager
       
       instanceManager.outputPass();
       // output messages are NOT considered "processed" if there is no output method on the MP.
-      assertEquals("number of processed messages should include outputs.", 2, instanceManager.getStatsCollector().getProcessedMessageCount());
+      assertEquals("number of processed messages should include outputs.", 2, ((MetricGetters)instanceManager.getStatsCollector()).getProcessedMessageCount());
    }
 
    // This test no longer really matters since there is no queue but we might as well leave it
@@ -563,6 +564,6 @@ public class TestInstanceManager
       
       dispatcher.dispatch(new MessageOne(123), true);
       
-      assertEquals(1,dispatcher.getStatsCollector().getMessageFailedCount());
+      assertEquals(1,((MetricGetters)dispatcher.getStatsCollector()).getMessageFailedCount());
    }
 }

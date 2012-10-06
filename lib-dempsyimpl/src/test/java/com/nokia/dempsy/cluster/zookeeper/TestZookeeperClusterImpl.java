@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.mpcluster.zookeeper;
+package com.nokia.dempsy.cluster.zookeeper;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -28,17 +28,16 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
 import org.junit.Test;
 
+import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.mpcluster.MpCluster;
-import com.nokia.dempsy.mpcluster.MpClusterException;
 
 public class TestZookeeperClusterImpl
 {
-   @Test(expected=MpClusterException.class)
+   @Test(expected=ClusterInfoException.class)
    public void testNoSever() throws Throwable
    {
       // pass in a bogus hostname
-      ZookeeperSessionFactory<String, String> factory = new ZookeeperSessionFactory<String, String>("127..0.1:2181",5000);
+      ZookeeperSessionFactory factory = new ZookeeperSessionFactory("127..0.1:2181",5000);
       factory.createSession();
    }
    
@@ -51,16 +50,16 @@ public class TestZookeeperClusterImpl
       ZookeeperTestServer server = new ZookeeperTestServer();
       
       Throwable receivedException = null;
-      ZookeeperSession<String, String> session = null;
+      ZookeeperSession session = null;
       
       try
       {
          server.start();
          
-         session = new ZookeeperSession<String, String>("127.0.0.1:" + port,5000) {
+         session = new ZookeeperSession("127.0.0.1:" + port,5000) {
             
             @Override
-            protected ZooKeeper makeZookeeperInstance(String connectString, int sessionTimeout) throws IOException
+            protected ZooKeeper makeZooKeeperClient(String connectString, int sessionTimeout) throws IOException
             {
                return new ZooKeeper(connectString,sessionTimeout,new ZkWatcher())
                {
@@ -77,11 +76,9 @@ public class TestZookeeperClusterImpl
                   
                };
 
-         MpCluster<String, String> cluster = session.getCluster(new ClusterId("test","test"));
-         
          try
          {
-            cluster.getActiveSlots();
+            session.getSubdirs(new ClusterId("test","test").asPath(), null);
          }
          catch(Exception e)
          {

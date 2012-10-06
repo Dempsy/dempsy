@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.mpcluster.zookeeper;
+package com.nokia.dempsy.cluster.zookeeper;
 
 import java.io.Serializable;
 import java.util.Random;

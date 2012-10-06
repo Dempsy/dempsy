@@ -64,6 +64,14 @@ public class ClusterId
 
    public String getMpClusterName() { return mpClusterName; }
    
+   /**
+    * <p>Provide the ClusterId as a path. The form of the string returned is:</p>
+    * <br>
+    * 
+    * @return: "/" + this.getApplicationName() + "/" + this.getMpClusterName()
+    */
+   public String asPath() { return "/" + this.getApplicationName() + "/" + this.getMpClusterName(); }
+   
    @Override
    public String toString()
    {

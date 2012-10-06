@@ -19,10 +19,30 @@ package com.nokia.dempsy.monitoring;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 
+/**
+ * <p>Core developers need to provide a factory for Dempsy to retrieve the chosen
+ * {@link StatsCollector} implementation.</p>
+ * 
+ * <p>There are two provided with Dempsy.
+ * The StatsCollectorCoda is built from Yammer Metrics and can be configured 
+ * to connect to any number of delivery mechanisms include Ganglia and Graphite.</p>
+ * 
+ * <p>The BasicStatsCollector should only be used in tests as it doesn't provide
+ * it's data anywhere but simply tracks the statistics.</p>
+ * 
+ */
 public interface StatsCollectorFactory
 {
    /**
-    * Keep in mind that the Destination can be null.
+    * The framework will invoke this method to retrieve the chosen {@link StatsCollector}
+    * implementation. 
+    * 
+    * @param clusterId is the Cluster Id for this cluster. Should be used to categorize the
+    * metrics being exposed.
+    * @param nodeIdentification is the destination for this Node. If this node isn't a
+    * destination for messages then this value can be null.
+    * @return the particular {@link StatsCollector} implementation the coresponds to this
+    * factory.
     */
-   StatsCollector createStatsCollector(ClusterId clusterId, Destination listenerDestination);
+   StatsCollector createStatsCollector(ClusterId clusterId, Destination nodeIdentification);
 }

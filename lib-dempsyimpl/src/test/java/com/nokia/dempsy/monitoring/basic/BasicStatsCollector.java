@@ -19,6 +19,7 @@ package com.nokia.dempsy.monitoring.basic;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
 /**
  * A very basic implementation of StatsCollector.
@@ -26,9 +27,8 @@ import com.nokia.dempsy.monitoring.StatsCollector;
  * implementation does, but useful for testing.
  *
  */
-public class BasicStatsCollector implements StatsCollector
+public class BasicStatsCollector implements StatsCollector, MetricGetters
 {
-   
    private final AtomicLong messagesReceived = new AtomicLong();
    private final AtomicLong messagesDiscarded = new AtomicLong();
    private final AtomicLong messagesDispatched = new AtomicLong();
@@ -41,14 +41,20 @@ public class BasicStatsCollector implements StatsCollector
    private final AtomicLong mpsCreated = new AtomicLong();
    private final AtomicLong mpsDeleted = new AtomicLong();
    
-   private final AtomicLong preInstantiationStart = new AtomicLong();
    private final AtomicLong preInstantiationDuration = new AtomicLong();
-
-   private final AtomicLong outputInvokeStart = new AtomicLong();
+   private final AtomicLong mpHandleMessageDuration = new AtomicLong();
    private final AtomicLong outputInvokeDuration = new AtomicLong();
-   
-   private final AtomicLong evictionPassStart = new AtomicLong();
    private final AtomicLong evictionPassDuration = new AtomicLong();
+   
+   private static class BasicTimerContext implements StatsCollector.TimerContext
+   {
+      private long startTime = System.currentTimeMillis();
+      private AtomicLong toIncrement;
+      
+      private BasicTimerContext(AtomicLong toIncrement) { this.toIncrement = toIncrement; }
+      
+      public void stop() { toIncrement.addAndGet(System.currentTimeMillis() - startTime); }
+   }
    
    @Override
    public long getDiscardedMessageCount()
@@ -95,7 +101,7 @@ public class BasicStatsCollector implements StatsCollector
    }
 
    @Override
-   public void messageFailed()
+   public void messageFailed(boolean mpFailure)
    {
       messagesFailed.incrementAndGet();
       inProcessMessages.decrementAndGet();
@@ -129,13 +135,13 @@ public class BasicStatsCollector implements StatsCollector
    }
 
    @Override
-   public void messageReceived(Object message)
+   public void messageReceived(byte[] message)
    {
       messagesReceived.incrementAndGet();
    }
 
    @Override
-   public void messageSent(Object message)
+   public void messageSent(byte[] message)
    {
       messagesSent.incrementAndGet();
    }
@@ -154,15 +160,15 @@ public class BasicStatsCollector implements StatsCollector
    }
    
    @Override
-   public void preInstantiationStarted()
+   public StatsCollector.TimerContext preInstantiationStarted()
    {
-      preInstantiationStart.set(System.currentTimeMillis());
+      return new BasicTimerContext(preInstantiationDuration);
    }
    
    @Override
-   public void preInstantiationCompleted()
+   public StatsCollector.TimerContext handleMessageStarted()
    {
-      preInstantiationDuration.set(System.currentTimeMillis()-preInstantiationStart.get());
+      return new BasicTimerContext(mpHandleMessageDuration);
    }
    
    @Override
@@ -172,25 +178,14 @@ public class BasicStatsCollector implements StatsCollector
    }
    
    @Override
-   public void outputInvokeStarted()
+   public StatsCollector.TimerContext outputInvokeStarted()
    {
-      outputInvokeStart.set(System.currentTimeMillis());
+      return new BasicTimerContext(outputInvokeDuration);
    }
    
-   @Override
-   public void outputInvokeCompleted()
-   {
-      outputInvokeDuration.set(System.currentTimeMillis()-outputInvokeStart.get());
-   }
-
 	@Override
-	public void evictionPassStarted() {
-	    evictionPassStart.set(System.currentTimeMillis());
-	}
-
-	@Override
-	public void evictionPassCompleted() {
-		evictionPassDuration.set(System.currentTimeMillis()-evictionPassStart.get());
+	public StatsCollector.TimerContext evictionPassStarted() {
+	    return new BasicTimerContext(evictionPassDuration);
 	}
 
 	@Override

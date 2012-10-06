@@ -44,6 +44,7 @@ import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.container.mocks.MockInputMessage;
 import com.nokia.dempsy.container.mocks.MockOutputMessage;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
@@ -56,7 +57,7 @@ import com.nokia.dempsy.serialization.java.JavaSerializer;
  */
 public class TestMpContainerLoadHandling 
 {
-   private void checkStat(StatsCollector stat)
+   private void checkStat(MetricGetters stat)
    {
       assertEquals(stat.getDispatchedMessageCount(), 
             stat.getMessageFailedCount() + stat.getProcessedMessageCount() + 
@@ -67,7 +68,7 @@ public class TestMpContainerLoadHandling
    private static Logger logger = LoggerFactory.getLogger(TestMpContainerLoadHandling.class);
    
    private MpContainer container;
-   private StatsCollector stats;
+   private MetricGetters stats;
    private MockDispatcher dispatcher;
    private CountDownLatch startLatch; // when set, the TestMessageProcessor waits to begin processing
    private CountDownLatch finishLatch; // counts down when any instance of TestMessageProcessor COMPLETES handling a message
@@ -83,12 +84,13 @@ public class TestMpContainerLoadHandling
       ClusterId cid = new ClusterId("TestMpContainerLoadHandling", "test" + sequence++);
       dispatcher = new MockDispatcher();
 
-      stats = new StatsCollectorCoda(cid);
+      StatsCollectorCoda sc = new StatsCollectorCoda(cid); 
+      stats = sc;
       JavaSerializer<Object> serializer = new JavaSerializer<Object>();
 
       container = new MpContainer(cid);
       container.setDispatcher(dispatcher);
-      container.setStatCollector(stats);
+      container.setStatCollector(sc);
       container.setSerializer(serializer);
       container.setPrototype(new TestMessageProcessor());
       
@@ -98,7 +100,7 @@ public class TestMpContainerLoadHandling
    @After
    public void tearDown() throws Exception
    {
-      stats.stop();
+      ((StatsCollector)stats).stop();
    }
    
    public static boolean failed = false;
