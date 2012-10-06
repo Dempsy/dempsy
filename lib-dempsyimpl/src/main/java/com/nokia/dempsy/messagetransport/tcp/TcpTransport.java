@@ -16,7 +16,18 @@
 
 package com.nokia.dempsy.messagetransport.tcp;
 
-import com.nokia.dempsy.messagetransport.*;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.net.UnknownHostException;
+import java.util.Enumeration;
+
+import com.nokia.dempsy.messagetransport.MessageTransportException;
+import com.nokia.dempsy.messagetransport.OverflowHandler;
+import com.nokia.dempsy.messagetransport.Receiver;
+import com.nokia.dempsy.messagetransport.SenderFactory;
+import com.nokia.dempsy.messagetransport.Transport;
 
 public class TcpTransport implements Transport
 {
@@ -41,6 +52,36 @@ public class TcpTransport implements Transport
    public void setOverflowHandler(OverflowHandler overflowHandler) throws MessageTransportException
    {
       this.overflowHandler = overflowHandler;
+   }
+   
+   public static InetAddress getFirstNonLocalhostInetAddress() throws SocketException
+   {
+      Enumeration<NetworkInterface> netInterfaces=NetworkInterface.getNetworkInterfaces();
+      while(netInterfaces.hasMoreElements()){
+         NetworkInterface networkInterface = (NetworkInterface)netInterfaces.nextElement();
+         for (Enumeration<InetAddress> loopInetAddress = networkInterface.getInetAddresses(); loopInetAddress.hasMoreElements(); )
+         {
+            InetAddress tempInetAddress = loopInetAddress.nextElement();
+            if (!tempInetAddress.isLoopbackAddress() && tempInetAddress instanceof Inet4Address)
+               return tempInetAddress;
+         }
+      }
+      return null;
+   }
+   
+   public static InetAddress getInetAddressBestEffort()
+   {
+      InetAddress ret = null;
+      
+      try { ret = getFirstNonLocalhostInetAddress(); }
+      catch (SocketException e) { ret = null; }
+      
+      if (ret == null)
+      {
+         try { ret = InetAddress.getLocalHost(); }
+         catch (UnknownHostException e) { ret = null; }
+      }
+      return ret;
    }
 
 }
