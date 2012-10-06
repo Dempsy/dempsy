@@ -146,7 +146,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             // For now if we hit the race condition between when the target Inbound
             // has created the slot and when it assigns the slot info, we simply claim
             // we failed.
-            if (emptySlots.size() > 0)
+            if (newtotalAddressCounts < 0 || emptySlots.size() > 0)
                return false;
             
             if (newtotalAddressCounts > 0)
