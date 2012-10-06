@@ -27,8 +27,8 @@ import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy;
-import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.annotations.MessageHandler;
+import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
@@ -37,8 +37,10 @@ import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
+import com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory;
 import com.nokia.dempsy.router.Router.ClusterRouter;
 import com.nokia.dempsy.router.RoutingStrategy.Inbound;
+import com.nokia.dempsy.router.microshard.MicroShardUtils;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 public class TestRouterClusterManagement
@@ -46,11 +48,28 @@ public class TestRouterClusterManagement
    Router routerFactory = null;
    RoutingStrategy.Inbound inbound = null;
    
+   public static class GoodMessage
+   {
+      @MessageKey
+      public String key() { return "hello"; }
+   }
+   
+   public static class GoodMessageChild extends GoodMessage
+   {
+   }
+   
+   
    @MessageProcessor
    public static class GoodTestMp
    {
       @MessageHandler
-      public void handle(Exception message) {}
+      public void handle(GoodMessage message) {}
+   }
+   
+   public static class Message
+   {
+      @MessageKey
+      public String key() { return "hello"; }
    }
    
    @Before
@@ -70,7 +89,8 @@ public class TestRouterClusterManagement
       LocalClusterSessionFactory mpfactory = new LocalClusterSessionFactory();
       ClusterInfoSession session = mpfactory.createSession();
       
-      TestUtils.createClusterLevel(clusterId, session);
+      MicroShardUtils utils = new MicroShardUtils(clusterId);
+      utils.mkClusterDir(session, null);
 
       // fake the inbound side setup
       inbound = strategy.createInbound(session,clusterId, 
@@ -82,10 +102,11 @@ public class TestRouterClusterManagement
             public void keyspaceResponsibilityChanged(Inbound inbound, boolean less, boolean more) { }
          });
       
-      routerFactory = new Router(app);
+      routerFactory = new Router(cd);
       routerFactory.setClusterSession(session);
       routerFactory.setCurrentCluster(clusterId);
-      routerFactory.initialize();
+      routerFactory.setStatsCollector(new BasicStatsCollectorFactory().createStatsCollector(clusterId, new Destination() {} ));
+      routerFactory.start();
    }
    
    @After
@@ -98,18 +119,21 @@ public class TestRouterClusterManagement
    @Test
    public void testGetRouterNotFound()
    {
-      Set<ClusterRouter> router = routerFactory.getRouter(java.lang.String.class);
+      // lazy load requires the using of the router.
+      routerFactory.dispatch(new Message());
+      Set<ClusterRouter> router = routerFactory.getRouter(Message.class);
       Assert.assertNull(router);
-      Assert.assertTrue(routerFactory.missingMsgTypes.containsKey(java.lang.String.class));
+      Assert.assertTrue(routerFactory.getMissingTypes().contains(Message.class));
    }
    
    @Test
    public void testGetRouterFound()
    {
-      Set<ClusterRouter> routers = routerFactory.getRouter(java.lang.Exception.class);
+      routerFactory.dispatch(new GoodMessage());
+      Set<ClusterRouter> routers = routerFactory.getRouter(GoodMessage.class);
       Assert.assertNotNull(routers);
-      Assert.assertEquals(false, routerFactory.missingMsgTypes.containsKey(java.lang.Exception.class));
-      Set<ClusterRouter> routers1 = routerFactory.getRouter(ClassNotFoundException.class);
+      Assert.assertEquals(false, routerFactory.getMissingTypes().contains(GoodMessage.class));
+      Set<ClusterRouter> routers1 = routerFactory.getRouter(GoodMessageChild.class);
       Assert.assertEquals(routers, routers1);
       Assert.assertEquals(new ClusterId("test", "test-slot"), routerFactory.getThisClusterId());
    }
@@ -125,11 +149,8 @@ public class TestRouterClusterManagement
       ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
       ClusterInfoSession session = factory.createSession();
       ClusterId curCluster = new ClusterId("test-app", "test-cluster1");
-      TestUtils.createClusterLevel(curCluster, session);
-      session.setData(curCluster.asPath(), new DecentralizedRoutingStrategy.DefaultRouterClusterInfo(20,2));
+      new MicroShardUtils(curCluster).mkClusterDir(session, new DecentralizedRoutingStrategy.DefaultRouterClusterInfo(20,2,null));
       session.stop();
       dempsy.stop();
    }
-   
-
 }

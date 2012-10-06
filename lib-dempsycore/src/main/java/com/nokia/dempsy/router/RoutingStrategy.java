@@ -26,7 +26,6 @@ import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
-import com.nokia.dempsy.router.RoutingStrategy.Outbound.Coordinator;
 
 /**
  * <p>A {@link RoutingStrategy} is responsible for determining how to find the appropriate
@@ -98,37 +97,9 @@ public interface RoutingStrategy
        */
       public boolean completeInitialization();
       
-      /**
-       * <p>Each node can have many Outbound instances and those Outbound cluster references
-       * can come and go. In order to tell Dempsy about what's going on in the cluster
-       * the Outbound should be updating the state of the OutboundCoordinator.</p>
-       * 
-       * <p>Implementors of the RoutingStrategy do not need to implement this interface.
-       * There is only one implementation and that instance will be supplied by the
-       * framework.</p>
-       */
-      public static interface Coordinator
-      {
-         /**
-          * registers the outbound with the Coordinator and provide what types the destination
-          * cluster can handle. Note that the Outbound is allowed to call registerOutbound 
-          * more than once, without calling unregisterOutbound first but the results should
-          * be the same.
-          */
-         public void registerOutbound(Outbound outbound, Collection<Class<?>> classes);
-         
-         /**
-          * registers the outbound with the Coordinator and provide what types the destination
-          * cluster can handle.
-          */
-         public void unregisterOutbound(Outbound outbound);
-
-      }
+      public void setUserData(Object userData);
       
-      /**
-       * Shut down and reclaim any resources associated with the {@link Outbound} instance.
-       */
-      public void stop();
+      public Object getUserData();
       
    }
    
@@ -153,6 +124,12 @@ public interface RoutingStrategy
        * Shut down and reclaim any resources associated with the {@link Inbound} instance.
        */
       public void stop();
+      
+      /**
+       * This is only called from tests
+       * @return
+       */
+      public boolean isInitialized();
       
       /**
        * Since the responsibility for the portion of the keyspace that this node is responsible for
@@ -183,17 +160,38 @@ public interface RoutingStrategy
                                 Destination thisDestination, Inbound.KeyspaceResponsibilityChangeListener listener);
    
    /**
-    * The RoutingStrategy needs to create an {@link Outbound} that corresponds to the given cluster. It should do this
-    * in a manner that absolutely succeeds even if the cluster information manager is in a bad state. This is why
-    * this method takes stable parameters and throws no exception.
+    * This class is responsible for creating Outbounds dynamically. In most implementations it will
+    * register with the ClusterInfoSession for changes in the application topology 
+    * (new clusters coming and going). The only interaction with this class is for the Router
+    * to call stop on shutdown.
+    */
+   public static interface OutboundManager
+   {
+      public void stop();
+      
+      public Collection<Outbound> retrieveOutbounds(Class<?> messageType);
+      
+      public Collection<Outbound> getAllOutbounds();
+      
+      // This is only called from tests
+      public Collection<Class<?>> getTypesWithNoOutbounds();
+   }
+   
+   /**
+    * The RoutingStrategy needs to create an {@link OutboundManager} needs to dynamcially react to changes in the 
+    * Application topology. It should do this in a manner that absolutely succeeds even if the cluster information manager
+    * is in a bad state. This is why this method takes stable parameters and throws no exception.
     *  
     * @param coordinator is the coordinator that the newly created {@link Outbound} can use to call back on the 
-    * framework.
-    * @param clusterId is the cluster id that the {@link Outbound} is being created for.
-    * @return a new {@link Outbound} that manages the selection of a {@link Destination} given a message destined for 
-    * the given cluster.
+    * framework and supply (and remove) {@link Outbound}s
+    * @param session is a handle to the session with the ClusterInfo manager. The {@link OutboundManager} should
+    * register for changes to the application topology here and use the Cluster Info to create (and remove) the
+    * appropriate {@link Outbound}s.
+    * @param currentCluster is the ClusterId of the current cluster.
+    * @return a new {@link OutboundManager} that manages the creation and registration (and unregistration) of
+    * {@link Outbound}s.
     */
-   public Outbound createOutbound(Outbound.Coordinator coordinator, ClusterInfoSession cluster, ClusterId clusterId);
+   public OutboundManager createOutboundManager(ClusterInfoSession session, ClusterId currentCluster,Collection<ClusterId> explicitClusterDestinations);
    
 }
 

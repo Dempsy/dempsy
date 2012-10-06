@@ -185,4 +185,52 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
       runAllCombinationsMultiDempsy(null, ctxs );
    }
 
+   @Test
+   public void testMessageThroughMultiDempsy() throws Throwable
+   {
+      String[][] ctxs = {
+            { "SinglestageApplication/appdef.xml","SinglestageApplication/cluster0.xml" },
+            { "SinglestageApplication/appdef.xml","SinglestageApplication/cluster1.xml" } 
+      };
+      runAllCombinationsMultiDempsy(
+            new MultiCheck()
+            {
+               @Override
+               public void check(ApplicationContext[] context) throws Throwable
+               {
+                  Dempsy dempsy0 = (Dempsy)context[0].getBean("dempsy");
+                  TestAdaptor adaptor = (TestAdaptor)context[0].getBean("adaptor");
+                  Object message = new Object();
+                  adaptor.pushMessage(message);
+                  
+                  // check that the message didn't go through.
+                  Dempsy dempsy1 = (Dempsy)context[1].getBean("dempsy");
+                  TestMp mp = (TestMp) getMp(dempsy1, "test-app","test-cluster1");
+                  assertTrue(mp.lastReceived.get() == null);
+                  
+                  TestAdaptor adaptor2 = (TestAdaptor)getAdaptor(dempsy0, "test-app","test-cluster0");
+                  assertEquals(adaptor,adaptor2);
+                  
+                  assertEquals(adaptor.lastSent, message);
+                  
+                  // now send a message through
+                  
+                  message = new TestMessage("HereIAm - testMessageThrough");
+                  adaptor.pushMessage(message);
+                  
+                  // instead of the latch we are going to poll for the correct result
+                  // wait for it to be received.
+                  final Object msg = message;
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return msg.equals(mp.lastReceived.get()); } }));
+                  
+                  assertEquals(adaptor2.lastSent,message);
+                  assertEquals(adaptor2.lastSent,mp.lastReceived.get());
+                  
+               }
+               
+               public String toString() { return "testMessageThrough"; }
+            }, ctxs);
+   }
+   
+
 }

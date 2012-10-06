@@ -30,6 +30,7 @@ import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.config.ApplicationDefinition;
+import com.nokia.dempsy.config.ClusterDefinition;
 
 public class TestRouterInstantiation
 {
@@ -37,7 +38,10 @@ public class TestRouterInstantiation
    public void testGetMessages() throws Throwable
    {
       ApplicationDefinition app = new ApplicationDefinition("test");
-      Router router = new Router(app);
+      ClusterDefinition cd = new ClusterDefinition("test-cluster");
+      app.add(cd);
+      
+      Router router = new Router(cd);
 
       List<Object> messages = new ArrayList<Object>();
       Object first = new Object();
@@ -58,7 +62,9 @@ public class TestRouterInstantiation
    public void testDispatchBadMessage() throws Throwable
    {
       ApplicationDefinition app = new ApplicationDefinition("test");
-      Router router = new Router(app);
+      ClusterDefinition cd = new ClusterDefinition("test-cluster");
+      app.add(cd);
+      Router router = new Router(cd);
 
       Object o;
       router.dispatch(o = new Object() {
@@ -86,7 +92,9 @@ public class TestRouterInstantiation
    public void testGetMessagesNester() throws Throwable
    {
       ApplicationDefinition app = new ApplicationDefinition("test");
-      Router router = new Router(app);
+      ClusterDefinition cd = new ClusterDefinition("test-cluster");
+      app.add(cd);
+      Router router = new Router(cd);
       
       List<Object> messages = new ArrayList<Object>();
       List<Object> parent = new ArrayList<Object>();

@@ -16,8 +16,6 @@
 
 package com.nokia.dempsy.cluster;
 
-import static com.nokia.dempsy.TestUtils.createApplicationLevel;
-import static com.nokia.dempsy.TestUtils.createClusterLevel;
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -41,6 +39,7 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.router.microshard.MicroShardUtils;
 
 public class TestAllClusterImpls
 {
@@ -95,7 +94,8 @@ public class TestAllClusterImpls
       
    private static String getClusterLeaf(ClusterId cid, ClusterInfoSession session) throws ClusterInfoException
    {
-      return session.exists(cid.asPath(), null) ? cid.asPath() : null;
+      MicroShardUtils u = new MicroShardUtils(cid);
+      return session.exists(u.getClusterDir(), null) ? u.getClusterDir() : null;
    }
    
    @Test
@@ -111,9 +111,10 @@ public class TestAllClusterImpls
             ClusterInfoSession session = factory.createSession();
             assertNotNull(pass,session);
             sessionsToClose.add(session);
-            String clusterPath = createClusterLevel(cid, session);
+            MicroShardUtils u =  new MicroShardUtils(cid);
+            String clusterPath = u.mkClusterDir(session,null);
             
-            assertEquals(clusterPath,cid.asPath());
+            assertEquals(clusterPath,u.getClusterDir());
             
             assertNotNull(pass,clusterPath);
             assertTrue(pass,session.exists(clusterPath, null));
@@ -144,7 +145,7 @@ public class TestAllClusterImpls
             ClusterInfoSession session = factory.createSession();
             assertNotNull(pass,session);
             sessionsToClose.add(session);
-            String clusterPath = createClusterLevel(cid,session);
+            String clusterPath = new MicroShardUtils(cid).mkClusterDir(session,null);
             assertNotNull(pass,clusterPath);
 
             String data = "HelloThere";
@@ -171,7 +172,7 @@ public class TestAllClusterImpls
             ClusterInfoSession session = factory.createSession();
             assertNotNull(pass,session);
             sessionsToClose.add(session);
-            String mpapp = createApplicationLevel(cid,session);
+            String mpapp = new MicroShardUtils(cid).mkAppDir(session);
             String clusterPath = mpapp + "/" + cid.getMpClusterName();
             assertNotNull(pass,session.mkdir(clusterPath, DirMode.PERSISTENT));
             assertNotNull(pass,clusterPath);
@@ -205,7 +206,7 @@ public class TestAllClusterImpls
             final ClusterInfoSession session = factory.createSession();
             assertNotNull(pass,session);
             sessionsToClose.add(session);
-            String cluster = createClusterLevel(cid,session);
+            String cluster = new MicroShardUtils(cid).mkClusterDir(session,null);
             assertNotNull(pass,cluster);
 
             String node = cluster + "/Test";
@@ -264,7 +265,7 @@ public class TestAllClusterImpls
             sessionsToClose.add(mainSession);
             
             TestWatcher mainAppWatcher = new TestWatcher(1);
-            String mpapp = createApplicationLevel(cid,mainSession);
+            String mpapp = new MicroShardUtils(cid).mkAppDir(mainSession);
             assertTrue(mainSession.exists(mpapp,null));
             mainSession.getSubdirs(mpapp, mainAppWatcher); // register mainAppWatcher for subdir
             assertEquals(0,mainSession.getSubdirs(mpapp,null).size());
@@ -344,7 +345,7 @@ public class TestAllClusterImpls
          {
             final ClusterId cid = new ClusterId("test-app6","test-cluster");
             session1 = factory.createSession();
-            createClusterLevel(cid, session1);
+            new MicroShardUtils(cid).mkClusterDir(session1,null);
             sessionsToClose.add(session1);
             session2 = factory.createSession();
             sessionsToClose.add(session2);
@@ -416,7 +417,7 @@ public class TestAllClusterImpls
             final ClusterInfoSession session = factory.createSession();
             assertNotNull(pass,session);
             sessionsToClose.add(session);
-            String cluster = createClusterLevel(cid,session);
+            String cluster = new MicroShardUtils(cid).mkClusterDir(session,null);
             assertNotNull(pass,cluster);
 
             String node = cluster + "/Test";
@@ -452,7 +453,7 @@ public class TestAllClusterImpls
             
             assertNotNull(pass,session);
             sessionsToClose.add(session);
-            String clusterPath = createClusterLevel(cid,session);
+            String clusterPath = new MicroShardUtils(cid).mkClusterDir(session,null);
             assertNotNull(pass,clusterPath);
             
             ClusterInfoWatcher watcher = new ClusterInfoWatcher()
@@ -464,7 +465,7 @@ public class TestAllClusterImpls
                }
             };
             
-            assertTrue(session.exists(cid.asPath(), watcher));
+            assertTrue(session.exists(new MicroShardUtils(cid).getClusterDir(), watcher));
 
             String data = "HelloThere";
             session.setData(clusterPath,data);

@@ -16,10 +16,8 @@
 
 package com.nokia.dempsy.cluster.zookeeper;
 
-import static com.nokia.dempsy.TestUtils.createClusterLevel;
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -37,20 +35,29 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.Dispatcher;
 import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.TestUtils.Condition;
+import com.nokia.dempsy.annotations.MessageHandler;
+import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.cluster.ClusterInfoWatcher;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ApplicationDefinition;
+import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.tcp.TcpTransport;
-import com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda;
+import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
+import com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory;
 import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
 import com.nokia.dempsy.router.SpecificClusterCheck;
+import com.nokia.dempsy.router.microshard.MicroShardUtils;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 /**
@@ -86,101 +93,20 @@ public class TestZookeeperClusterResilience
    @Test
    public void testBouncingServer() throws Throwable
    {
-      ZookeeperTestServer server = new ZookeeperTestServer();
-      ZookeeperSession session = null;
-      final ClusterId clusterId = new ClusterId(appname,"testBouncingServer");
-      
-      try
-      {
-         server.start();
-
-         ZookeeperSessionFactory factory = new ZookeeperSessionFactory("127.0.0.1:" + port,5000);
-         session = (ZookeeperSession)factory.createSession();
-         final ZookeeperSession cluster = session;
-         createClusterLevel(clusterId, session);
-         TestWatcher callback = new TestWatcher(cluster)
-         {
-            
-            @Override
-            public void process()
-            {
-               boolean done = false;
-               while (!done)
-               {
-                  done = true;
-                  
-                  try
-                  {
-                     if (session.getSubdirs(clusterId.asPath(), this).size() == 0)
-                        session.mkdir(clusterId.asPath() + "/slot1",DirMode.EPHEMERAL);
-                     called.set(true);
-                  }
-                  catch(ClusterInfoException.NoNodeException e)
-                  {
-                     try
-                     {
-                        createClusterLevel(clusterId,session);
-                        done = false;
-                     }
-                     catch (ClusterInfoException e1)
-                     {
-                        throw new RuntimeException(e1);
-                     }
-                  }
-                  catch(ClusterInfoException e)
-                  {
-                     // this will fail when the connection is severed... that's ok.
-                  }
-               }
-            }
-
-         };
-
-         cluster.exists(clusterId.asPath(), callback);
-         callback.process();
-         
-         // create another session and look
-         ZookeeperSession session2 = (ZookeeperSession)factory.createSession();
-         assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServer").asPath(), null).size());
-         session2.stop();
-
-         // kill the server.
-         server.shutdown(false);
-
-         // reset the flags
-         callback.called.set(false);
-
-         // restart the server
-         server.start(false);
-         
-         // wait for the call
-         assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new TestUtils.Condition<TestWatcher>()
-         {
-            @Override
-            public boolean conditionMet(TestWatcher o) { return o.called.get(); }
-         }));
-
-         // get the view from a new session.
-         session2 = (ZookeeperSession)factory.createSession();
-         assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServer").asPath(), null).size());
-         session2.stop();
-      }
-      finally
-      {
-         if (server != null)
-            server.shutdown();
-         
-         if (session != null)
-            session.stop();
-      }
+      runBouncingServerTest("testBouncingServer",false);
    }
-
+   
    @Test
    public void testBouncingServerWithCleanDataDir() throws Throwable
    {
+      runBouncingServerTest("testBouncingServerWithCleanDataDir",true);
+   }
+
+   private void runBouncingServerTest(String testName, boolean deleteDataDir) throws Throwable
+   {
       ZookeeperTestServer server = new ZookeeperTestServer();
       ZookeeperSession session = null;
-      final ClusterId clusterId = new ClusterId(appname,"testBouncingServerWithCleanDataDir");
+      final ClusterId clusterId = new ClusterId(appname,testName);
       
       try
       {
@@ -189,8 +115,9 @@ public class TestZookeeperClusterResilience
          ZookeeperSessionFactory factory = new ZookeeperSessionFactory("127.0.0.1:" + port,5000);
          session = (ZookeeperSession)factory.createSession();
          final ZookeeperSession cluster = session;
-         createClusterLevel(clusterId, session);
-         TestWatcher callback = new TestWatcher(cluster)
+         final MicroShardUtils u = new MicroShardUtils(clusterId);
+         u.mkAllPersistentAppDirs(session, null);
+         TestWatcher callback = new TestWatcher(session)
          {
             
             @Override
@@ -203,15 +130,15 @@ public class TestZookeeperClusterResilience
                   
                   try
                   {
-                     if (session.getSubdirs(clusterId.asPath(), this).size() == 0)
-                        session.mkdir(clusterId.asPath() + "/slot1",DirMode.EPHEMERAL);
+                     if (session.getSubdirs(u.getShardsDir(), this).size() == 0)
+                        session.mkdir(u.getShardsDir() + "/slot1",DirMode.EPHEMERAL);
                      called.set(true);
                   }
                   catch(ClusterInfoException.NoNodeException e)
                   {
                      try
                      {
-                        createClusterLevel(clusterId,session);
+                        new MicroShardUtils(clusterId).mkAllPersistentAppDirs(session,null);
                         done = false;
                      }
                      catch (ClusterInfoException e1)
@@ -228,22 +155,22 @@ public class TestZookeeperClusterResilience
 
          };
 
-         cluster.exists(clusterId.asPath(), callback);
+         cluster.exists(u.getShardsDir(), callback);
          callback.process();
          
          // create another session and look
          ZookeeperSession session2 = (ZookeeperSession)factory.createSession();
-         assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServerWithCleanDataDir").asPath(), null).size());
+         assertEquals(1,session2.getSubdirs(new MicroShardUtils(new ClusterId(appname,testName)).getShardsDir(), null).size());
          session2.stop();
 
          // kill the server.
-         server.shutdown(true);
+         server.shutdown(deleteDataDir);
 
          // reset the flags
          callback.called.set(false);
 
          // restart the server
-         server.start(true);
+         server.start(deleteDataDir);
          
          // wait for the call
          assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new TestUtils.Condition<TestWatcher>()
@@ -254,7 +181,7 @@ public class TestZookeeperClusterResilience
 
          // get the view from a new session.
          session2 = (ZookeeperSession)factory.createSession();
-         assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServerWithCleanDataDir").asPath(), null).size());
+         assertEquals(1,session2.getSubdirs(new MicroShardUtils(new ClusterId(appname,testName)).getShardsDir(), null).size());
          session2.stop();
       }
       finally
@@ -274,19 +201,20 @@ public class TestZookeeperClusterResilience
       ZookeeperSessionFactory factory = new ZookeeperSessionFactory("127.0.0.1:" + port,5000);
       
       // create a session from the session factory
-      ZookeeperSession session = (ZookeeperSession)factory.createSession();
+      final ZookeeperSession session = (ZookeeperSession)factory.createSession();
       
       ClusterId clusterId = new ClusterId(appname,"testNoServerOnStartup");
       
       // hook a test watch to make sure that callbacks work correctly
-      TestWatcher callback = new TestWatcher(session)
+      final TestWatcher callback = new TestWatcher(session)
       {
          @Override public void process() { called.set(true); }
       };
       
       // now accessing the cluster should get us an error.
+      MicroShardUtils u = new MicroShardUtils(clusterId);
       boolean gotCorrectError = false;
-      try { session.getSubdirs(clusterId.asPath(), callback); } catch (ClusterInfoException e) { gotCorrectError = true; }
+      try { session.getSubdirs(u.getShardsDir(), callback); } catch (ClusterInfoException e) { gotCorrectError = true; }
       assertTrue(gotCorrectError);
       
       // now lets startup the server.
@@ -297,7 +225,7 @@ public class TestZookeeperClusterResilience
          server.start();
          
          // create a cluster from the session
-         TestUtils.createClusterLevel(clusterId,session);
+         new MicroShardUtils(clusterId).mkAllPersistentAppDirs(session,null);
          
          // wait until this works.
          assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new Condition<TestWatcher>() {
@@ -311,7 +239,7 @@ public class TestZookeeperClusterResilience
             @Override public boolean conditionMet(TestWatcher o){  return !o.called.get(); }
          }));
 
-         session.getSubdirs(clusterId.asPath(), callback);
+         session.getSubdirs(new MicroShardUtils(clusterId).getShardsDir(), callback);
          
          ZooKeeper origZk = session.zkref.get();
          ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(origZk);
@@ -326,24 +254,25 @@ public class TestZookeeperClusterResilience
          //  No matter how fast I check it's possible that it's okay again OR that allSlots hasn't been cleared.
          // 
          // however, they should eventually recover.
-         gotCorrectError = true;
-         for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && gotCorrectError;)
+         assertTrue(TestUtils.poll(baseTimeoutMillis, new MicroShardUtils(clusterId), new Condition<MicroShardUtils>()
          {
-            Thread.sleep(1);
-            try { session.getSubdirs(clusterId.asPath(), callback); gotCorrectError = false; } catch (ClusterInfoException e) {  }
-         }
-
-         session.getSubdirs(clusterId.asPath(), callback);
-
-         // And join should work
-         gotCorrectError = true;
-         for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && gotCorrectError;)
-         {
-            Thread.sleep(1);
-            try { session.mkdir(clusterId.asPath() + "/join-1", DirMode.EPHEMERAL); gotCorrectError = false; } catch (ClusterInfoException e) {  }
-         }
+            @Override
+            public boolean conditionMet(MicroShardUtils o) throws Throwable {  
+               try { session.getSubdirs(o.getShardsDir(), callback); return true; } catch (ClusterInfoException e) {  }
+               return false;
+            }
+         }));
          
-         assertFalse(gotCorrectError);
+         // And join should work
+         assertTrue(TestUtils.poll(baseTimeoutMillis, new MicroShardUtils(clusterId), new Condition<MicroShardUtils>()
+         {
+            @Override
+            public boolean conditionMet(MicroShardUtils o) throws Throwable {  
+               try { session.mkdir(o.getShardsDir() + "/join-1", DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) {  }
+               return false;
+            }
+         }));
+
       }
       finally
       {
@@ -370,7 +299,8 @@ public class TestZookeeperClusterResilience
          session =  new ZookeeperSession("127.0.0.1:" + port,5000);
 
          final ClusterId clusterId = new ClusterId(appname,"testSessionExpired");
-         createClusterLevel(clusterId,session);
+         final MicroShardUtils u = new MicroShardUtils(clusterId);
+         u.mkAllPersistentAppDirs(session,null);
          TestWatcher callback = new TestWatcher(session)
          {
             @Override
@@ -379,8 +309,8 @@ public class TestZookeeperClusterResilience
                try
                {
                   logger.trace("process called on TestWatcher.");
-                  session.exists(clusterId.asPath(), this);
-                  session.getSubdirs(clusterId.asPath(), this);
+                  session.exists(u.getClusterDir(), this);
+                  session.getSubdirs(u.getClusterDir(), this);
                   called.set(true);
                }
                catch (ClusterInfoException cie)
@@ -405,10 +335,11 @@ public class TestZookeeperClusterResilience
          killer.close(); // tricks the server into expiring the other session
          
          // and eventually a callback
-         assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
+         assertTrue(poll(baseTimeoutMillis,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
          
-         createClusterLevel(clusterId,session);
-         assertTrue(session.exists(clusterId.asPath(), callback));
+         // now we should be able to recheck
+         u.mkAllPersistentAppDirs(session,null);
+         assertTrue(session.exists(u.getShardsDir(), callback));
       }
       finally
       {
@@ -420,28 +351,103 @@ public class TestZookeeperClusterResilience
       }
    }
    
+   //------------------------------------------------------------------------------
+   // here is a complete non-spring, non-DI Dempsy instantiation
+   //------------------------------------------------------------------------------
+   private static Dempsy getDempsyFor(ClusterId clusterId, ClusterDefinition cd)
+   {
+      Dempsy dempsy = new Dempsy();
+      List<ClusterDefinition> cds = new ArrayList<ClusterDefinition>(1);
+      cds.add(cd);
+      dempsy.setClusterDefinitions(cds);
+      initDempsy(dempsy,clusterId);
+      return dempsy;
+   }
+   
    private static Dempsy getDempsyFor(ClusterId clusterId, ApplicationDefinition ad) throws Throwable
    {
-      //------------------------------------------------------------------------------
-      // here is a complete non-spring, non-DI Dempsy instantiation
-      //------------------------------------------------------------------------------
       List<ApplicationDefinition> ads = new ArrayList<ApplicationDefinition>();
       ads.add(ad);
       
       Dempsy dempsy = new Dempsy();
       dempsy.setApplicationDefinitions(ads);
-      dempsy.setClusterCheck(new SpecificClusterCheck(clusterId));
-      dempsy.setDefaultRoutingStrategy(new DecentralizedRoutingStrategy(20, 1));
-      dempsy.setDefaultSerializer(new JavaSerializer<Object>());
-      dempsy.setDefaultStatsCollectorFactory(new StatsCollectorFactoryCoda());
-      dempsy.setDefaultTransport(new TcpTransport());
-      //------------------------------------------------------------------------------
-
+      initDempsy(dempsy,clusterId);
       return dempsy;
    }
    
+   private static BasicStatsCollector curCollector = null;
+   
+   private static void initDempsy(Dempsy dempsy, ClusterId clusterId)
+   {
+      dempsy.setClusterCheck(new SpecificClusterCheck(clusterId));
+      dempsy.setDefaultRoutingStrategy(new DecentralizedRoutingStrategy(20, 1));
+      dempsy.setDefaultSerializer(new JavaSerializer<Object>());
+      dempsy.setDefaultStatsCollectorFactory(new BasicStatsCollectorFactory()
+      {
+         @Override
+         public StatsCollector createStatsCollector(ClusterId clusterId, Destination listenerDestination)
+         {
+            if (curCollector == null)
+               curCollector = new BasicStatsCollector();
+            return curCollector;
+         }
+
+      });
+      dempsy.setDefaultTransport(new TcpTransport());
+   }
+   //------------------------------------------------------------------------------
+   
+   public static class AnotherAdaptor implements Adaptor
+   {
+      public Dispatcher dispatcher;
+      
+      @Override
+      public void setDispatcher(Dispatcher dispatcher){ this.dispatcher = dispatcher; }
+
+      @Override
+      public void start() { }
+
+      @Override
+      public void stop() { }
+   }
+   
+   // inherited message
+   public static class MyMessageCountChild extends FullApplication.MyMessageCount
+   {
+      private static final long serialVersionUID = 1L;
+      public static volatile AtomicLong hitCount = new AtomicLong(0);
+      
+      public MyMessageCountChild(long v) { super(v); }
+      
+      @Override
+      public void hitMe()
+      {
+         hitCount.incrementAndGet();
+      }
+   }
+   
+   @MessageProcessor
+   public static class MyRankAgain implements Cloneable
+   {
+      public static AtomicLong called = new AtomicLong(0);
+      
+      @MessageHandler
+      public void handleMessage(MyMessageCountChild m) 
+      {
+//         System.out.println("Got One In Child!");
+         m.hitMe(); 
+         called.incrementAndGet();
+      }
+      
+      @Override
+      public MyRankAgain clone() throws CloneNotSupportedException
+      {
+         return (MyRankAgain)super.clone();
+      }
+   }
+   
    @Test
-   public void testSessionExpiredWithFullApp() throws Throwable
+   public void testSessionExpiredWithFullAppPlusDynamicAdditions() throws Throwable
    {
       // now lets startup the server.
       ZookeeperTestServer server = null;
@@ -449,7 +455,7 @@ public class TestZookeeperClusterResilience
       ZookeeperSession session = null;
       final AtomicLong processCount = new AtomicLong(0);
       
-      Dempsy[] dempsy = new Dempsy[3];
+      Dempsy[] dempsy = new Dempsy[5];
       try
       {
          server = new ZookeeperTestServer();
@@ -457,11 +463,11 @@ public class TestZookeeperClusterResilience
 
          session = new ZookeeperSession("127.0.0.1:" + port,5000) {
             @Override
-            public WatcherProxy makeWatcherProxy(ClusterInfoWatcher w)
+            public ZookeeperSession.WatcherProxy makeWatcherProxy(ClusterInfoWatcher watcher)
             {
-                     processCount.incrementAndGet();
-                     return super.makeWatcherProxy(w);
-            };
+               processCount.incrementAndGet();
+               return super.makeWatcherProxy(watcher);
+            }
          };
          sessionRef.set(session);
 
@@ -481,22 +487,21 @@ public class TestZookeeperClusterResilience
          
          dempsy[2].setClusterSessionFactory(new ClusterInfoSessionFactory()
          {
-            
             @Override
             public ClusterInfoSession createSession() throws ClusterInfoException
             {
                return sessionRef.get();
             }
          });
-
-         // start everything in reverse order
-         for (int i = 2; i >= 0; i--)
-            dempsy[i].start();
          
+         // start everything in reverse order
+         dempsy[2].start();
+         dempsy[1].start();
+         dempsy[0].start();
+
          // make sure the final count is incrementing
          long curCount = app.finalMessageCount.get();
-         assertTrue(poll(30000,curCount,new Condition<Long>(){
-
+         assertTrue(poll(baseTimeoutMillis,curCount,new Condition<Long>(){
             @Override
             public boolean conditionMet(Long o)
             {
@@ -520,8 +525,7 @@ public class TestZookeeperClusterResilience
          
          // make sure the final count is STILL incrementing
          curCount = app.finalMessageCount.get();
-         assertTrue(poll(30000,curCount,new Condition<Long>(){
-
+         assertTrue(poll(baseTimeoutMillis,curCount,new Condition<Long>(){
             @Override
             public boolean conditionMet(Long o)
             {
@@ -529,7 +533,95 @@ public class TestZookeeperClusterResilience
             }
             
          }));
+         
+         //====================================================================
+         // This test is now extended to use the dynamic topology functionality
+         //====================================================================
+         
+         // now, see if I can add a dynamic cluster
+         AnotherAdaptor anotherAdaptor = new AnotherAdaptor();
+         ClusterId cid2 = new ClusterId(FullApplication.class.getSimpleName(),AnotherAdaptor.class.getSimpleName());
+         ClusterDefinition cd2 = new ClusterDefinition(cid2.getMpClusterName());
+         cd2.setApplicationDefinition(app.createBaseApplicationDefinition());
+         cd2.setAdaptor(anotherAdaptor);
+         
+         // create a start a new dempsy instance
+         dempsy[3] = getDempsyFor(cid2,cd2);
+         dempsy[3].setClusterSessionFactory(new ZookeeperSessionFactory("127.0.0.1:" + port,5000));
+         dempsy[3].start();
+         
+         // wait for the dispatcher to be set
+         assertTrue(poll(baseTimeoutMillis,anotherAdaptor,new Condition<AnotherAdaptor>() {
+            @Override
+            public boolean conditionMet(AnotherAdaptor o) { return o.dispatcher != null; }
+         }));
+         
+         // Now send a message.
+         MyMessageCountChild.hitCount.set(0);
+         MyMessageCountChild msg1 = new MyMessageCountChild(-1);
+         anotherAdaptor.dispatcher.dispatch(msg1);
+         
+         // even though this message inherits from the base MyMessageCount class
+         //  it should make it through to the MyRankMp which will call hitMe
+         //  and it will cause the static hitCount to increment.
+         assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() {
+            @Override
+            public boolean conditionMet(Object o) { return MyMessageCountChild.hitCount.get() > 0; }
+         }));
+         
+         // Make sure we've seen only one.
+         Thread.sleep(10);
+         assertEquals(1,MyMessageCountChild.hitCount.get());
+         
+         // Now add a new Mp that will also receive Rank
+         MyMessageCountChild.hitCount.set(0);
+         
+         // ... but stop the zk server
+         server.shutdown();
+         
+         MyRankAgain mp3 = new MyRankAgain();
+         ClusterId cid3 = new ClusterId(FullApplication.class.getSimpleName(),MyRankAgain.class.getSimpleName());
+         ClusterDefinition cd3 = new ClusterDefinition(cid3.getMpClusterName());
+         cd3.setApplicationDefinition(app.createBaseApplicationDefinition());
+         cd3.setMessageProcessorPrototype(mp3);
 
+         // create a start a new dempsy instance
+         dempsy[4] = getDempsyFor(cid3,cd3);
+         dempsy[4].setClusterSessionFactory(new ZookeeperSessionFactory("127.0.0.1:" + port,5000));
+         dempsy[4].start();
+         
+         Thread.sleep(10);
+         server = new ZookeeperTestServer();
+         server.start();
+         
+         app.finalMessageCount.set(0);
+         MyRankAgain.called.set(0);
+         
+         // poll until messages get through
+         assertTrue(poll(baseTimeoutMillis,anotherAdaptor,new Condition<AnotherAdaptor>() {
+            @Override
+            public boolean conditionMet(AnotherAdaptor o) { o.dispatcher.dispatch(new MyMessageCountChild(-1)); return (MyRankAgain.called.get() > 10) && app.finalMessageCount.get() > 10; }
+         }));
+         
+         // now stop the original adaptor
+         dempsy[1].stop();
+
+         // there's a race condition here ... some messages may still
+         // trickle through from the above sending. This should aviod that
+         // MOST of the time.
+         Thread.sleep(100);
+
+         // now reset the counter
+         MyMessageCountChild.hitCount.set(0);
+         
+         // send a couple messages
+         anotherAdaptor.dispatcher.dispatch(new MyMessageCountChild(-1));
+         
+         // now, because there are 2 ultimate destinations for this message, the hitCount should got to 2
+         assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() {
+            @Override
+            public boolean conditionMet(Object o) { return MyMessageCountChild.hitCount.get() > 1; }
+         }));
       }
       finally
       {
@@ -539,7 +631,7 @@ public class TestZookeeperClusterResilience
          if (session != null)
             session.stop();
          
-         for (int i = 0; i < 3; i++)
+         for (int i = 0; i < dempsy.length; i++)
             if (dempsy[i] != null)
                dempsy[i].stop();
       }
@@ -574,13 +666,14 @@ public class TestZookeeperClusterResilience
          sessiong = session;
          
          final ClusterId clusterId = new ClusterId(appname,"testRecoverWithIOException");
-         TestUtils.createClusterLevel(clusterId, session);
+         final MicroShardUtils u = new MicroShardUtils(clusterId);
+         u.mkAllPersistentAppDirs(session, null);
          TestWatcher callback = new TestWatcher(session)
          {
             @Override public void process()
             {
                try { 
-                  session.getSubdirs(clusterId.asPath(),this);
+                  session.getSubdirs(u.getClusterDir(),this);
                   called.set(true);
                }
                catch (ClusterInfoException cie) { throw new RuntimeException(cie); }
@@ -600,11 +693,11 @@ public class TestZookeeperClusterResilience
          assertTrue(forceIOExceptionLatch.await(baseTimeoutMillis * 3, TimeUnit.MILLISECONDS));
 
          // now the getActiveSlots call should fail since i'm preventing the recovery by throwing IOExceptions
-         assertTrue(TestUtils.poll(baseTimeoutMillis, clusterId, new Condition<ClusterId>()
+         assertTrue(TestUtils.poll(baseTimeoutMillis, u, new Condition<MicroShardUtils>()
          {
             @Override
-            public boolean conditionMet(ClusterId o) throws Throwable {
-               try { session.mkdir(o.asPath() + "/join-1", DirMode.EPHEMERAL); return false; } catch (ClusterInfoException e) { return true; }
+            public boolean conditionMet(MicroShardUtils o) throws Throwable {  
+               try { session.mkdir(o.getShardsDir() + "/join-1", DirMode.EPHEMERAL); return false; } catch (ClusterInfoException e) { return true; }
             }
          }));
          
@@ -614,26 +707,26 @@ public class TestZookeeperClusterResilience
          forceIOException.set(false);
          
          // wait for the callback
-         assertTrue(poll(baseTimeoutMillis,callback,new Condition<TestWatcher>() { @Override public boolean conditionMet(TestWatcher o) { return o.called.get(); } }));
+         assertTrue(poll(baseTimeoutMillis,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
          
          // this should eventually recover.
-         assertTrue(TestUtils.poll(baseTimeoutMillis, clusterId, new Condition<ClusterId>()
+         assertTrue(TestUtils.poll(baseTimeoutMillis, u, new Condition<MicroShardUtils>()
          {
             @Override
-            public boolean conditionMet(ClusterId o) throws Throwable {
-               try { TestUtils.createClusterLevel(o, session); session.mkdir(o.asPath() + "/join-1", DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) { return false; }
+            public boolean conditionMet(MicroShardUtils o) throws Throwable {  
+               try { o.mkAllPersistentAppDirs(session, null); session.mkdir(o.getShardsDir() + "/join-1", DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) { return false; }
             }
          }));
          
-         session.getSubdirs(clusterId.asPath(),callback);
+         session.getSubdirs(u.getShardsDir(),callback);
          
          // And join should work
          // And join should work
-         assertTrue(TestUtils.poll(baseTimeoutMillis,clusterId , new Condition<ClusterId>()
+         assertTrue(TestUtils.poll(baseTimeoutMillis,u , new Condition<MicroShardUtils>()
          {
             @Override
-            public boolean conditionMet(ClusterId o) throws Throwable {
-               try { session.mkdir(o.asPath() + "/join-1", DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) { }
+            public boolean conditionMet(MicroShardUtils o) throws Throwable {  
+               try { session.mkdir(o.getShardsDir() + "/join-1", DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) {  }
                return false;
             }
          }));

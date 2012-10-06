@@ -171,6 +171,8 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
       // no-op
 
    }
+   
+   public long getMessagesUnset() { return messagesUnsent.get(); }
 
    @Override
    public double getPreInstantiationDuration()

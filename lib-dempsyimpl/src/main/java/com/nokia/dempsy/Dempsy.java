@@ -95,8 +95,7 @@ public class Dempsy
                      executor.start();
                   ClusterInfoSession clusterSession = clusterSessionFactory.createSession();
                   ClusterId currentClusterId = clusterDefinition.getClusterId();
-                  router = new Router(clusterDefinition.getApplicationDefinition());
-                  router.setCurrentCluster(currentClusterId);
+                  router = new Router(clusterDefinition);
                   router.setClusterSession(clusterSession);
                   // get the executor if one is set
                   
@@ -148,7 +147,7 @@ public class Dempsy
                      strategyInbound = strategy.createInbound(clusterSession,currentClusterId,acceptedMessageClasses, thisDestination,container);
                   
                   // this can fail because of down cluster manager server ... but it should eventually recover.
-                  try { router.initialize(); }
+                  try { router.start(); }
                   catch (ClusterInfoException e)
                   {
                      logger.warn("Strategy failed to initialize. Continuing anyway. The cluster manager issue will be resolved automatically.",e);
@@ -445,7 +444,7 @@ public class Dempsy
          throw new DempsyException("Cannot start this application because there are no ApplicationDefinitions");
       
       if (clusterSessionFactory == null)
-         throw new DempsyException("Cannot start this application because there was no ClusterFactory implementaiton set.");
+         throw new DempsyException("Cannot start this application because there was no ClusterInfoSessionFactory implementaiton set.");
       
       if (clusterCheck == null)
          throw new DempsyException("Cannot start this application because there's no way to tell which cluster to start. Make sure the appropriate " + 
@@ -465,7 +464,7 @@ public class Dempsy
     
       try
       {
-         applications = new HashMap<String,Application>(applicationDefinitions.size());
+         applications = new HashMap<String,Application>();
          
          if (applicationDefinitions != null)
          {

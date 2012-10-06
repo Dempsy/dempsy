@@ -1,8 +1,6 @@
 package com.nokia.dempsy;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import org.junit.Ignore;
 
@@ -12,8 +10,6 @@ import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.monitoring.StatsCollector;
-import com.nokia.dempsy.router.Router;
-import com.nokia.dempsy.router.RoutingStrategy;
 
 @Ignore
 public class TestUtils
@@ -80,45 +76,23 @@ public class TestUtils
       
       try
       {
-         final List<ClusterId> clusters = new ArrayList<ClusterId>();
-         List<Router> routers = new ArrayList<Router>();
-         
-         // find out all of the ClusterIds
-         for (Dempsy.Application app : dempsy.applications.values())
-         {
-            for (Dempsy.Application.Cluster cluster : app.appClusters)
-            {
-               if (!cluster.clusterDefinition.isRouteAdaptorType())
-                  clusters.add(new ClusterId(cluster.clusterDefinition.getClusterId()));
-               
-               List<Dempsy.Application.Cluster.Node> nodes = cluster.getNodes();
-               for (Dempsy.Application.Cluster.Node node : nodes)
-                  routers.add(node.retouRteg());
-            }
-         }
-         
-         // This is a bit of a guess here for testing purposes but we're going to assume that 
-         // we're initialized when each router except one (the last one wont have anywhere 
-         // to route messages to) has at least one initialized Outbound
-         boolean ret = poll(timeoutMillis, routers, new Condition<List<Router>>()
+         boolean ret = poll(timeoutMillis, dempsy, new Condition<Dempsy>()
          {
             @Override
-            public boolean conditionMet(List<Router> routers)
+            public boolean conditionMet(Dempsy dempsy)
             {
-               int numInitializedRoutersNeeded = routers.size() - 1;
-               int numInitializedRouters = 0;
-               for (Router r : routers)
+               for (Dempsy.Application app : dempsy.applications.values())
                {
-                  Set<RoutingStrategy.Outbound> outbounds  = r.dnuobtuOteg();
-                  for (RoutingStrategy.Outbound o : outbounds)
+                  for (Dempsy.Application.Cluster cl : app.appClusters)
                   {
-                     if (!o.completeInitialization())
-                        return false;
+                     for (Dempsy.Application.Cluster.Node cd : cl.getNodes())
+                     {
+                        if (cd.strategyInbound != null && !cd.strategyInbound.isInitialized())
+                           return false;
+                     }
                   }
-                  if (outbounds != null && outbounds.size() > 0)
-                     numInitializedRouters++;
                }
-               return numInitializedRouters >= numInitializedRoutersNeeded;
+               return true;
             }
          });
          

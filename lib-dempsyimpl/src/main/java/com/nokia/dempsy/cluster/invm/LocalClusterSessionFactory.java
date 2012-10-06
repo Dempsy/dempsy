@@ -54,8 +54,8 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
 
    // ====================================================================
    // This section pertains to the management of the tree information
-   private Map<String,Entry> entries = new HashMap<String,Entry>();
-   {
+   private static Map<String,Entry> entries = new HashMap<String,Entry>();
+   static {
       entries.put("/", new Entry()); /// initially add the root.
    }
 
@@ -131,7 +131,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return f.getParent();
    }
    
-   private Entry get(String absolutePath, ClusterInfoWatcher watcher, boolean nodeWatch) throws ClusterInfoException.NoNodeException
+   private static Entry get(String absolutePath, ClusterInfoWatcher watcher, boolean nodeWatch) throws ClusterInfoException.NoNodeException
    {
       Entry ret;
       ret = entries.get(absolutePath);
@@ -147,20 +147,20 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return ret;
    }
    
-   private synchronized Object ogetData(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
+   private static synchronized Object ogetData(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
    {
       Entry e = get(path,watcher,true);
       return e.data.get();
    }
    
-   private synchronized void osetData(String path, Object data) throws ClusterInfoException
+   private static synchronized void osetData(String path, Object data) throws ClusterInfoException
    {
       Entry e = get(path,null,true);
       e.data.set(data);
       e.callWatchers(true,false);
    }
    
-   private synchronized boolean oexists(String path,ClusterInfoWatcher watcher)
+   private static synchronized boolean oexists(String path,ClusterInfoWatcher watcher)
    {
       Entry e = entries.get(path);
       if (e != null && watcher != null)
@@ -168,12 +168,12 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return e != null;
    }
    
-   private String omkdir(String path, DirMode mode) throws ClusterInfoException
+   private static String omkdir(String path, DirMode mode) throws ClusterInfoException
    {
       Entry parent = null;
       String pathToUse;
       
-      synchronized(this)
+      synchronized(LocalClusterSessionFactory.class)
       {
          if (oexists(path,null))
             return path;
@@ -209,14 +209,14 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return pathToUse;
    }
    
-   private void ormdir(String path) throws ClusterInfoException {   ormdir(path,true);  }
+   private static void ormdir(String path) throws ClusterInfoException {   ormdir(path,true);  }
    
-   private void ormdir(String path, boolean notifyWatchers) throws ClusterInfoException
+   private static void ormdir(String path, boolean notifyWatchers) throws ClusterInfoException
    {
       Entry ths;
       Entry parent = null;
       
-      synchronized(this)
+      synchronized(LocalClusterSessionFactory.class)
       {
          ths = entries.get(path);
          if (ths == null)
@@ -238,7 +238,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
          ths.callWatchers(true, true);
    }
    
-   private synchronized Collection<String> ogetSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
+   private static synchronized Collection<String> ogetSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
    {
       Entry e = get(path,watcher,false);
       Collection<String>ret = new ArrayList<String>(e.children.size());
@@ -333,6 +333,18 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
             localEphemeralDirs.clear();
          }
          currentSessions.remove(this);
+         
+         synchronized(currentSessions)
+         {
+            if (currentSessions.size() == 0)
+            {
+               synchronized(LocalClusterSessionFactory.class)
+               {
+                  entries.clear();
+                  entries.put("/", new Entry()); /// initially add the root.
+               }
+            }
+         }
       }
       
       
