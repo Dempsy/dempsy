@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.junit.Ignore;
 
-import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;
@@ -74,34 +73,25 @@ public class TestUtils
       if (!poll(timeoutMillis, dempsy,new Condition<Dempsy>() { @Override public boolean conditionMet(Dempsy dempsy) { return dempsy.isRunning(); } }))
          return false;
       
-      try
+      return poll(timeoutMillis, dempsy, new Condition<Dempsy>()
       {
-         boolean ret = poll(timeoutMillis, dempsy, new Condition<Dempsy>()
+         @Override
+         public boolean conditionMet(Dempsy dempsy)
          {
-            @Override
-            public boolean conditionMet(Dempsy dempsy)
+            for (Dempsy.Application app : dempsy.applications.values())
             {
-               for (Dempsy.Application app : dempsy.applications.values())
+               for (Dempsy.Application.Cluster cl : app.appClusters)
                {
-                  for (Dempsy.Application.Cluster cl : app.appClusters)
+                  for (Dempsy.Application.Cluster.Node cd : cl.getNodes())
                   {
-                     for (Dempsy.Application.Cluster.Node cd : cl.getNodes())
-                     {
-                        if (cd.strategyInbound != null && !cd.strategyInbound.isInitialized())
-                           return false;
-                     }
+                     if (cd.strategyInbound != null && !cd.strategyInbound.isInitialized())
+                        return false;
                   }
                }
-               return true;
             }
-         });
-         
-         return ret;
-      }
-      catch (ClusterInfoException e)
-      {
-         return false;
-      }
+            return true;
+         }
+      });
    }
    
    public static ClusterInfoSession getSession(Dempsy.Application.Cluster c)
