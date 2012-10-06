@@ -705,12 +705,18 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   {
                      // this may happen because of a race condition between the 
                      taskSepaphore.release();
+                     wrapper.releaseLock(); // we never got into the run so we need to release the lock
                   }
                   catch (InterruptedException e)
                   {
                      // this can happen while blocked in the semaphore.acquire.
                      // if we're no longer running we should just get out
                      // of here.
+                     //
+                     // Not releasing the taskSepaphore assumes the acquire never executed.
+                     // if (since) the acquire never executed we also need to release the
+                     //  wrapper lock or that Mp will never be usable again.
+                     wrapper.releaseLock(); // we never got into the run so we need to release the lock
                   }
                }
                else
