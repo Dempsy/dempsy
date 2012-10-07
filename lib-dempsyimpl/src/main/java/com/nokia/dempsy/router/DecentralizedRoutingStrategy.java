@@ -59,6 +59,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    private int defaultTotalSlots;
    private int defaultNumNodes;
    
+   private ScheduledExecutorService scheduler_ = null;
+   
    public DecentralizedRoutingStrategy(int defaultTotalSlots, int defaultNumNodes)
    {
       this.defaultTotalSlots = defaultTotalSlots;
@@ -333,13 +335,11 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          private Object userData;
          private AtomicBoolean isRunning = new AtomicBoolean(true);
 
-         private ScheduledExecutorService scheduler = null;
-
          private Outbound(ClusterInfoSession cluster, ClusterId clusterId)
          {
             this.clusterSession = cluster;
             this.clusterId = clusterId;
-            execSetupDestinations(false);
+            execSetupDestinations();
          }
 
          @Override
@@ -362,7 +362,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          @Override
          public void process()
          {
-            execSetupDestinations(true);
+            execSetupDestinations();
          }
 
          /**
@@ -370,10 +370,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
           */
          public synchronized void stop()
          {
-            if (scheduler != null)
-               scheduler.shutdown();
-            scheduler = null;
             isRunning.set(false);
+            disposeOfScheduler();
          }
 
          /**
@@ -455,41 +453,31 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             }
             return false;
          }
-
-         private void execSetupDestinations(final boolean fromProcess)
+         
+         private void execSetupDestinations()
          {
             if (!setupDestinations() && isRunning.get())
             {
                synchronized(this)
                {
-                  if (scheduler == null)
-                     scheduler = Executors.newScheduledThreadPool(1);
-
-                  scheduler.schedule(new Runnable(){
-                     @Override
-                     public void run()
-                     {
-                        if (!setupDestinations() && isRunning.get())
+                  ScheduledExecutorService sched = getScheduledExecutor();
+                  if (sched != null)
+                  {
+                     sched.schedule(new Runnable(){
+                        @Override
+                        public void run()
                         {
-                           synchronized(Outbound.this)
+                           if (isRunning.get() && !setupDestinations())
                            {
-                              if (scheduler != null)
-                                 scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
+                              ScheduledExecutorService sched = getScheduledExecutor();
+                              if (sched != null)
+                                 sched.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
                            }
+                           else
+                              disposeOfScheduler();
                         }
-                        else
-                        {
-                           synchronized(Outbound.this)
-                           {
-                              if (scheduler != null)
-                              {
-                                 scheduler.shutdown();
-                                 scheduler = null;
-                              }
-                           }
-                        }
-                     }
-                  }, resetDelay, TimeUnit.MILLISECONDS);
+                     }, resetDelay, TimeUnit.MILLISECONDS);
+                  }
                }
             }
          }
@@ -499,8 +487,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    
    private class Inbound implements RoutingStrategy.Inbound, ClusterInfoWatcher
    {
-      private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-
       private Set<Integer> destinationsAcquired = new HashSet<Integer>();
       private ClusterInfoSession session;
       private Destination thisDestination;
@@ -521,20 +507,20 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          this.clusterId = clusterId;
          this.msutils = new MicroShardUtils(clusterId);
          this.clusterInfo = new DefaultRouterClusterInfo(defaultTotalSlots, defaultNumNodes, messageTypes);
-         acquireSlots(false);
+         acquireSlots();
       }
 
       @Override
       public void process()
       {
-         acquireSlots(true);
+         acquireSlots();
       }
       
       boolean alreadyHere = false;
       boolean recurseAttempt = false;
       ScheduledFuture<?> currentlyWaitingOn = null;
       
-      private synchronized void acquireSlots(final boolean fromProcess)
+      private synchronized void acquireSlots()
       {
          if (!isRunning.get())
             return;
@@ -632,13 +618,18 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             
             if (retry)
             {
-               currentlyWaitingOn = scheduler.schedule(new Runnable(){
-                  @Override
-                  public void run() { acquireSlots(fromProcess); }
-               }, resetDelay, TimeUnit.MILLISECONDS);
+               ScheduledExecutorService sched = getScheduledExecutor();
+               if (sched != null)
+                   currentlyWaitingOn = sched.schedule(new Runnable(){
+                     @Override
+                     public void run() { acquireSlots(); }
+                  }, resetDelay, TimeUnit.MILLISECONDS);
             }
             else
+            {
+               disposeOfScheduler();
                isInited.set(true);
+            }
          }
       }
       
@@ -648,7 +639,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       @Override
       public void stop()
       {
-         scheduler.shutdown();
          isRunning.set(false);
       }
       
@@ -813,6 +803,20 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       }
       else
          return false;
+   }
+   
+   private synchronized ScheduledExecutorService getScheduledExecutor()
+   {
+      if (scheduler_ == null)
+         scheduler_ = Executors.newScheduledThreadPool(1);
+      return scheduler_;
+   }
+   
+   private synchronized void disposeOfScheduler()
+   {
+      if (scheduler_ != null)
+         scheduler_.shutdown();
+      scheduler_ = null;
    }
 
 }
