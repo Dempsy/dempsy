@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy.monitoring.coda;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.tcp.TcpDestination;
+import com.nokia.dempsy.messagetransport.tcp.TcpTransport;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.StatsCollectorFactory;
 import com.yammer.metrics.reporting.ConsoleReporter;
@@ -142,12 +144,22 @@ public class StatsCollectorFactoryCoda implements StatsCollectorFactory {
       // metric namespace hierarchy, is what we'll use, falling back to
       // a constant "local" for non-tcp transports.
       
-      String prefix = "local";
-      if (destination != null && destination instanceof TcpDestination)
+      String prefix;
+      if (destination != null)
       {
-         prefix = ((TcpDestination)destination).getInetAddress().getHostAddress().replaceAll("\\.", "-");
+         if (destination instanceof TcpDestination)
+            prefix = ((TcpDestination)destination).getInetAddress().getHostAddress().replaceAll("\\.", "-");
+         else
+            prefix = destination.toString().replaceAll("\\.", "-");
       }
+      else // destination == null
+      {
+         InetAddress addr = TcpTransport.getInetAddressBestEffort();
+         prefix = (addr != null) ? addr.getHostAddress().replaceAll("\\.", "-") : "local";
+      }
+
       if (logger.isTraceEnabled()) logger.trace("setting prefix to \"" + prefix + "\"");
+      
       return prefix;
    }
    

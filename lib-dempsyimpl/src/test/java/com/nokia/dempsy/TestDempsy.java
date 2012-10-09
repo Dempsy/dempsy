@@ -24,8 +24,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import junit.framework.Assert;
 
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -51,9 +52,11 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
+import com.nokia.dempsy.cluster.DisruptibleSession;
+import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.mpcluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
-import com.nokia.dempsy.router.DefaultRoutingStrategy;
+import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
 public class TestDempsy
 {
@@ -63,7 +66,7 @@ public class TestDempsy
    
    String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
    
-   String[] clusterManagers = new String[]{ "testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/ClusterManager-LocalVmActx.xml" };
+   String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
    String[][] transports = new String[][] {
          { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
@@ -75,10 +78,11 @@ public class TestDempsy
          // this is a hack ... use a ClusterId as a String tuple for comparison
          
          // the passthrough Destination is not serializable but zookeeper requires it to be
-         new ClusterId("testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
+         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
+         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml") , 
          
          // the blockingqueue Destination is not serializable but zookeeper requires it to be
-         new ClusterId("testDempsy/ClusterManager-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
+         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
    });
  
    private static InitZookeeperServerBean zkServer = null;
@@ -95,6 +99,14 @@ public class TestDempsy
    public static void shutdownZookeeper()
    {
       zkServer.stop();
+   }
+   
+   @Before
+   public void init()
+   {
+      KeySourceImpl.disruptSession = false;
+      KeySourceImpl.infinite = false;
+      KeySourceImpl.pause = new CountDownLatch(0);
    }
    
    public static class TestMessage implements Serializable
@@ -190,13 +202,69 @@ public class TestDempsy
    
    public static class KeySourceImpl implements KeySource<String>
    {
+      private Dempsy dempsy = null;
+      private ClusterId clusterId = null;
+      public static volatile boolean disruptSession = false;
+      public static volatile boolean infinite = false;
+      public static volatile CountDownLatch pause = new CountDownLatch(0);
+      public static volatile KSIterable lastCreated = null;
+      
+      public void setDempsy(Dempsy dempsy) { this.dempsy = dempsy; }
+      
+      public void setClusterId(ClusterId clusterId) { this.clusterId = clusterId; }
+      
+      public class KSIterable implements Iterable<String>
+      {
+         public volatile String lastKey = "";
+         public CountDownLatch m_pause = pause;
+         public volatile boolean m_infinite = infinite;
+
+         {
+            lastCreated = this;
+         }
+
+         @Override
+         public Iterator<String> iterator()
+         {
+            return new Iterator<String>()
+            {
+               long count = 0;
+
+               @Override
+               public boolean hasNext() { if (count >= 1) kickClusterInfoMgr(); return m_infinite ? true : (count < 2);  }
+
+               @Override
+               public String next() { try { m_pause.await(); } catch (InterruptedException ie) {} count++; return (lastKey = "test" + count);}
+
+               @Override
+               public void remove() { throw new UnsupportedOperationException(); }
+
+               private void kickClusterInfoMgr() 
+               {
+                  if (!disruptSession)
+                     return;
+                  disruptSession = false; // one disruptSession
+                  Dempsy.Application.Cluster c = dempsy.getCluster(clusterId);
+                  Object session = TestUtils.getSession(c);
+                  if (session instanceof DisruptibleSession)
+                  {
+                     DisruptibleSession dses = (DisruptibleSession)session;
+                     dses.disrupt();
+                  }
+               }
+            };
+         }
+         
+      }
+      
       @Override
       public Iterable<String> getAllPossibleKeys()
       {
-         ArrayList<String> keys = new ArrayList<String>();
-         keys.add("test1");
-         keys.add("test2");
-         return keys;
+         // The array is proxied to create the ability to rip out the cluster manager
+         // in the middle of iterating over the key source. This is to create the 
+         // condition in which the key source is being iterated while the routing strategy
+         // is attempting to get slots.
+         return new KSIterable();
       }
    }
    
@@ -238,19 +306,14 @@ public class TestDempsy
 
             if (! badCombos.contains(new ClusterId(clusterManager,transport)))
             {
+               String pass = " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport;
                try
                {
                   logger.debug("*****************************************************************");
-                  logger.debug(" test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport);
+                  logger.debug(pass);
                   logger.debug("*****************************************************************");
 
-                  DefaultRoutingStrategy.resetOutboundsChecking();
-                  
-                  String[] ctx = new String[4];
-                  ctx[0] = dempsyConfig;
-                  ctx[1] = clusterManager;
-                  ctx[2] = transport;
-                  ctx[3] = "testDempsy/" + applicationContext;
+                  String[] ctx = { dempsyConfig, clusterManager, transport, "testDempsy/" + applicationContext };
 
                   logger.debug("Starting up the appliction context ...");
                   ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
@@ -258,7 +321,7 @@ public class TestDempsy
                   
                   Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
                   
-                  assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, 20, dempsy));
+                  assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, 20, dempsy));
 
                   WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
                   Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
@@ -280,7 +343,7 @@ public class TestDempsy
                }
                catch (AssertionError re)
                {
-                  logger.error("***************** FAILED ON: " + clusterManager + ", " + transport);
+                  logger.error("***************** FAILED ON: " + pass);
                   throw re;
                }
                
@@ -296,7 +359,7 @@ public class TestDempsy
       ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(
             "testDempsy/Dempsy-IndividualClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
-            "testDempsy/ClusterManager-LocalVmActx.xml",
+            "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();
@@ -330,7 +393,7 @@ public class TestDempsy
       new ClassPathXmlApplicationContext(
             "testDempsy/Dempsy-InValidClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
-            "testDempsy/ClusterManager-LocalVmActx.xml",
+            "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
    }
@@ -347,7 +410,7 @@ public class TestDempsy
          actx = new ClassPathXmlApplicationContext(
                "testDempsy/Dempsy.xml",
                "testDempsy/Transport-PassthroughActx.xml",
-               "testDempsy/ClusterManager-LocalVmActx.xml",
+               "testDempsy/ClusterInfo-LocalActx.xml",
                "testDempsy/SimpleMultistageApplicationActx.xml"
                );
          actx.registerShutdownHook();
@@ -501,7 +564,7 @@ public class TestDempsy
                   assertTrue(mp.outputCount.get()>=10);
                }
                
-               public String toString() { return "testOutPutMessage"; }
+               public String toString() { return "testCronOutPutMessage"; }
 
             });
    }
@@ -539,6 +602,18 @@ public class TestDempsy
    @Test
    public void testMpKeyStore() throws Throwable
    {
+      runMpKeyStoreTest("testMpKeyStore");
+   }
+   
+   @Test
+   public void testMpKeyStoreWithFailingClusterManager() throws Throwable
+   {
+      KeySourceImpl.disruptSession = true;
+      runMpKeyStoreTest("testMpKeyStoreWithFailingClusterManager");
+   }
+   
+   public void runMpKeyStoreTest(final String methodName) throws Throwable
+   {
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
           new Checker()   
             {
@@ -556,7 +631,7 @@ public class TestDempsy
                   // instead of the latch we are going to poll for the correct result
                   // wait for it to be received.
                   assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
-
+                  
                   TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
                   adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
 
@@ -574,13 +649,78 @@ public class TestDempsy
                   Assert.assertTrue(nodes.size()>0);
                   Node node = nodes.get(0);
                   Assert.assertNotNull(node);
-                  double duration = node.getStatsCollector().getPreInstantiationDuration();
+                  double duration = ((MetricGetters)node.getStatsCollector()).getPreInstantiationDuration();
                   Assert.assertTrue(duration>0.0);
                }
                
-               public String toString() { return "testMPStartMethod"; }
+               public String toString() { return methodName; }
+            });
+   }
+   
+   @Test
+   public void testOverlappingKeyStoreCalls() throws Throwable
+   {
+      KeySourceImpl.pause = new CountDownLatch(1);
+      KeySourceImpl.infinite = true;
+
+      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
+          new Checker()   
+            {
+               @Override
+               public void check(ApplicationContext context) throws Throwable
+               {
+                  // wait until the KeySourceImpl has been created
+                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null; } }));
+                  final KeySourceImpl.KSIterable firstCreated = KeySourceImpl.lastCreated;
+                  
+                  // start things and verify that the init method was called
+                  Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+                  TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+
+                  Dempsy.Application.Cluster c = dempsy.getCluster(new ClusterId("test-app","test-cluster1"));
+                  assertNotNull(c);
+                  Dempsy.Application.Cluster.Node node = c.getNodes().get(0);
+                  assertNotNull(node);
+                  
+                  MpContainer container = node.getMpContainer();
+                  
+                  // let it go and wait until there's a few keys.
+                  firstCreated.m_pause.countDown();
+                  
+                  // as the KeySource iterates, this will increase
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get() > 10000; } }));
+
+                  // prepare the next countdown latch
+                  KeySourceImpl.pause = new CountDownLatch(0); // just let the 2nd one go
+                  
+                  // I want the next one to stop at 2
+                  KeySourceImpl.infinite = false;
+
+                  // Now force another call while the first is running
+                  container.keyspaceResponsibilityChanged(node.strategyInbound, false, true);
+                  
+                  // wait until the second one is created
+                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null && firstCreated != KeySourceImpl.lastCreated; } }));
+                  
+                  // now the first one should be done and therefore no longer incrementing.
+                  String lastKeyOfFirstCreated = firstCreated.lastKey;
+
+                  // and the second one should be done also and stopped at 2.
+                  final KeySourceImpl.KSIterable secondCreated = KeySourceImpl.lastCreated;
+                  assertTrue(firstCreated != secondCreated);
+                  
+                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return "test2".equals(secondCreated.lastKey); } }));
+                  
+                  Thread.sleep(50);
+                  assertEquals(lastKeyOfFirstCreated,firstCreated.lastKey); // make sure the first one isn't still moving on
+                  assertEquals("test2",secondCreated.lastKey);
+                  
+                  // prepare for the next run
+                  KeySourceImpl.pause = new CountDownLatch(1);
+                  KeySourceImpl.infinite = true;
+               }
+               
+               public String toString() { return "testOverlappingKeyStoreCalls"; }
             });
    }   
-
-
 }

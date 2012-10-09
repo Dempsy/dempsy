@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.mpcluster.zookeeper;
+package com.nokia.dempsy.cluster.zookeeper;
 
 import java.io.IOException;
 
@@ -22,12 +22,12 @@ import javax.inject.Inject;
 
 import org.apache.zookeeper.ZooKeeper;
 
+import com.nokia.dempsy.cluster.ClusterInfoException;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.internal.util.SafeString;
-import com.nokia.dempsy.mpcluster.MpClusterException;
-import com.nokia.dempsy.mpcluster.MpClusterSession;
-import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
 
-public class ZookeeperSessionFactory<T,N> implements MpClusterSessionFactory<T, N>
+public class ZookeeperSessionFactory implements ClusterInfoSessionFactory
 {
    private String connectString;
    private int sessionTimeout;
@@ -40,23 +40,22 @@ public class ZookeeperSessionFactory<T,N> implements MpClusterSessionFactory<T, 
    }
    
    @Override
-   public MpClusterSession<T, N> createSession() throws MpClusterException
+   public ClusterInfoSession createSession() throws ClusterInfoException
    {
-      ZookeeperSession<T, N> ret;
+      ZookeeperSession ret;
       
       // create a new zookeeper instance
       try
       {
-         ret = new ZookeeperSession<T, N>(connectString,sessionTimeout);
+         ret = new ZookeeperSession(connectString,sessionTimeout);
       }
       catch (IOException ioe)
       {
-         throw new MpClusterException("Failed to instantiate a ZooKeeper client (" + 
+         throw new ClusterInfoException("Failed to instantiate a ZooKeeper client (" + 
                ZooKeeper.class.getSimpleName() + ") using the connectString:\"" +
                SafeString.valueOf(connectString) + "\" with the sessionTimeout:" +
                sessionTimeout,ioe);
       }
-      
       
       return ret;
    }

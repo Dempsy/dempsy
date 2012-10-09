@@ -41,7 +41,7 @@ public class TcpDestination implements Destination, Serializable
    @Override
    public String toString()
    {
-      return "(" + inetAddress.getHostAddress() + ":" + port + ")";
+      return "(" + inetAddress.getHostAddress() + (port > 0 ? (":" + port + ")") : "");
    }
    
    @Override

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.mpcluster.zookeeper;
+package com.nokia.dempsy.cluster.zookeeper;
 
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
@@ -38,24 +38,24 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy;
 import com.nokia.dempsy.TestUtils.Condition;
+import com.nokia.dempsy.cluster.ClusterInfoException;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.zookeeper.FullApplication.MyAdaptor;
+import com.nokia.dempsy.cluster.zookeeper.FullApplication.MyMp;
+import com.nokia.dempsy.cluster.zookeeper.FullApplication.MyRankMp;
+import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
-import com.nokia.dempsy.mpcluster.MpClusterException;
-import com.nokia.dempsy.mpcluster.MpClusterSession;
-import com.nokia.dempsy.mpcluster.zookeeper.FullApplication.MyAdaptor;
-import com.nokia.dempsy.mpcluster.zookeeper.FullApplication.MyMp;
-import com.nokia.dempsy.mpcluster.zookeeper.FullApplication.MyRankMp;
-import com.nokia.dempsy.mpcluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
-import com.nokia.dempsy.router.ClusterInformation;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.router.CurrentClusterCheck;
-import com.nokia.dempsy.router.SlotInformation;
+
 
 public class TestFullApp
 {
    private static final String dempsyConfig = "fullApp/Dempsy.xml";
-   private static final String clusterManager = "testDempsy/ClusterManager-ZookeeperActx.xml";
+   private static final String clusterManager = "testDempsy/ClusterInfo-ZookeeperActx.xml";
    private static final String transport = "testDempsy/Transport-TcpActx.xml";
    private static final long baseTimeoutMillis = 10000;
    
@@ -125,7 +125,7 @@ public class TestFullApp
       }
    }
 
-   private ZookeeperSession<ClusterInformation, SlotInformation> zookeeperCluster = null;
+   private ZookeeperSession zookeeperCluster = null;
    
    @Test
    public void testStartForceMpDisconnectStop() throws Throwable
@@ -148,18 +148,18 @@ public class TestFullApp
          // the MyMp cluster.
          zookeeperCluster = null;
          dempsy.setClusterSessionFactory(
-               new ZookeeperSessionFactory<ClusterInformation, SlotInformation>(System.getProperty("zk_connect"), 5000)
+               new ZookeeperSessionFactory(System.getProperty("zk_connect"), 5000)
                {
                   int sessionCount = 0;
 
                   @Override
-                  public synchronized MpClusterSession<ClusterInformation, SlotInformation> createSession() throws MpClusterException
+                  public synchronized ClusterInfoSession createSession() throws ClusterInfoException
                   {
                      sessionCount++;
-                     MpClusterSession<ClusterInformation, SlotInformation> ret = super.createSession();
+                     ClusterInfoSession ret = super.createSession();
 
                      if (sessionCount == 2)
-                        zookeeperCluster = (ZookeeperSession<ClusterInformation, SlotInformation>)ret;
+                        zookeeperCluster = (ZookeeperSession)ret;
                      return ret;
                   }
                });
@@ -182,8 +182,8 @@ public class TestFullApp
 
          assertNotNull(zookeeperCluster);
 
-         assertEquals(0,collector.getDiscardedMessageCount());
-         assertEquals(0,collector.getMessageFailedCount());
+         assertEquals(0,((MetricGetters)collector).getDiscardedMessageCount());
+         assertEquals(0,((MetricGetters)collector).getMessageFailedCount());
 
          // ok ... so now we have stuff going all the way through. let's kick
          // the middle Mp's zookeeper cluster and see what happens.
@@ -258,18 +258,18 @@ public class TestFullApp
          // the MyMp cluster.
          zookeeperCluster = null;
          dempsy.setClusterSessionFactory(
-               new ZookeeperSessionFactory<ClusterInformation, SlotInformation>(System.getProperty("zk_connect"), 5000)
+               new ZookeeperSessionFactory(System.getProperty("zk_connect"), 5000)
                {
                   int sessionCount = 0;
 
                   @Override
-                  public synchronized MpClusterSession<ClusterInformation, SlotInformation> createSession() throws MpClusterException
+                  public synchronized ClusterInfoSession createSession() throws ClusterInfoException
                   {
                      sessionCount++;
-                     MpClusterSession<ClusterInformation, SlotInformation> ret = super.createSession();
+                     ClusterInfoSession ret = super.createSession();
 
                      if (sessionCount == 2)
-                        zookeeperCluster = (ZookeeperSession<ClusterInformation, SlotInformation>)ret;
+                        zookeeperCluster = (ZookeeperSession)ret;
                      return ret;
                   }
                });
@@ -297,8 +297,8 @@ public class TestFullApp
 
          assertNotNull(zookeeperCluster);
 
-         assertEquals(0,collector.getDiscardedMessageCount());
-         assertEquals(0,collector.getMessageFailedCount());
+         assertEquals(0,((MetricGetters)collector).getDiscardedMessageCount());
+         assertEquals(0,((MetricGetters)collector).getMessageFailedCount());
 
          // ok ... so now we have stuff going all the way through. let's kick
          // the middle Mp's zookeeper cluster and see what happens.
@@ -499,7 +499,7 @@ public class TestFullApp
          // an alternate way to get it, since with the stats collector rework
          // we no longer use an independent MetricsRegistry per StatsCollector 
          // instance.
-         assertEquals(0,collector.getDispatchedMessageCount());
+         assertEquals(0,((MetricGetters)collector).getDispatchedMessageCount());
          assertEquals(0,spareprototype.myMpReceived.get());
          
          // now bring down the original

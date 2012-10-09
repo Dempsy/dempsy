@@ -252,6 +252,17 @@ public class TestMpContainer
    }
 
    @Test
+   public void testOutputInvoker() throws Exception {
+     inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+        ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
+        assertTrue("messages received", (out1 != null) );
+
+        assertEquals("number of MP instances", 1, container.getProcessorCount());
+        assertTrue("queue is empty", outputQueue.isEmpty());
+
+   }
+   
+   @Test
    public void testMtInvokeOutput()
    throws Exception
    {
@@ -275,18 +286,6 @@ public class TestMpContainer
       assertEquals("no more messages in queue", 0, outputQueue.size());
    }
 
-
-   @Test
-   public void testOutputInvoker() throws Exception {
-	   inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
-	      ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
-	      assertTrue("messages received", (out1 != null) );
-
-	      assertEquals("number of MP instances", 1, container.getProcessorCount());
-	      assertTrue("queue is empty", outputQueue.isEmpty());
-
-   }
-   
    @Test
    public void testEvictable() throws Exception {
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
@@ -315,7 +314,7 @@ public class TestMpContainer
    }
    
    @Test
-   public void testEvictableWithBusyMp() throws Exception
+   public void testEvictableWithBusyMp() throws Throwable
    {
       // This forces the instantiation of an Mp
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));

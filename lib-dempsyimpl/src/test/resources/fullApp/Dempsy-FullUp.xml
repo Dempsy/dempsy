@@ -11,10 +11,10 @@
    <bean name="dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType">
       <property name="clusterSessionFactory" ref="clusterSessionFactory" />
       <property name="clusterCheck">
-         <bean class="com.nokia.dempsy.mpcluster.zookeeper.TestFullApp.CheckCluster" />
+         <bean class="com.nokia.dempsy.cluster.zookeeper.TestFullApp.CheckCluster" />
       </property>
       <property name="defaultRoutingStrategy">
-         <bean class="com.nokia.dempsy.router.DefaultRoutingStrategy" >
+         <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
             <constructor-arg name="defaultTotalSlots" type="int" value="20" />
             <constructor-arg name="defaultNumNodes" type="int" value="1" />
          </bean>

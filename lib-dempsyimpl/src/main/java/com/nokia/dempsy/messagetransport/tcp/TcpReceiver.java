@@ -21,15 +21,12 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,7 +35,6 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
 import org.apache.commons.io.IOUtils;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MarkerFactory;
@@ -213,7 +209,7 @@ public class TcpReceiver implements Receiver
    {
       try
       {
-         InetAddress inetAddress = useLocalhost ? InetAddress.getLocalHost() : getFirstNonLocalhostInetAddress();
+         InetAddress inetAddress = useLocalhost ? InetAddress.getLocalHost() : TcpTransport.getFirstNonLocalhostInetAddress();
          if (inetAddress == null)
             throw new MessageTransportException("Failed to set the Inet Address for this host. Is there a valid network interface?");
          
@@ -251,21 +247,6 @@ public class TcpReceiver implements Receiver
     * Directs the factory to create TcpDestinations providing the given port number.
     */
    public void setPort(int port) { this.port = port; }
-   
-   private static InetAddress getFirstNonLocalhostInetAddress() throws SocketException
-   {
-      Enumeration<NetworkInterface> netInterfaces=NetworkInterface.getNetworkInterfaces();
-      while(netInterfaces.hasMoreElements()){
-         NetworkInterface networkInterface = (NetworkInterface)netInterfaces.nextElement();
-         for (Enumeration<InetAddress> loopInetAddress = networkInterface.getInetAddresses(); loopInetAddress.hasMoreElements(); )
-         {
-            InetAddress tempInetAddress = loopInetAddress.nextElement();
-            if (!tempInetAddress.isLoopbackAddress() && tempInetAddress instanceof Inet4Address)
-               return tempInetAddress;
-         }
-      }
-      return null;
-   }
    
    protected void bind() throws MessageTransportException
    {

@@ -21,11 +21,11 @@ import java.util.Collection;
 import com.nokia.dempsy.DempsyException;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
-import com.nokia.dempsy.mpcluster.MpCluster;
 import com.nokia.dempsy.router.RoutingStrategy.Outbound.Coordinator;
 
 /**
@@ -58,7 +58,7 @@ import com.nokia.dempsy.router.RoutingStrategy.Outbound.Coordinator;
  * and are therefore defined in the {@link ApplicationDefinition} using a single {@link RoutingStrategy} as
  * part of the {@link ClusterDefinition} that defines <code>Stage2</code>
  * 
- * <p>As an example, the DefaultRoutingStrategy's Inbound and Outbound coordinate
+ * <p>As an example, the DecentralizedRoutingStrategy's Inbound and Outbound coordinate
  * through the cluster. The Inbound side negotiates for slot ownership and those
  * slots contain enough information for the Outbound side </p>
  * 
@@ -90,6 +90,13 @@ public interface RoutingStrategy
        * {@link Outbound} for.
        */
       public ClusterId getClusterId();
+      
+      /**
+       * Since Outbound initialization can take place asynchronously, this method should be implemented
+       * to return true when the outbound's first successful initialization is complete. It's used to
+       * in tests to make sure that an application is completely initialized before proceeding.
+       */
+      public boolean completeInitialization();
       
       /**
        * <p>Each node can have many Outbound instances and those Outbound cluster references
@@ -146,6 +153,17 @@ public interface RoutingStrategy
        * Shut down and reclaim any resources associated with the {@link Inbound} instance.
        */
       public void stop();
+      
+      /**
+       * Since the responsibility for the portion of the keyspace that this node is responsible for
+       * is determined by the Inbound strategy, when that responsibility changes, Dempsy itself
+       * needs to be notified.
+       */
+      public static interface KeyspaceResponsibilityChangeListener
+      {
+         public void keyspaceResponsibilityChanged(Inbound inbound, boolean less, boolean more);
+      }
+      
    }
    
    /**
@@ -161,7 +179,8 @@ public interface RoutingStrategy
     * with 'this' node.
     * @return the {@link Inbound} instance.
     */
-   public Inbound createInbound(MpCluster<ClusterInformation, SlotInformation> cluster, Collection<Class<?>> messageTypes, Destination thisDestination);
+   public Inbound createInbound(ClusterInfoSession cluster, ClusterId clusterId, Collection<Class<?>> messageTypes,
+                                Destination thisDestination, Inbound.KeyspaceResponsibilityChangeListener listener);
    
    /**
     * The RoutingStrategy needs to create an {@link Outbound} that corresponds to the given cluster. It should do this
@@ -174,7 +193,7 @@ public interface RoutingStrategy
     * @return a new {@link Outbound} that manages the selection of a {@link Destination} given a message destined for 
     * the given cluster.
     */
-   public Outbound createOutbound(Outbound.Coordinator coordinator, MpCluster<ClusterInformation, SlotInformation> cluster);
+   public Outbound createOutbound(Outbound.Coordinator coordinator, ClusterInfoSession cluster, ClusterId clusterId);
    
 }
 

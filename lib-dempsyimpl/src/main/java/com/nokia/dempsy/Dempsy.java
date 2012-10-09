@@ -28,10 +28,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MarkerFactory;
 
+import com.nokia.dempsy.cluster.ClusterInfoException;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.container.ContainerException;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
@@ -39,16 +41,10 @@ import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.Transport;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.StatsCollectorFactory;
-import com.nokia.dempsy.mpcluster.MpCluster;
-import com.nokia.dempsy.mpcluster.MpClusterException;
-import com.nokia.dempsy.mpcluster.MpClusterSession;
-import com.nokia.dempsy.mpcluster.MpClusterSessionFactory;
 import com.nokia.dempsy.output.OutputExecuter;
-import com.nokia.dempsy.router.ClusterInformation;
 import com.nokia.dempsy.router.CurrentClusterCheck;
 import com.nokia.dempsy.router.Router;
 import com.nokia.dempsy.router.RoutingStrategy;
-import com.nokia.dempsy.router.SlotInformation;
 import com.nokia.dempsy.serialization.Serializer;
 
 /**
@@ -82,13 +78,12 @@ public class Dempsy
          {
             protected ClusterDefinition clusterDefinition;
             
-            private Router router = null;
+            Router router = null;
             private MpContainer container = null;
-            private RoutingStrategy.Inbound strategyInbound = null;
+            RoutingStrategy.Inbound strategyInbound = null;
             List<Class<?>> acceptedMessageClasses = null;
             Receiver receiver = null;
             StatsCollector statsCollector = null;
-            MpCluster<ClusterInformation, SlotInformation> currentClusterHandle = null;
             
             private Node(ClusterDefinition clusterDefinition) { this.clusterDefinition = clusterDefinition; }
             
@@ -97,7 +92,7 @@ public class Dempsy
             {
                try
                {
-                  MpClusterSession<ClusterInformation, SlotInformation> clusterSession = clusterSessionFactory.createSession();
+                  ClusterInfoSession clusterSession = clusterSessionFactory.createSession();
                   ClusterId currentClusterId = clusterDefinition.getClusterId();
                   router = new Router(clusterDefinition.getParentApplicationDefinition());
                   router.setCurrentCluster(currentClusterId);
@@ -138,16 +133,18 @@ public class Dempsy
                   
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
                   
-                  currentClusterHandle = clusterSession.getCluster(currentClusterId);
-                  
+                  KeySource<?> keySource = clusterDefinition.getKeySource();
+                  if (keySource != null)
+                     container.setKeySource(keySource);
+
                   // there is only an inbound strategy if we have an Mp (that is, we aren't an adaptor) and
                   // we actually accept messages
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
-                     strategyInbound = strategy.createInbound(currentClusterHandle,acceptedMessageClasses, thisDestination);
+                     strategyInbound = strategy.createInbound(clusterSession,currentClusterId,acceptedMessageClasses, thisDestination,container);
                   
                   // this can fail because of down cluster manager server ... but it should eventually recover.
                   try { router.initialize(); }
-                  catch (MpClusterException e)
+                  catch (ClusterInfoException e)
                   {
                      logger.warn("Strategy failed to initialize. Continuing anyway. The cluster manager issue will be resolved automatically.",e);
                   }
@@ -164,46 +161,6 @@ public class Dempsy
                   
                   container.startEvictionThread(Cluster.this.clusterDefinition.getEvictionFrequency(), Cluster.this.clusterDefinition.getEvictionTimeUnit());
                   
-                  final KeySource<?> keySource = clusterDefinition.getKeySource();
-                  if(keySource != null)
-                  {
-                     Thread t = new Thread(new Runnable()
-                     {
-                        @Override
-                        public void run()
-                        {
-                           try{
-                              statsCollector.preInstantiationStarted();
-                              Iterable<?> iterable = keySource.getAllPossibleKeys();
-                              for(Object key: iterable)
-                              {
-                                 try
-                                 {
-                                    if(strategyInbound.doesMessageKeyBelongToNode(key))
-                                    {
-                                          container.getInstanceForKey(key);
-                                    }
-                                 }
-                                 catch(ContainerException e)
-                                 {
-                                    logger.error("Failed to instantiate MP for Key "+key +
-                                          " of type "+key.getClass().getSimpleName(), e);
-                                 }
-                              }
-                           }
-                           catch(Throwable e)
-                           {
-                              logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
-                                    keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
-                           }
-                           finally
-                           {
-                              statsCollector.preInstantiationCompleted();
-                           }
-                        }
-                     }, "Pre-Instantation Thread");
-                     t.start();
-                  }
                }
                catch(RuntimeException e) { throw e; }
                catch(Exception e) { throw new DempsyException(e); }
@@ -240,6 +197,9 @@ public class Dempsy
                   try { strategyInbound.stop(); strategyInbound = null;} catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
             }
             
+            // Only called from tests
+            public Router retouRteg() { return router; }
+
             /**
              * Run any methods annotated PreInitilze on the MessageProcessor prototype
              * @param prototype reference to MessageProcessor prototype
@@ -433,7 +393,7 @@ public class Dempsy
    private List<ApplicationDefinition> applicationDefinitions = null;
    protected List<Application> applications = null;
    private CurrentClusterCheck clusterCheck = null;
-   protected MpClusterSessionFactory<ClusterInformation, SlotInformation> clusterSessionFactory = null;
+   protected ClusterInfoSessionFactory clusterSessionFactory = null;
    private RoutingStrategy defaultRoutingStrategy = null;
    private Serializer<Object> defaultSerializer = null;
    private Transport transport = null;
@@ -544,13 +504,13 @@ public class Dempsy
       }
    }
 
-   public MpClusterSessionFactory<ClusterInformation, SlotInformation> getClusterSessionFactory()
+   public ClusterInfoSessionFactory getClusterSessionFactory()
    {
       return clusterSessionFactory;
    }
 
    @Inject
-   public void setClusterSessionFactory(MpClusterSessionFactory<ClusterInformation, SlotInformation> clusterFactory)   {
+   public void setClusterSessionFactory(ClusterInfoSessionFactory clusterFactory)   {
       this.clusterSessionFactory = clusterFactory;
    }
    
