@@ -39,10 +39,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MarkerFactory;
 
+import com.nokia.dempsy.executor.DefaultDempsyExecutor;
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpReceiver implements Receiver
 {
@@ -62,6 +65,8 @@ public class TcpReceiver implements Receiver
    
    protected boolean useLocalhost = false;
    protected int port = -1;
+   protected DefaultDempsyExecutor executor = null;
+   protected StatsCollector statsCollector;
    
    @PostConstruct
    public synchronized void start() throws MessageTransportException
@@ -134,8 +139,16 @@ public class TcpReceiver implements Receiver
                }, "Server for " + destination);
       
       serverThread.start();
+      
+      executor = new DefaultDempsyExecutor();
+      executor.setCoresFactor(1.0);
+      executor.setAdditionalThreads(1);
+      executor.start();
     }
    
+   @Override
+   public void setStatsCollector(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
+
    /**
     * When an overflow handler is set the Adaptor indicates that a 'failFast' should happen
     * and any failed message deliveries end up passed to the overflow handler. 
@@ -180,6 +193,7 @@ public class TcpReceiver implements Receiver
             logger.warn("Couldn't release the socket accept for " + destination);
       }
       
+      executor.shutdown();
    }
    
    public synchronized boolean isStarted()
@@ -318,9 +332,28 @@ public class TcpReceiver implements Receiver
                      {
                         try
                         {
-                            boolean messageSuccess = messageTransportListener.onMessage( messageBytes, overflowHandler != null );
-                            if (overflowHandler != null && !messageSuccess)
-                               overflowHandler.overflow(messageBytes);
+                           final byte[] pass = messageBytes;
+                           executor.submitLimited(new DempsyExecutor.Rejectable<Object>()
+                           {
+                              byte[] message = pass;
+                              
+                              @Override
+                              public Object call() throws Exception
+                              {
+                                 boolean messageSuccess = messageTransportListener.onMessage( message, overflowHandler != null );
+                                 if (overflowHandler != null && !messageSuccess)
+                                    overflowHandler.overflow(message);
+                                 return null;
+                              }
+
+                              @Override
+                              public void rejected()
+                              {
+                                 if (statsCollector != null)
+                                    statsCollector.messageDiscarded(message);
+                              }
+                           });
+                           
                         }
                         catch (Throwable se)
                         {

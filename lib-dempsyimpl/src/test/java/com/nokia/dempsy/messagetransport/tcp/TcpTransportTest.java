@@ -40,11 +40,14 @@ import org.slf4j.LoggerFactory;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.nokia.dempsy.TestUtils;
+import com.nokia.dempsy.executor.DefaultDempsyExecutor;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
+import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
 
 public class TcpTransportTest
 {
@@ -510,15 +513,39 @@ public class TcpTransportTest
       Set<String> receivedStringMessages = new HashSet<String>();
       AtomicReference<RuntimeException> throwThisOnce = new AtomicReference<RuntimeException>();
       AtomicLong numMessages = new AtomicLong(0);
+      Object latch = null;
+      AtomicLong numIn = new AtomicLong(0);
+      
+      public StringListener() {}
+      
+      public StringListener(Object latch) { this.latch = latch; }
       
       @Override
-      public synchronized boolean onMessage(byte[] messageBytes, boolean failfast ) throws MessageTransportException
+      public boolean onMessage(byte[] messageBytes, boolean failfast ) throws MessageTransportException
       {
-         receivedStringMessages.add( new String( messageBytes ) );
-         numMessages.incrementAndGet();
-         if (throwThisOnce.get() != null)
-            throw throwThisOnce.getAndSet(null);
-         return true;
+         try
+         {
+            numIn.incrementAndGet();
+            if (latch != null)
+            {
+               synchronized(latch)
+               {
+                  try { latch.wait(); } catch (InterruptedException e) { throw new RuntimeException(e); }
+               }
+            }
+            synchronized(this)
+            {
+               receivedStringMessages.add( new String( messageBytes ) );
+            }
+            numMessages.incrementAndGet();
+            if (throwThisOnce.get() != null)
+               throw throwThisOnce.getAndSet(null);
+            return true;
+         }
+         finally
+         {
+            numIn.decrementAndGet();
+         }
       }
 
       @Override
@@ -603,5 +630,99 @@ public class TcpTransportTest
          }
       } : new TcpSenderFactory();
    }
+   
+   @Test
+   public void transportMTWorkerMessage() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost) throws Throwable
+         {
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            try
+            {
+               //===========================================
+               // setup the sender and receiver
+               adaptor = new TcpReceiver();
+               final Object latch = new Object();
+               BasicStatsCollector statsCollector = new BasicStatsCollector();
+               adaptor.setStatsCollector(statsCollector);
+               StringListener receiver = new StringListener(latch);
+               adaptor.setListener(receiver);
+               factory = makeSenderFactory(false); // distruptible sender factory
+
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+
+               // send a message
+               final Sender sender = factory.getSender(destination);
+               
+               final int numAdaptorThreads = adaptor.executor.getNumThreads();
+               
+               assertTrue(numAdaptorThreads > 1);
+               
+               // send as many messages as there are threads.
+               
+               for (int i = 0; i < (((DefaultDempsyExecutor)adaptor.executor).getMaxNumberOfQueuedLimitedTasks() + adaptor.executor.getNumThreads()); i++)
+                  sender.send("Hello".getBytes());
+               
+               // wait until all Listeners are in and all threads enqueued
+               assertTrue(TestUtils.poll(baseTimeoutMillis, receiver, new TestUtils.Condition<StringListener>() 
+                     { @Override public boolean conditionMet(StringListener o) { return o.numIn.get() == numAdaptorThreads; } }));
+
+               assertTrue(TestUtils.poll(baseTimeoutMillis, ((DefaultDempsyExecutor)adaptor.executor), new TestUtils.Condition<DefaultDempsyExecutor>() 
+                     { @Override public boolean conditionMet(DefaultDempsyExecutor o) { return o.getCurrentQueuedLimitedTasks() == o.getMaxNumberOfQueuedLimitedTasks(); } }));
+
+               assertEquals(0,statsCollector.getDiscardedMessageCount());
+               
+               // we are going to poll but we are going to keep adding to the queu of tasks. So we add 2, let one go, 
+               //  until we start seeing rejects. 
+
+               assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, 
+                     new TestUtils.Condition<BasicStatsCollector>() { 
+                  @Override public boolean conditionMet(BasicStatsCollector o) throws Throwable
+                  {
+                     sender.send("Hello".getBytes());
+                     sender.send("Hello".getBytes());
+                     
+                     synchronized(latch)
+                     {
+                        latch.notify(); // single exit.
+                     }
+
+                     return o.getDiscardedMessageCount() > 0;
+                  }
+               }));
+               
+               
+               receiver.latch = null;
+               synchronized(latch) { latch.notifyAll(); }
+               
+               adaptor.stop();
+               
+               synchronized(latch) { latch.notifyAll(); }
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "testTransportSimpleMessage"; }
+      });
+   }
+   
 
 }
