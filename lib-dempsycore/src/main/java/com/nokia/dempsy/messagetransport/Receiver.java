@@ -16,12 +16,15 @@
 
 package com.nokia.dempsy.messagetransport;
 
+import com.nokia.dempsy.monitoring.StatsCollector;
+
 public interface Receiver
 {
-
    public Destination getDestination() throws MessageTransportException;
    
    public void setListener(Listener listener) throws MessageTransportException;
+   
+   public void setStatsCollector(StatsCollector statsCollector);
 
    public void stop();
 }
