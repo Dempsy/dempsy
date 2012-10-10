@@ -29,6 +29,7 @@ import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 /**
  * This transport is basically an inVM transport where the call-stack becomes 
@@ -69,7 +70,7 @@ public class PassthroughTransport implements Transport
          public void stop() { isStopped = true; }
       };
    }
-
+   
    @Override
    public Receiver createInbound() throws MessageTransportException
    {
@@ -77,6 +78,9 @@ public class PassthroughTransport implements Transport
       {
          List<Listener> listeners = new CopyOnWriteArrayList<Listener>();
          
+         @Override
+         public void setStatsCollector(StatsCollector statsCollector) { }
+
          Sender sender = new Sender()
          {
             @Override

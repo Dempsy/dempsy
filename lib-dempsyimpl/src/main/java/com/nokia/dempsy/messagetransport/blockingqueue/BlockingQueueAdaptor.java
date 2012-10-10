@@ -31,6 +31,7 @@ import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Listener;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 /**
  * <p>The Message transport default library comes with this BlockingQueue implementation.</p>
@@ -86,6 +87,9 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
       }
    }
    
+   @Override
+   public void setStatsCollector(StatsCollector statsCollector) { }
+
    @Override
    public void run()
    {
