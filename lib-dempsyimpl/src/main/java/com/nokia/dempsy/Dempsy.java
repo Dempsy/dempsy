@@ -129,6 +129,8 @@ public class Dempsy
                            receiver != null ? thisDestination : null);
                      router.setStatsCollector(statsCollector);
                      container.setStatCollector(statsCollector);
+                     if (receiver != null)
+                        receiver.setStatsCollector(statsCollector);
                   }
                   
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
