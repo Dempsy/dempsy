@@ -143,6 +143,7 @@ public class TcpReceiver implements Receiver
       executor = new DefaultDempsyExecutor();
       executor.setCoresFactor(1.0);
       executor.setAdditionalThreads(1);
+      executor.setMaxNumberOfQueuedLimitedTasks(10000);
       executor.start();
     }
    

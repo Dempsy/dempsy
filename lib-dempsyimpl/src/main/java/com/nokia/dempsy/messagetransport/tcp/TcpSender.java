@@ -54,7 +54,6 @@ public class TcpSender implements Sender
          DataOutputStream localDataOutputStream = getDataOutputStream();
 
          localDataOutputStream.writeInt( messageBytes.length );
-         localDataOutputStream.flush();
          localDataOutputStream.write( messageBytes );
          localDataOutputStream.flush();
       }

@@ -73,6 +73,8 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    
    public int getMaxNumberOfQueuedLimitedTasks() { return (int)maxNumWaitingLimitedTasks; }
    
+   public void setMaxNumberOfQueuedLimitedTasks(int maxNumWaitingLimitedTasks) { this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks; }
+   
    public int getCurrentQueuedLimitedTasks() { return (int)numLimited.get(); }
    
    @Override
