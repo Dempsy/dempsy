@@ -219,7 +219,8 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       return new ZooKeeper(connectString, sessionTimeout, new ZkWatcher());
    }
    
-   private class WatcherProxy implements Watcher
+   // protected for test access only
+   protected class WatcherProxy implements Watcher
    {
       private ClusterInfoWatcher watcher;
       
@@ -267,11 +268,17 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       public Object call(ZooKeeper cur, String path, WatcherProxy watcher, Object userdata) throws KeeperException, InterruptedException, SerializationException;
    }
    
+   // This is broken out in order to be intercepted in tests
+   protected WatcherProxy makeWatcherProxy(ClusterInfoWatcher watcher)
+   {
+      return new WatcherProxy(watcher);
+   }
+   
    private Object callZookeeper(String name, String path, ClusterInfoWatcher watcher, Object userdata, ZookeeperCall callee) throws ClusterInfoException
    {
       if (isRunning)
       {
-         WatcherProxy wp = watcher != null ? new WatcherProxy(watcher) : null;
+         WatcherProxy wp = watcher != null ? makeWatcherProxy(watcher) : null;
          if (wp != null)
          {
             synchronized (registeredWatchers)
@@ -334,14 +341,51 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
             @Override
             public void run()
             {
+               if (logger.isTraceEnabled())
+                  logger.trace("Executing ZooKeeper client reset.");
+               
                ZooKeeper newZk = null;
                try
                {
                   newZk = makeZooKeeperClient(connectString, sessionTimeout);
+
+                  // this is true if the reset worked and we're not in the process
+                  // of shutting down.
+                  if (newZk != null)
+                  {
+                     // we want the setNewZookeeper and the clearing of the
+                     // beingReset flag to be atomic so future failures that result
+                     // in calls to resetZookeeper will either:
+                     //   1) be skipped because they are for an older ZooKeeper instance.
+                     //   2) be executed because they are for this new ZooKeeper instance.
+                     // what we dont want is the possibility that the reset will be skipped
+                     // even though the reset is called for this new ZooKeeper, but we haven't cleared
+                     // the beingReset flag yet.
+                     synchronized(ZookeeperSession.this)
+                     {
+                        setNewZookeeper(newZk);
+                        beingReset = false;
+                     }
+                     
+                     // now notify the watchers
+                     Collection<WatcherProxy> twatchers = new ArrayList<WatcherProxy>();
+                     synchronized(registeredWatchers)
+                     {
+                        twatchers.addAll(registeredWatchers);
+                     }
+                     
+                     for (WatcherProxy watcher : twatchers)
+                        watcher.process(null);
+                  }
                }
                catch (IOException e)
                {
-                  logger.warn("Failed to reset the ZooKeeper connection to " + connectString);
+                  logger.warn("Failed to reset the ZooKeeper connection to " + connectString,e);
+                  newZk = null;
+               }
+               catch (RuntimeException e)
+               {
+                  logger.warn("Failed to reset the ZooKeeper connection to " + connectString,e);
                   newZk = null;
                }
                finally
@@ -351,39 +395,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
                      scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
                }
 
-               // this is true if the reset worked and we're not in the process
-               // of shutting down.
-               if (newZk != null && isRunning)
-               {
-                  // we want the setNewZookeeper and the clearing of the
-                  // beingReset flag to be atomic so future failures that result
-                  // in calls to resetZookeeper will either:
-                  //   1) be skipped because they are for an older ZooKeeper instance.
-                  //   2) be executed because they are for this new ZooKeeper instance.
-                  // what we dont want is the possibility that the reset will be skipped
-                  // even though the reset is called for this new ZooKeeper, but we haven't cleared
-                  // the beingReset flag yet.
-                  synchronized(ZookeeperSession.this)
-                  {
-                     setNewZookeeper(newZk);
-                     beingReset = false;
-                  }
-                  
-                  // now notify the watchers
-                  Collection<WatcherProxy> twatchers = new ArrayList<WatcherProxy>();
-                  synchronized(registeredWatchers)
-                  {
-                     twatchers.addAll(registeredWatchers);
-                  }
-                  
-                  for (WatcherProxy watcher : twatchers)
-                     watcher.process(null);
-               }
-               else if (newZk != null)
-               {
-                  // in this case with zk == null we're shutting down.
-                  try { newZk.close(); } catch (Throwable th) {}
-               }
             }
          }, resetDelay, TimeUnit.MILLISECONDS);
       }
