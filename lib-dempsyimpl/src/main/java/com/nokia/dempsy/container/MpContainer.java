@@ -835,10 +835,6 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
                   ". The value returned from the clone call appears to be null.");
 
-         wrapper = new InstanceWrapper(instance); // null check above.
-         instances.put(key, wrapper);
-         statCollector.messageProcessorCreated(key);
-
          // activate
          byte[] data = null;
          if (logger.isTraceEnabled())
@@ -870,6 +866,13 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             throw new ContainerException("the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +  
                   " because of an unknown exception.",e);
          }
+
+         // we only want to create a wrapper and place the instance into the container
+         //  if the instance activated correctly. If we got here then the above try block
+         //  must have been succesful.
+         wrapper = new InstanceWrapper(instance); // null check above.
+         instances.put(key, wrapper);
+         statCollector.messageProcessorCreated(key);
 
          return wrapper;
       }
