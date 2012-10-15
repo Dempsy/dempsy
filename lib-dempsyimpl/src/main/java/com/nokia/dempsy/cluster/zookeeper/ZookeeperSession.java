@@ -373,12 +373,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
                         {
                            setNewZookeeper(newZk);
                            beingReset = null;
-                           try { scheduler.shutdownNow(); } 
-                           catch (Throwable th)
-                           {
-                              logger.error("Failed to shut down ScheduledExecutorService. This may result in a thread leak.",th);
-                           }
-                           scheduler = null;
                         }
 
                         // now notify the watchers
