@@ -372,6 +372,9 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
                         {
                            setNewZookeeper(newZk);
                            beingReset = null;
+                           if (scheduler != null)
+                              scheduler.shutdown();
+                           scheduler = null;
                         }
 
                         // now notify the watchers
