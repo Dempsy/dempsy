@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -324,80 +325,110 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       throw new ClusterInfoException(name + " called on stopped ZookeeperSession.");
    }
    
-   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-   private volatile boolean beingReset = false;
+   private ScheduledExecutorService scheduler = null;
+   private volatile ScheduledFuture<?> beingReset = null;
    
    private synchronized void resetZookeeper(ZooKeeper failedInstance)
    {
-      AtomicReference<ZooKeeper> tmpZkRef = zkref;
-      // if we're not shutting down (which would be indicated by tmpZkRef == null
-      //   and if the failedInstance we're trying to reset is the current one, indicated by tmpZkRef.get() == failedInstance
-      //   and if we're not already working on beingReset
-      if (tmpZkRef != null && tmpZkRef.get() == failedInstance && !beingReset)
+      if (!isRunning)
+         logger.error("resetZookeeper called on stopped ZookeeperSession.");
+      
+      try
       {
-         beingReset = true;
-         scheduler.schedule(new Runnable()
+         AtomicReference<ZooKeeper> tmpZkRef = zkref;
+         // if we're not shutting down (which would be indicated by tmpZkRef == null
+         //   and if the failedInstance we're trying to reset is the current one, indicated by tmpZkRef.get() == failedInstance
+         //   and if we're not already working on beingReset
+         if (tmpZkRef != null && tmpZkRef.get() == failedInstance && (beingReset == null || beingReset.isDone()))
          {
-            @Override
-            public void run()
+            if (scheduler == null)
+               scheduler = Executors.newScheduledThreadPool(1);
+            
+            beingReset = scheduler.schedule(new Runnable()
             {
-               if (logger.isTraceEnabled())
-                  logger.trace("Executing ZooKeeper client reset.");
-               
-               ZooKeeper newZk = null;
-               try
+               @Override
+               public void run()
                {
-                  newZk = makeZooKeeperClient(connectString, sessionTimeout);
+//                  if (logger.isTraceEnabled())
+                     logger.error("Executing ZooKeeper client reset.");
 
-                  // this is true if the reset worked and we're not in the process
-                  // of shutting down.
-                  if (newZk != null)
+                  ZooKeeper newZk = null;
+                  try
                   {
-                     // we want the setNewZookeeper and the clearing of the
-                     // beingReset flag to be atomic so future failures that result
-                     // in calls to resetZookeeper will either:
-                     //   1) be skipped because they are for an older ZooKeeper instance.
-                     //   2) be executed because they are for this new ZooKeeper instance.
-                     // what we dont want is the possibility that the reset will be skipped
-                     // even though the reset is called for this new ZooKeeper, but we haven't cleared
-                     // the beingReset flag yet.
-                     synchronized(ZookeeperSession.this)
-                     {
-                        setNewZookeeper(newZk);
-                        beingReset = false;
-                     }
-                     
-                     // now notify the watchers
-                     Collection<WatcherProxy> twatchers = new ArrayList<WatcherProxy>();
-                     synchronized(registeredWatchers)
-                     {
-                        twatchers.addAll(registeredWatchers);
-                     }
-                     
-                     for (WatcherProxy watcher : twatchers)
-                        watcher.process(null);
-                  }
-               }
-               catch (IOException e)
-               {
-                  logger.warn("Failed to reset the ZooKeeper connection to " + connectString,e);
-                  newZk = null;
-               }
-               catch (RuntimeException e)
-               {
-                  logger.warn("Failed to reset the ZooKeeper connection to " + connectString,e);
-                  newZk = null;
-               }
-               finally
-               {
-                  if (newZk == null && isRunning)
-                     // reschedule me.
-                     scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
-               }
+                     newZk = makeZooKeeperClient(connectString, sessionTimeout);
 
-            }
-         }, resetDelay, TimeUnit.MILLISECONDS);
+                     // this is true if the reset worked and we're not in the process
+                     // of shutting down.
+                     if (newZk != null)
+                     {
+                        // we want the setNewZookeeper and the clearing of the
+                        // beingReset flag to be atomic so future failures that result
+                        // in calls to resetZookeeper will either:
+                        //   1) be skipped because they are for an older ZooKeeper instance.
+                        //   2) be executed because they are for this new ZooKeeper instance.
+                        // what we dont want is the possibility that the reset will be skipped
+                        // even though the reset is called for this new ZooKeeper, but we haven't cleared
+                        // the beingReset flag yet.
+                        synchronized(ZookeeperSession.this)
+                        {
+                           setNewZookeeper(newZk);
+                           beingReset = null;
+                           try { scheduler.shutdownNow(); } 
+                           catch (Throwable th)
+                           {
+                              logger.error("Failed to shut down ScheduledExecutorService. This may result in a thread leak.",th);
+                           }
+                           scheduler = null;
+                        }
+
+                        // now notify the watchers
+                        Collection<WatcherProxy> twatchers = new ArrayList<WatcherProxy>();
+                        synchronized(registeredWatchers)
+                        {
+                           twatchers.addAll(registeredWatchers);
+                        }
+
+                        for (WatcherProxy watcher : twatchers)
+                           watcher.process(null);
+                     }
+                  }
+//                  catch (IOException e)
+//                  {
+//                     logger.warn("Failed to reset the ZooKeeper connection to " + connectString,e);
+//                     newZk = null;
+//                  }
+                  catch (Throwable e)
+                  {
+                     logger.warn("Failed to reset the ZooKeeper connection to " + connectString,e);
+                     newZk = null;
+                  }
+                  finally
+                  {
+                     if (newZk == null && isRunning)
+                        // reschedule me.
+                        scheduler.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
+                  }
+
+               }
+            }, resetDelay, TimeUnit.MILLISECONDS);
+         }
       }
+      catch(Throwable re)
+      {
+         beingReset = null;
+         logger.error("resetZookeeper failed for attempted reset to " + connectString,re);
+         try
+         {
+            if (scheduler != null)
+               scheduler.shutdownNow();
+         }
+         catch (Throwable th)
+         {
+            logger.error("Failed to shut down ScheduledExecutorService. This may result in a thread leak.",th);
+         }
+         scheduler = null;
+      }
+      
    }
 
    private synchronized void setNewZookeeper(ZooKeeper newZk)
