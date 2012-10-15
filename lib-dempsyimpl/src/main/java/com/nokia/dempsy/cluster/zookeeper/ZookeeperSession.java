@@ -312,7 +312,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          }
          catch(InterruptedException e)
          {
-            resetZookeeper(cur);
             throw new ClusterInfoException("Interrupted while trying to " + name + " at " + path,e);
          }
          catch(SerializationException e)

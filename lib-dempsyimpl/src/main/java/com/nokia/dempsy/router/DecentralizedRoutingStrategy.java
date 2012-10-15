@@ -270,8 +270,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             }
             alreadyHere = true;
             
-            if (logger.isTraceEnabled())
-               logger.trace("Resetting Inbound Strategy for cluster " + clusterId);
+//            if (logger.isTraceEnabled())
+               logger.error("Resetting Inbound Strategy for cluster " + clusterId);
             
             int minNodeCount = defaultNumNodes;
             int totalAddressNeeded = defaultTotalSlots;
