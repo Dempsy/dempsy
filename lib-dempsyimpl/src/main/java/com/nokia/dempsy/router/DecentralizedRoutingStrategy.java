@@ -26,6 +26,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,7 +78,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          this.coordinator = coordinator;
          this.clusterSession = cluster;
          this.clusterId = clusterId;
-         execSetupDestinations(false);
+         execSetupDestinations();
       }
 
       @Override
@@ -100,7 +101,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       @Override
       public void process()
       {
-         execSetupDestinations(true);
+         execSetupDestinations();
       }
       
       @Override
@@ -185,7 +186,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          return false;
       }
       
-      private void execSetupDestinations(final boolean fromProcess)
+      private void execSetupDestinations()
       {
          if (!setupDestinations())
          {
@@ -255,6 +256,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       
       boolean alreadyHere = false;
       boolean recurseAttempt = false;
+      ScheduledFuture<?> currentlyWaitingOn = null;
       
       private synchronized void acquireSlots(final boolean fromProcess)
       {
@@ -269,6 +271,14 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                return;
             }
             alreadyHere = true;
+            
+            // ok ... we're going to execute this now. So if we have an outstanding scheduled task we
+            // need to cancel it.
+            if (currentlyWaitingOn != null)
+            {
+               currentlyWaitingOn.cancel(false);
+               currentlyWaitingOn = null;
+            }
             
 //            if (logger.isTraceEnabled())
                logger.error("Resetting Inbound Strategy for cluster " + clusterId);
@@ -345,10 +355,12 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             alreadyHere = false;
             
             if (retry)
-               scheduler.schedule(new Runnable(){
+            {
+               currentlyWaitingOn = scheduler.schedule(new Runnable(){
                   @Override
                   public void run() { acquireSlots(fromProcess); }
                }, resetDelay, TimeUnit.MILLISECONDS);
+            }
          }
       }
       

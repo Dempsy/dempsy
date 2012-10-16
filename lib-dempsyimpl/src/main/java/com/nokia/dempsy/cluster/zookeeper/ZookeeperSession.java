@@ -262,6 +262,15 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
             }
          }
       }
+
+      @Override
+      public boolean equals(Object o) { return watcher.equals(((WatcherProxy)o).watcher); }
+      
+      @Override
+      public int hashCode() { return watcher.hashCode(); }
+      
+      @Override
+      public String toString() { return SafeString.valueOfClass(watcher); }
    }
    
    private interface ZookeeperCall

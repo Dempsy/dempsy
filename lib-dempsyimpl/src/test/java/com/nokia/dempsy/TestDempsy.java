@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -52,6 +53,7 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
@@ -135,6 +137,7 @@ public class TestDempsy
       public CountDownLatch outputLatch = new CountDownLatch(10);
       public AtomicInteger startCalls = new AtomicInteger(0);
       public AtomicInteger cloneCalls = new AtomicInteger(0);
+      public AtomicLong handleCalls = new AtomicLong(0);
       
       @Start
       public void start()
@@ -146,6 +149,7 @@ public class TestDempsy
       public void handle(TestMessage message)
       {
          lastReceived.set(message);
+         handleCalls.incrementAndGet();
       }
       
       @Override
@@ -475,7 +479,8 @@ public class TestDempsy
                
                public String toString() { return "testMPStartMethod"; }
             });
-   }   
+   }
+   
    @Test
    public void testMessageThrough() throws Throwable
    {
@@ -517,6 +522,77 @@ public class TestDempsy
                public String toString() { return "testMessageThrough"; }
             });
    }
+   
+   @Test
+   public void testMessageThroughWithClusterFailure() throws Throwable
+   {
+      runAllCombinations("SinglestageApplicationActx.xml",
+            new Checker()
+            {
+               @Override
+               public void check(ApplicationContext context) throws Throwable
+               {
+                  // check that the message didn't go through.
+                  Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+                  TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+
+                  final AtomicReference<TestMessage> msg = new AtomicReference<TestMessage>();
+                  final TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
+                  // now send a message through
+                  
+                  TestMessage message = new TestMessage("HereIAm - testMessageThrough");
+                  adaptor.pushMessage(message);
+                  
+                  // instead of the latch we are going to poll for the correct result
+                  // wait for it to be received.
+                  msg.set(message);
+                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return msg.get().equals(mp.lastReceived.get()); } }));
+                  
+                  assertEquals(adaptor.lastSent,message);
+                  assertEquals(adaptor.lastSent,mp.lastReceived.get());
+                  
+                  // now go into a disruption loop
+                  ClusterInfoSession session = TestUtils.getSession(dempsy.getCluster(new ClusterId("test-app","test-cluster1")));
+                  assertNotNull(session);
+                  DisruptibleSession dsess = (DisruptibleSession) session;
+                  
+                  final AtomicBoolean stopSending = new AtomicBoolean(false);
+                  
+                  Thread thread = new Thread(new Runnable()
+                  {
+                     
+                     @Override
+                     public void run()
+                     {
+                        long count = 0;
+                        while (!stopSending.get())
+                        {
+                           adaptor.pushMessage(new TestMessage("Hello:" + count++));
+                           try { Thread.sleep(1); } catch (Throwable th) {}
+                        }
+                     }
+                  });
+                  
+                  thread.setDaemon(true);
+                  thread.start();
+                  
+                  for (int i = 0; i < 10; i++)
+                  {
+                     logger.trace("=========================");
+                     dsess.disrupt();
+                     
+                     // now wait until more messages come through
+                     final long curCount = mp.handleCalls.get();
+                     assertTrue(poll(baseTimeoutMillis,mp, new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get() > curCount; } }));
+                  }
+                  
+                  stopSending.set(true);
+               }
+               
+               public String toString() { return "testMessageThrough"; }
+            });
+   }
+
    
    @Test
    public void testOutPutMessage() throws Throwable
