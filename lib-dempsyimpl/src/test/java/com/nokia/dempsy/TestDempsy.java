@@ -78,6 +78,9 @@ public class TestDempsy
          { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml" }
    };
    
+   String[] serializers = new String[]
+         { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml" };
+   
    // bad combinations.
    List<ClusterId> badCombos = Arrays.asList(new ClusterId[] {
          // this is a hack ... use a ClusterId as a String tuple for comparison
@@ -118,6 +121,9 @@ public class TestDempsy
    {
       private static final long serialVersionUID = 1L;
       private String val;
+      
+      @SuppressWarnings("unused") // required for Kryo
+      private TestMessage() {} 
       
       public TestMessage(String val) { this.val = val; }
       
@@ -176,7 +182,7 @@ public class TestDempsy
       @Override
       public void overflow(byte[] messageBytes)
       {
-         System.out.println("Overflow:" + messageBytes);
+         logger.debug("Overflow:" + messageBytes);
       }
       
    }
@@ -307,20 +313,22 @@ public class TestDempsy
          {
             // select one of the alternatingTransports
             String transport = alternatingTransports[runCount % alternatingTransports.length];
+            
+            String serializer = serializers[runCount % serializers.length];
 
             // alternate the dempsy configs
             String dempsyConfig = dempsyConfigs[runCount % dempsyConfigs.length];
 
             if (! badCombos.contains(new ClusterId(clusterManager,transport)))
             {
-               String pass = " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport;
+               String pass = " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + serializer + "," + transport;
                try
                {
                   logger.debug("*****************************************************************");
                   logger.debug(pass);
                   logger.debug("*****************************************************************");
 
-                  String[] ctx = { dempsyConfig, clusterManager, transport, "testDempsy/" + applicationContext };
+                  String[] ctx = { dempsyConfig, clusterManager, transport, serializer, "testDempsy/" + applicationContext };
 
                   logger.debug("Starting up the appliction context ...");
                   ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
@@ -367,6 +375,7 @@ public class TestDempsy
             "testDempsy/Dempsy-IndividualClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();
@@ -401,6 +410,7 @@ public class TestDempsy
             "testDempsy/Dempsy-InValidClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
    }
@@ -453,6 +463,7 @@ public class TestDempsy
                "testDempsy/Dempsy.xml",
                "testDempsy/Transport-PassthroughActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
+               "testDempsy/Serializer-KryoActx.xml",
                "testDempsy/SimpleMultistageApplicationActx.xml"
                );
          actx.registerShutdownHook();

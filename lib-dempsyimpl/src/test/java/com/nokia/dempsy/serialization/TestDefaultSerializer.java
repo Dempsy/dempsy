@@ -14,28 +14,53 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.serialization.java;
+package com.nokia.dempsy.serialization;
 
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-import com.nokia.dempsy.serialization.Serializer;
+import com.nokia.dempsy.serialization.java.JavaSerializer;
+import com.nokia.dempsy.serialization.kryo.KryoSerializer;
+import com.nokia.dempsy.serialization.kryo.Registration;
 
 public class TestDefaultSerializer 
 {
-
    private static final int TEST_NUMBER = 42;
    private static final String TEST_STRING = "life, the universe and everything";
    
-   private Serializer<MockClass> serializer = new JavaSerializer<MockClass>();
    private MockClass o1 = new MockClass(TEST_NUMBER, TEST_STRING);
    
-
    @Test
-   public void testSerializeDeserialize() throws Exception
+   public void testJavaSerializeDeserialize() throws Throwable
+   {
+      runSerializer(new JavaSerializer<MockClass>());
+   }
+   
+   @Test
+   public void testKryoSerializeDeserialize() throws Throwable
+   {
+      runSerializer(new KryoSerializer<MockClass>());
+   }
+   
+   @Test
+   public void testKryoSerializeDeserializeWithRegister() throws Throwable
+   {
+      KryoSerializer<MockClass> ser1 = new KryoSerializer<MockClass>();
+      runSerializer(ser1);
+      KryoSerializer<MockClass> ser2 = 
+            new KryoSerializer<MockClass>(new Registration(MockClass.class.getName(),10));
+      runSerializer(ser2);
+      
+      byte[] d1 = ser1.serialize(o1);
+      byte[] d2 = ser2.serialize(o1);
+      assertTrue(d2.length < d1.length);
+   }
+   
+   private void runSerializer(Serializer<MockClass> serializer) throws Throwable
    {
       byte[] data = serializer.serialize(o1);
       assertNotNull(data);
