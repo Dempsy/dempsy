@@ -68,5 +68,38 @@ public class TestDefaultSerializer
       assertNotNull(o2);
       assertEquals(o1, o2);
    }
+   
+   public static class Mock2
+   {
+      private final int i;
+      private final MockClass mock;
+      
+      public Mock2() 
+      {
+         i = 5;
+         mock = null;
+      }
+      
+      public Mock2(int i, MockClass mock)
+      { 
+         this.i = i;
+         this.mock = mock;
+      }
+      
+      public int getInt() { return i; }
+      
+      public MockClass getMockClass() { return mock; }
+   }
+   
+   @Test
+   public void testKryoWithFinalFields() throws Throwable
+   {
+      KryoSerializer<Object> ser = new KryoSerializer<Object>();
+      Mock2 o = new Mock2(1, new MockClass(2, "Hello"));
+      byte[] data = ser.serialize(o);
+      Mock2 o2 = (Mock2)ser.deserialize(data);
+      assertEquals(1,o2.getInt());
+      assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
+   }
       
 }
