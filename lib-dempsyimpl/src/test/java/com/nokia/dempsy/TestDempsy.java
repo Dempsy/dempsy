@@ -46,6 +46,8 @@ import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.annotations.MessageHandler;
@@ -62,6 +64,7 @@ import com.nokia.dempsy.executor.DefaultDempsyExecutor;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiverAccess;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
+import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 
 public class TestDempsy
 {
@@ -79,7 +82,7 @@ public class TestDempsy
    };
    
    String[] serializers = new String[]
-         { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml" };
+         { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml", "testDempsy/Serializer-KryoOptimizedActx.xml" };
    
    // bad combinations.
    List<ClusterId> badCombos = Arrays.asList(new ClusterId[] {
@@ -115,6 +118,7 @@ public class TestDempsy
       KeySourceImpl.disruptSession = false;
       KeySourceImpl.infinite = false;
       KeySourceImpl.pause = new CountDownLatch(0);
+      TestMp.currentOutputCount = 10;
    }
    
    public static class TestMessage implements Serializable
@@ -137,13 +141,29 @@ public class TestDempsy
       }
    }
    
+   public static class TestKryoOptimizer implements KryoOptimizer
+   {
+
+      @Override
+      public void optimize(Kryo kryo)
+      {
+         kryo.setRegistrationRequired(true);
+         @SuppressWarnings("unchecked")
+         FieldSerializer<TestMessage> valSer = (FieldSerializer<TestMessage>)kryo.getSerializer(TestMessage.class);
+         valSer.setFieldsCanBeNull(false);
+      }
+      
+   }
+   
    @MessageProcessor
    public static class TestMp implements Cloneable
    {
+      public static int currentOutputCount = 10;
+      
       // need a mutable object reference
       public AtomicReference<TestMessage> lastReceived = new AtomicReference<TestMessage>();
       public AtomicLong outputCount = new AtomicLong(0);
-      public CountDownLatch outputLatch = new CountDownLatch(10);
+      public CountDownLatch outputLatch = new CountDownLatch(currentOutputCount);
       public AtomicInteger startCalls = new AtomicInteger(0);
       public AtomicInteger cloneCalls = new AtomicInteger(0);
       public AtomicLong handleCalls = new AtomicLong(0);
@@ -672,6 +692,10 @@ public class TestDempsy
    @Test
    public void testCronOutPutMessage() throws Throwable
    {
+      // since the cron output message can only go to 1 second resolution,
+      //  we need to drop the number of attempt from 3. Otherwise this test
+      //  takes way too long.
+      TestMp.currentOutputCount = 3;
       runAllCombinations("SinglestageOutputApplicationActx.xml",
             new Checker()
             {
@@ -686,7 +710,7 @@ public class TestDempsy
                   Dempsy dempsy = (Dempsy)context.getBean("dempsy");
                   TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster2");
                   assertTrue(mp.outputLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
-                  assertTrue(mp.outputCount.get()>=10);
+                  assertTrue(mp.outputCount.get()>=3);
                }
                
                public String toString() { return "testCronOutPutMessage"; }

@@ -1,5 +1,9 @@
 package com.nokia.dempsy.serialization.kryo;
 
+/**
+ * This class holds Kryo class registration information. You can assign an ID to
+ * a class for optimized Kryo serialization.
+ */
 public class Registration
 {
    protected String classname;

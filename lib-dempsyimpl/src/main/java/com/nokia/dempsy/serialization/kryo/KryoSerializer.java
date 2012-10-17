@@ -17,7 +17,6 @@
 package com.nokia.dempsy.serialization.kryo;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -32,30 +31,58 @@ import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 
+/**
+ * This is the implementation of the Kryo based serialization for Dempsy.
+ * It can be configured with registered classes using Spring by passing
+ * a list of {@link Registration} instances to the constructor.
+ */
 public class KryoSerializer<T> implements Serializer<T> 
 {
    private static Logger logger = LoggerFactory.getLogger(KryoSerializer.class);
    private static class KryoHolder
    {
       public Kryo kryo = new Kryo();
-      public Output output = new Output(256, 1024*1024*1024);
+      public Output output = new Output(1024, 1024*1024*1024);
+      public Input input = new Input();
    }
    // need an object pool of Kryo instances since Kryo is not thread safe
    private ConcurrentLinkedQueue<KryoHolder> kryopool = new ConcurrentLinkedQueue<KryoHolder>();
    private List<Registration> registrations = null;
+   private volatile KryoOptimizer optimizer = null;
    
+   /**
+    * Create an unconfigured default {@link KryoSerializer} with no registered classes.
+    */
    public KryoSerializer() {}
    
-   public KryoSerializer(List<Registration> reg)
-   {
-      registrations = Collections.unmodifiableList(reg);
-   }
-   
+   /**
+    * Create an {@link KryoSerializer} with the provided registrations. This can be
+    * used from a Spring configuration.
+    */
    public KryoSerializer(Registration... regs)
    {
-      registrations = Arrays.asList(regs);
+      registrations = Arrays.asList(regs); 
    }
-
+   
+   /**
+    * Create an {@link KryoSerializer} with the provided registrations and Application specific
+    * Optimizer. This can be used from a Spring configuration.
+    */
+   public KryoSerializer(KryoOptimizer optimizer, Registration... regs)
+   {
+      registrations = Arrays.asList(regs);
+      this.optimizer = optimizer;
+   }
+   
+   /**
+    * Set the optimizer. This is provided for a dependency injection framework to use. If it's called
+    * @param optimizer
+    */
+   public void setKryoOptimizer(KryoOptimizer optimizer)
+   {
+      this.optimizer= optimizer;
+      kryopool.clear(); // need to create new Kryo's.
+   }
 
    @Override
    public byte[] serialize(T object) throws SerializationException 
@@ -87,7 +114,8 @@ public class KryoSerializer<T> implements Serializer<T>
       try
       {
          k = getKryoHolder();
-         return (T)(k.kryo.readClassAndObject(new Input(data)));  
+         k.input.setBuffer(data);
+         return (T)(k.kryo.readClassAndObject(k.input));  
       }
       catch (KryoException ke)
       {
@@ -119,6 +147,13 @@ public class KryoSerializer<T> implements Serializer<T>
                   logger.error("Cannot register the class " + SafeString.valueOf(reg.classname) + " with Kryo because the class couldn't be found.");
                }
             }
+         }
+         
+         if (optimizer != null)
+         {
+            try { optimizer.optimize(ret.kryo); }
+            catch (Throwable th) { logger.error("Optimizer for KryoSerializer \"" + SafeString.valueOfClass(optimizer) + 
+                  "\" threw and unepexcted exception.... continuing.",th); }
          }
       }
       return ret;
