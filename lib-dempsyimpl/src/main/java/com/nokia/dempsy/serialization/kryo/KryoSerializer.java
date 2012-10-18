@@ -48,7 +48,8 @@ public class KryoSerializer<T> implements Serializer<T>
    // need an object pool of Kryo instances since Kryo is not thread safe
    private ConcurrentLinkedQueue<KryoHolder> kryopool = new ConcurrentLinkedQueue<KryoHolder>();
    private List<Registration> registrations = null;
-   private volatile KryoOptimizer optimizer = null;
+   private KryoOptimizer optimizer = null;
+   private boolean requireRegistration = false;
    
    /**
     * Create an unconfigured default {@link KryoSerializer} with no registered classes.
@@ -78,10 +79,23 @@ public class KryoSerializer<T> implements Serializer<T>
     * Set the optimizer. This is provided for a dependency injection framework to use. If it's called
     * @param optimizer
     */
-   public void setKryoOptimizer(KryoOptimizer optimizer)
+   public synchronized void setKryoOptimizer(KryoOptimizer optimizer)
    {
       this.optimizer= optimizer;
       kryopool.clear(); // need to create new Kryo's.
+   }
+   
+   /**
+    * You can require Kryo to serialize only registered classes by passing '<code>true</code>' to
+    * setKryoRegistrationRequired. The default is '<code>false</code>'.
+    */
+   public synchronized void setKryoRegistrationRequired(boolean requireRegistration)
+   {
+      if (this.requireRegistration != requireRegistration)
+      {
+         this.requireRegistration = requireRegistration;
+         kryopool.clear();
+      }
    }
 
    @Override
@@ -98,6 +112,11 @@ public class KryoSerializer<T> implements Serializer<T>
       catch (KryoException ke)
       {
          throw new SerializationException("Failed to serialize.",ke);
+      }
+      catch (IllegalArgumentException e) // this happens when requiring registration but serializing an unregistered class
+      {
+         throw new SerializationException("Failed to serialize " + SafeString.objectDescription(object) + 
+               " (did you require registration and attempt to serialize an unregistered class?)", e);
       }
       finally
       {
@@ -121,6 +140,10 @@ public class KryoSerializer<T> implements Serializer<T>
       {
          throw new SerializationException("Failed to deserialize.",ke);
       }
+      catch (IllegalArgumentException e) // this happens when requiring registration but deserializing an unregistered class
+      {
+         throw new SerializationException("Failed to deserialize. Did you require registration and attempt to deserialize an unregistered class?", e);
+      }
       finally
       {
          if (k != null)
@@ -134,6 +157,9 @@ public class KryoSerializer<T> implements Serializer<T>
       if (ret == null)
       {
          ret = new KryoHolder();
+         if (requireRegistration)
+            ret.kryo.setRegistrationRequired(requireRegistration);
+         
          if (registrations != null)
          {
             for (Registration reg : registrations)

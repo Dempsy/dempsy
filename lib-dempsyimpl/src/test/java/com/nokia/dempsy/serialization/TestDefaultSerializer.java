@@ -71,6 +71,24 @@ public class TestDefaultSerializer
       assertTrue(d2.length < d1.length);
    }
    
+   @Test(expected=SerializationException.class)
+   public void testKryoSerializeWithRegisterFail() throws Throwable
+   {
+      KryoSerializer<MockClass> ser1 = new KryoSerializer<MockClass>();
+      ser1.setKryoRegistrationRequired(true);
+      runSerializer(ser1);
+   }
+
+   @Test(expected=SerializationException.class)
+   public void testKryoDeserializeWithRegisterFail() throws Throwable
+   {
+      KryoSerializer<MockClass> ser1 = new KryoSerializer<MockClass>();
+      KryoSerializer<MockClass> ser2 = new KryoSerializer<MockClass>();
+      ser2.setKryoRegistrationRequired(true);
+      byte[] data = ser1.serialize(new MockClass());
+      ser2.deserialize(data);
+   }
+
    private void runSerializer(Serializer<MockClass> serializer) throws Throwable
    {
       byte[] data = serializer.serialize(o1);
