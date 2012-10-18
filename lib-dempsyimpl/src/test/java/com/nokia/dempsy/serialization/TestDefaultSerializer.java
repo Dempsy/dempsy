@@ -174,13 +174,16 @@ public class TestDefaultSerializer
    {
       KryoSerializer<Object> serR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10));
       KryoSerializer<Object> serRR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
+      KryoSerializer<Object> serRROb = new KryoSerializer<Object>(new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()));
       KryoSerializer<Object> ser = new KryoSerializer<Object>();
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
       byte[] data = ser.serialize(o);
       byte[] dataR = serR.serialize(o);
       byte[] dataRR = serRR.serialize(o);
+      byte[] dataRROb = serRROb.serialize(o);
       assertTrue(dataR.length < data.length);
       assertTrue(dataRR.length < dataR.length);
+      assertTrue(dataRROb.length == dataRR.length);
       Mock2 o2 = (Mock2)ser.deserialize(data);
       assertEquals(1,o2.getInt());
       assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
@@ -194,6 +197,7 @@ public class TestDefaultSerializer
       KryoSerializer<Object> ser = new KryoSerializer<Object>();
       KryoSerializer<Object> serR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10));
       KryoSerializer<Object> serRR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
+      KryoSerializer<Object> serRROb = new KryoSerializer<Object>(new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()));
       KryoSerializer<Object> serRRO  = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
       serRRO.setKryoOptimizer(new KryoOptimizer()
       {
@@ -216,9 +220,11 @@ public class TestDefaultSerializer
       byte[] data = ser.serialize(o);
       byte[] dataR = serR.serialize(o);
       byte[] dataRR = serRR.serialize(o);
+      byte[] dataRROb = serRROb.serialize(o);
       byte[] dataRRO = serRRO.serialize(o);
       assertTrue(dataR.length < data.length);
       assertTrue(dataRR.length < dataR.length);
+      assertTrue(dataRROb.length == dataRR.length);
       assertTrue(dataRRO.length <= dataRR.length);
       Mock2 o2 = (Mock2)ser.deserialize(data);
       assertEquals(1,o2.getInt());

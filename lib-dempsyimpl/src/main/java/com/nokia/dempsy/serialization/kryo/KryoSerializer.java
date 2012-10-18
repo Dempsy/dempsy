@@ -166,7 +166,10 @@ public class KryoSerializer<T> implements Serializer<T>
             {
                try
                {
-                  ret.kryo.register(Class.forName(reg.classname), reg.id);
+                  if (reg.id == -1)
+                     ret.kryo.register(Class.forName(reg.classname));
+                  else
+                     ret.kryo.register(Class.forName(reg.classname), reg.id);
                }
                catch (ClassNotFoundException cnfe)
                {

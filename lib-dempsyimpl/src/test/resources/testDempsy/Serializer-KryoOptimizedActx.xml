@@ -11,10 +11,10 @@
 		</constructor-arg>
 	   <constructor-arg>
 	     <list>
-	       <bean class="com.nokia.dempsy.serialization.kryo.Registration" >
-	         <property name="classname" value="com.nokia.dempsy.TestDempsy$TestMessage" />
-	         <property name="id" value="10" />
-	       </bean>
+          <bean class="com.nokia.dempsy.serialization.kryo.Registration" >
+            <constructor-arg value="com.nokia.dempsy.TestDempsy$TestMessage" />
+            <constructor-arg value="10" />
+          </bean>
 	     </list>
 	   </constructor-arg>
 	</bean>
