@@ -355,5 +355,39 @@ public class TestDefaultSerializer
       
       assertTrue(!failed.get());
    }
+   
+   public static enum MockEnum
+   {
+      FROM("F"),
+      TO("T"),
+      BOTH("B");
+
+      private String publicValue;
       
+      private MockEnum(String value) { publicValue = value; }
+      
+      @Override
+      public String toString() { return publicValue; }
+   }      
+
+   public static class Mock4
+   {
+      private MockEnum e;
+      
+      public Mock4() {}
+      public Mock4(MockEnum e) { this.e = e; }
+      
+      public MockEnum get() { return e; }
+   }
+   
+   @Test
+   public void testEnumWithNoDefaultConstructor() throws Throwable
+   {
+      Mock4 o = new Mock4(MockEnum.BOTH);
+      KryoSerializer<Mock4> ser = new KryoSerializer<Mock4>(new Registration(Mock4.class.getName()), new Registration(MockEnum.class.getName()));
+      byte[] data = ser.serialize(o);
+      Mock4 dser = ser.deserialize(data);
+      assertTrue(o.get() == dser.get());
+      assertEquals(o.get().toString(),dser.get().toString());
+   }
 }
