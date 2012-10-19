@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy.messagetransport.tcp;
 
+import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -23,7 +24,6 @@ import java.net.Socket;
 import java.util.Arrays;
 
 import org.apache.commons.io.IOUtils;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,7 +103,7 @@ public class TcpSender implements Sender
                throw new IOException("Connection to self same port!!!");
          }
 
-          dataOutputStream = new DataOutputStream( socket.getOutputStream() );
+          dataOutputStream = new DataOutputStream( new BufferedOutputStream(socket.getOutputStream(), 1024 * 8) );
       }
       
       return dataOutputStream;
