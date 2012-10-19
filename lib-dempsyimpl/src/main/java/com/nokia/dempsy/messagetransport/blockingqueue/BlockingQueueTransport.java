@@ -19,6 +19,7 @@ package com.nokia.dempsy.messagetransport.blockingqueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
@@ -36,7 +37,7 @@ public class BlockingQueueTransport implements Transport
    private OverflowHandler overflowHandler = null;
 
    @Override
-   public SenderFactory createOutbound() throws MessageTransportException
+   public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException
    {
       BlockingQueueSenderFactory ret = new BlockingQueueSenderFactory();
       if (overflowHandler != null)
@@ -45,7 +46,7 @@ public class BlockingQueueTransport implements Transport
    }
 
    @Override
-   public Receiver createInbound() throws MessageTransportException
+   public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
    {
       BlockingQueueAdaptor ret = new BlockingQueueAdaptor();
       ret.setQueue(getNewQueue());

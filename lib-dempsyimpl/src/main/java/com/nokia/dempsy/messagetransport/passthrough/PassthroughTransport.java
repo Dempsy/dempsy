@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.nokia.dempsy.Adaptor;
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
@@ -50,7 +51,7 @@ public class PassthroughTransport implements Transport
    private boolean failFast = true;
    
    @Override
-   public SenderFactory createOutbound() throws MessageTransportException
+   public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException
    {
       return new SenderFactory()
       {
@@ -72,7 +73,7 @@ public class PassthroughTransport implements Transport
    }
    
    @Override
-   public Receiver createInbound() throws MessageTransportException
+   public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
    {
       return new Receiver()
       {

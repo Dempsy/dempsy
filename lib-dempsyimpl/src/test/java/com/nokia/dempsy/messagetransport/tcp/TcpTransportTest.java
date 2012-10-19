@@ -107,7 +107,7 @@ public class TcpTransportTest
                if (localhost) adaptor.setUseLocalhost(localhost);
                //===========================================
 
-               adaptor.start(); // start the adaptor
+               adaptor.start(null); // start the adaptor
                Destination destination = adaptor.getDestination(); // get the destination
 
                // send a message
@@ -182,8 +182,8 @@ public class TcpTransportTest
          if (localhost) adaptor.setUseLocalhost(localhost);
          //===========================================
 
-         adaptor.start(); // start the adaptor
-         adaptor.start(); // double start ... just want more coverage.
+         adaptor.start(null); // start the adaptor
+         adaptor.start(null); // double start ... just want more coverage.
 
          Destination destination = adaptor.getDestination(); // get the destination
          if (port > 0) adaptor.setPort(port);
@@ -244,7 +244,7 @@ public class TcpTransportTest
                if (localhost) adaptor.setUseLocalhost(localhost);
                //===========================================
 
-               adaptor.start(); // start the adaptor
+               adaptor.start(null); // start the adaptor
                Destination destination = adaptor.getDestination(); // get the destination
 
                //===========================================
@@ -367,7 +367,7 @@ public class TcpTransportTest
                if (localhost) adaptor.setUseLocalhost(localhost);
                //===========================================
 
-               adaptor.start(); // start the adaptor
+               adaptor.start(null); // start the adaptor
                Destination destination = adaptor.getDestination(); // get the destination
 
                //===========================================
@@ -657,7 +657,7 @@ public class TcpTransportTest
                if (localhost) adaptor.setUseLocalhost(localhost);
                //===========================================
 
-               adaptor.start(); // start the adaptor
+               adaptor.start(null); // start the adaptor
                Destination destination = adaptor.getDestination(); // get the destination
 
                // send a message

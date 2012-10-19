@@ -35,6 +35,7 @@ import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Receiver;
@@ -92,12 +93,16 @@ public class Dempsy
             {
                try
                {
+                  DempsyExecutor executor = (DempsyExecutor)clusterDefinition.getExecutor(); // this can be null
+                  if (executor != null)
+                     executor.start();
                   ClusterInfoSession clusterSession = clusterSessionFactory.createSession();
                   ClusterId currentClusterId = clusterDefinition.getClusterId();
                   router = new Router(clusterDefinition.getParentApplicationDefinition());
                   router.setCurrentCluster(currentClusterId);
                   router.setClusterSession(clusterSession);
-                  router.setDefaultSenderFactory(transport.createOutbound());
+                  // get the executor if one is set
+                  router.setDefaultSenderFactory(transport.createOutbound(executor));
                   
                   container = new MpContainer(currentClusterId);
                   container.setDispatcher(router);
@@ -117,7 +122,7 @@ public class Dempsy
                   Destination thisDestination = null;
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                   {
-                     receiver = transport.createInbound();
+                     receiver = transport.createInbound(executor);
                      receiver.setListener(container);
                      thisDestination = receiver.getDestination();
                   }

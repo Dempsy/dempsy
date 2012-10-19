@@ -25,6 +25,10 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    
    public DefaultDempsyExecutor() { }
    
+   /**
+    * Create a DefaultDempsyExecutor with a fixed number of threads while setting the
+    * maximum number of limited tasks.
+    */
    public DefaultDempsyExecutor(int threadPoolSize, int maxNumWaitingLimitedTasks) 
    {
       this.threadPoolSize = threadPoolSize;
@@ -59,8 +63,7 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          // figure out the number of cores.
          int cores = Runtime.getRuntime().availableProcessors();
          int cpuBasedThreadCount = (int)Math.ceil((double)cores * m) + additionalThreads; // why? I don't know. If you don't like it 
-         //   then use the other constructor
-         // we want at least 4 worker threads not matter how many CPUs
+                                                                                          //   then use the other constructor
          threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
       }
       executor = Executors.newFixedThreadPool(threadPoolSize);
@@ -68,7 +71,7 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       numLimited = new AtomicLong(0);
       
       if (maxNumWaitingLimitedTasks < 0)
-         maxNumWaitingLimitedTasks = 2 * threadPoolSize;
+         maxNumWaitingLimitedTasks = 20 * threadPoolSize;
    }
    
    public int getMaxNumberOfQueuedLimitedTasks() { return (int)maxNumWaitingLimitedTasks; }
@@ -89,6 +92,10 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       if (schedule != null)
          schedule.shutdown();
    }
+   
+   public boolean isRunning() { return (schedule != null && executor != null) &&
+         !(schedule.isShutdown() || schedule.isTerminated()) &&
+         !(executor.isShutdown() || executor.isTerminated()); }
    
    @Override
    public <V> Future<V> submit(Callable<V> r) { return executor.submit(r); }

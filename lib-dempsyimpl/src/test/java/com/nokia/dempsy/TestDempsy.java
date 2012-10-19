@@ -58,6 +58,9 @@ import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.executor.DefaultDempsyExecutor;
+import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
+import com.nokia.dempsy.messagetransport.tcp.TcpReceiverAccess;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
 public class TestDempsy
@@ -400,6 +403,41 @@ public class TestDempsy
             "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
+   }
+   
+   @Test
+   public void testTcpTransportExecutorConfigurationThroughApplication() throws Throwable
+   {
+      ClassPathXmlApplicationContext actx = null;
+      DefaultDempsyExecutor executor = null;
+      try
+      {
+         actx = new ClassPathXmlApplicationContext(
+               "testDempsy/Dempsy-IndividualClusterStart.xml",
+               "testDempsy/Transport-TcpActx.xml",
+               "testDempsy/ClusterInfo-LocalActx.xml",
+               "testDempsy/SimpleMultistageApplicationWithExecutorActx.xml"
+               );
+         actx.registerShutdownHook();
+
+         Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
+         for (Dempsy.Application.Cluster cluster : dempsy.applications.get(0).appClusters)
+         {
+            // get the receiver from the node
+            TcpReceiver r = (TcpReceiver)cluster.getNodes().get(0).receiver;
+            executor = (DefaultDempsyExecutor)TcpReceiverAccess.getExecutor(r);
+            assertEquals(123456,executor.getMaxNumberOfQueuedLimitedTasks());
+            assertTrue(executor.isRunning());
+         }
+      }
+      finally
+      {
+         try { actx.stop(); } catch (Throwable th) {}
+         try { actx.destroy(); } catch(Throwable th) {}
+      }
+      
+      assertNotNull(executor);
+      assertTrue(!executor.isRunning());
    }
 
    @Test

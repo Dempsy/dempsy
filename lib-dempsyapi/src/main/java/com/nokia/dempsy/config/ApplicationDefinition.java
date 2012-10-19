@@ -89,9 +89,10 @@ public class ApplicationDefinition
    private List<ClusterDefinition> clusterDefinitions = new ArrayList<ClusterDefinition>();
    private String applicationName = null;
    private boolean isInitialized = false;
-   private Object serializer;
-   private Object routingStrategy;
-   private Object statsCollectorFactory;
+   private Object serializer = null;
+   private Object routingStrategy = null;
+   private Object statsCollectorFactory = null;
+   private Object dempsyExecutor = null;
    
    public ApplicationDefinition(String applicationName) { this.applicationName = applicationName; }
 
@@ -186,6 +187,24 @@ public class ApplicationDefinition
 	   this.statsCollectorFactory = statsCollectorFactory;
 	   return this;
    }
+   
+   /**
+    * Get the currently configured {@code DempsyExecutor} for this Application.
+    */
+   public Object getExecutor() { return dempsyExecutor; }
+
+   /**
+    * You can set a custom Executor for worker threads. See {@code DempsyExecutor} in the lib-dempsycore
+    * for the definition of this interface. There is a {@code DefaultDempsyExecutor} that can be used
+    * and configured for the number of worker threads either directly or by some factor of the number
+    * of cores.
+    */
+   public ApplicationDefinition setExecutor(Object dempsyExecutor)
+   {
+      this.dempsyExecutor = dempsyExecutor;
+      return this;
+   }
+
 //------------------------------------------------------------------------
 // Rudimentary functionality
 //------------------------------------------------------------------------

@@ -48,7 +48,8 @@ public class ClusterDefinition
    private Object strategy = null;
    private Object serializer = null;
    private Object statsCollectorFactory = null;
-   private Object outputExecuter;
+   private Object dempsyExecutor = null;
+   private Object outputExecuter = null;
    private boolean adaptorIsDaemon = false;
    private KeySource<?> keySource = null;
    private long evictionFrequency = 600;
@@ -153,6 +154,13 @@ public class ClusterDefinition
    public ClusterDefinition setStatsCollectorFactory(Object statsCollectorFactory)
    {
       this.statsCollectorFactory = statsCollectorFactory;
+      return this;
+   }
+   
+   public Object getExecutor() { return dempsyExecutor == null ? parent.getExecutor() : dempsyExecutor; }
+   public ClusterDefinition setExecutor(Object dempsyExecutor)
+   {
+      this.dempsyExecutor = dempsyExecutor;
       return this;
    }
    

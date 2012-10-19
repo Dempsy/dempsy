@@ -31,7 +31,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
 import org.apache.commons.io.IOUtils;
@@ -65,14 +64,15 @@ public class TcpReceiver implements Receiver
    
    protected boolean useLocalhost = false;
    protected int port = -1;
-   protected DefaultDempsyExecutor executor = null;
+   protected DempsyExecutor executor = null;
    protected StatsCollector statsCollector;
    
-   @PostConstruct
-   public synchronized void start() throws MessageTransportException
+   public synchronized void start(DempsyExecutor exec) throws MessageTransportException
    {
       if (isStarted())
          return;
+      
+      executor = exec;
 
       // this sets the destination instance
       getDestination();
@@ -138,18 +138,22 @@ public class TcpReceiver implements Receiver
                   }
                }, "Server for " + destination);
       
+      if (executor == null)
+      {
+         DefaultDempsyExecutor defexecutor = new DefaultDempsyExecutor();
+         defexecutor.setCoresFactor(1.0);
+         defexecutor.setAdditionalThreads(1);
+         defexecutor.setMaxNumberOfQueuedLimitedTasks(10000);
+         executor = defexecutor;
+         executor.start();
+      }
+
       serverThread.start();
-      
-      executor = new DefaultDempsyExecutor();
-      executor.setCoresFactor(1.0);
-      executor.setAdditionalThreads(1);
-      executor.setMaxNumberOfQueuedLimitedTasks(10000);
-      executor.start();
     }
    
    @Override
    public void setStatsCollector(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
-
+   
    /**
     * When an overflow handler is set the Adaptor indicates that a 'failFast' should happen
     * and any failed message deliveries end up passed to the overflow handler. 

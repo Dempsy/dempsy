@@ -23,6 +23,7 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
 
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
@@ -31,20 +32,20 @@ import com.nokia.dempsy.messagetransport.Transport;
 
 public class TcpTransport implements Transport
 {
-   private OverflowHandler overflowHandler;
+   private OverflowHandler overflowHandler = null;
 
    @Override
-   public SenderFactory createOutbound() throws MessageTransportException
+   public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException
    {
       return new TcpSenderFactory();
    }
 
    @Override
-   public Receiver createInbound() throws MessageTransportException
+   public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
    {
       TcpReceiver receiver = new TcpReceiver();
       receiver.setOverflowHandler(overflowHandler);
-      receiver.start();
+      receiver.start(executor);
       return receiver;
    }
 
