@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -98,7 +99,8 @@ public class TestDefaultSerializer
       assertEquals(o1, o2);
    }
    
-   public static class Mock2
+   @SuppressWarnings("serial")
+   public static class Mock2 implements Serializable
    {
       private final int i;
       private final MockClass mock;
@@ -126,6 +128,7 @@ public class TestDefaultSerializer
       }
    }
    
+   @SuppressWarnings("serial")
    public static class Mock3 extends Mock2
    {
       public int myI = -1;
@@ -172,15 +175,18 @@ public class TestDefaultSerializer
    @Test
    public void testChildClassSerializationWithRegistration() throws Throwable
    {
+      KryoSerializer<Object> ser = new KryoSerializer<Object>();
+      JavaSerializer<Object> serJ = new JavaSerializer<Object>();
       KryoSerializer<Object> serR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10));
       KryoSerializer<Object> serRR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
       KryoSerializer<Object> serRROb = new KryoSerializer<Object>(new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()));
-      KryoSerializer<Object> ser = new KryoSerializer<Object>();
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
       byte[] data = ser.serialize(o);
+      byte[] dataJ = serJ.serialize(o);
       byte[] dataR = serR.serialize(o);
       byte[] dataRR = serRR.serialize(o);
       byte[] dataRROb = serRROb.serialize(o);
+      assertTrue(dataJ.length > data.length);
       assertTrue(dataR.length < data.length);
       assertTrue(dataRR.length < dataR.length);
       assertTrue(dataRROb.length == dataRR.length);
@@ -195,6 +201,7 @@ public class TestDefaultSerializer
    public void testChildClassSerializationWithRegistrationAndOptimization() throws Throwable
    {
       KryoSerializer<Object> ser = new KryoSerializer<Object>();
+      JavaSerializer<Object> serJ = new JavaSerializer<Object>();
       KryoSerializer<Object> serR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10));
       KryoSerializer<Object> serRR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
       KryoSerializer<Object> serRROb = new KryoSerializer<Object>(new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()));
@@ -218,10 +225,12 @@ public class TestDefaultSerializer
       
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
       byte[] data = ser.serialize(o);
+      byte[] dataJ = serJ.serialize(o);
       byte[] dataR = serR.serialize(o);
       byte[] dataRR = serRR.serialize(o);
       byte[] dataRROb = serRROb.serialize(o);
       byte[] dataRRO = serRRO.serialize(o);
+      assertTrue(dataJ.length > data.length);
       assertTrue(dataR.length < data.length);
       assertTrue(dataRR.length < dataR.length);
       assertTrue(dataRROb.length == dataRR.length);
