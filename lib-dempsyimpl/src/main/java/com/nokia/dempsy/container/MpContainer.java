@@ -17,16 +17,20 @@
 package com.nokia.dempsy.container;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
@@ -43,6 +47,7 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.internal.AnnotatedMethodInvoker;
 import com.nokia.dempsy.container.internal.LifecycleHelper;
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.monitoring.StatsCollector;
@@ -92,6 +97,8 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    private KeySource<?> keySource = null;
 
    private volatile boolean isRunning = true;
+   
+   private DempsyExecutor executor = null;
 
    public MpContainer(ClusterId clusterId) { this.clusterId = clusterId; }
 
@@ -203,6 +210,11 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    public void setDispatcher(Dispatcher dispatcher)
    {
       this.dispatcher = dispatcher;
+   }
+   
+   public void setExecutor(DempsyExecutor executor)
+   {
+      this.executor = executor;
    }
 
    /**
@@ -337,6 +349,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                public void run()
                {
                   synchronized(isRunningMpInst) { isRunningMpInst.set(true); }
+                  List<Future<Object>> futures = new ArrayList<Future<Object>>();
 
                   stopRunningMpInst.set(false); // reset this flag in case it's been set
 
@@ -350,19 +363,34 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   try{
                      tcontext = statCollector.preInstantiationStarted();
                      Iterable<?> iterable = keySource.getAllPossibleKeys();
-                     for(Object key: iterable)
+                     for(final Object key: iterable)
                      {
                         if (stopRunningMpInst.get() || !isRunning)
                            break;
-                        try
+                        
+                        if(strategyInbound.doesMessageKeyBelongToNode(key))
                         {
-                           if(strategyInbound.doesMessageKeyBelongToNode(key))
-                              getInstanceForKey(key);
-                        }
-                        catch(ContainerException e)
-                        {
-                           logger.error("Failed to instantiate MP for Key "+key +
-                                 " of type "+key.getClass().getSimpleName(), e);
+                           Callable<Object> callable = new Callable<Object>()
+                           {
+                              Object k = key;
+                              
+                              @Override
+                              public Object call()
+                              {
+                                 try { getInstanceForKey(k); }
+                                 catch(ContainerException e)
+                                 {
+                                    logger.error("Failed to instantiate MP for Key "+key +
+                                          " of type "+key.getClass().getSimpleName(), e);
+                                 }
+                                 return null;
+                              }
+                           };
+                           
+                           if (executor != null)
+                              futures.add(executor.submit(callable));
+                           else
+                              callable.call();
                         }
                      }
                   }
@@ -374,6 +402,11 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   finally
                   {
                      if (tcontext != null) tcontext.stop();
+                     if (stopRunningMpInst.get()) // this run is being preempted
+                     {
+                        for (Future<Object> f : futures)
+                           try { f.cancel(false); } catch (Throwable th) { logger.warn("Error trying to cancel an attempt to pre-instantiate a Mp",th); }
+                     }
                      synchronized(isRunningMpInst)
                      {
                         isRunningMpInst.set(false);

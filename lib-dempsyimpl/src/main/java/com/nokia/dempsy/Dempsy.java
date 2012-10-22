@@ -106,6 +106,8 @@ public class Dempsy
                   
                   container = new MpContainer(currentClusterId);
                   container.setDispatcher(router);
+                  if (executor != null)
+                     container.setExecutor(executor);
                   Object messageProcessorPrototype = clusterDefinition.getMessageProcessorPrototype();
                   if (messageProcessorPrototype != null)
                   {

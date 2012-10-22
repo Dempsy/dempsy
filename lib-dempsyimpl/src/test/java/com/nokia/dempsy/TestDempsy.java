@@ -675,7 +675,7 @@ public class TestDempsy
                   Dempsy dempsy = (Dempsy)context.getBean("dempsy");
                   TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster2");
                   assertTrue(mp.outputLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
-                  assertTrue(mp.outputCount.get()>=10);
+                  assertTrue(mp.outputCount.get()>=3);
                }
                
                public String toString() { return "testCronOutPutMessage"; }
@@ -728,47 +728,49 @@ public class TestDempsy
    
    public void runMpKeyStoreTest(final String methodName) throws Throwable
    {
-      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
-          new Checker()   
-            {
-               @Override
-               public void check(ApplicationContext context) throws Throwable
-               {
-                  // start things and verify that the init method was called
-                  Dempsy dempsy = (Dempsy)context.getBean("dempsy");
-                  TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
-                      
-                  // verify we haven't called it again, not that there's really
-                  // a way to given the code
-                  assertEquals(1, mp.startCalls.get());
+      Checker checker =           new Checker()   
+      {
+         @Override
+         public void check(ApplicationContext context) throws Throwable
+         {
+            // start things and verify that the init method was called
+            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+                
+            // verify we haven't called it again, not that there's really
+            // a way to given the code
+            assertEquals(1, mp.startCalls.get());
 
-                  // instead of the latch we are going to poll for the correct result
-                  // wait for it to be received.
-                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
-                  
-                  TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
-                  adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
+            // instead of the latch we are going to poll for the correct result
+            // wait for it to be received.
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
+            
+            TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
+            adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
 
-                  // instead of the latch we are going to poll for the correct result
-                  // wait for it to be received.
-                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
-                  
-                  adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
+            // instead of the latch we are going to poll for the correct result
+            // wait for it to be received.
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
+            
+            adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
 
-                  // instead of the latch we are going to poll for the correct result
-                  // wait for it to be received.
-                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
-                  List<Node> nodes = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes();
-                  Assert.assertNotNull(nodes);
-                  Assert.assertTrue(nodes.size()>0);
-                  Node node = nodes.get(0);
-                  Assert.assertNotNull(node);
-                  double duration = ((MetricGetters)node.getStatsCollector()).getPreInstantiationDuration();
-                  Assert.assertTrue(duration>0.0);
-               }
-               
-               public String toString() { return methodName; }
-            });
+            // instead of the latch we are going to poll for the correct result
+            // wait for it to be received.
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
+            List<Node> nodes = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes();
+            Assert.assertNotNull(nodes);
+            Assert.assertTrue(nodes.size()>0);
+            Node node = nodes.get(0);
+            Assert.assertNotNull(node);
+            double duration = ((MetricGetters)node.getStatsCollector()).getPreInstantiationDuration();
+            Assert.assertTrue(duration>0.0);
+         }
+         
+         public String toString() { return methodName; }
+      };
+
+      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml", checker);
+      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml", checker);
    }
    
    @Test
@@ -777,64 +779,66 @@ public class TestDempsy
       KeySourceImpl.pause = new CountDownLatch(1);
       KeySourceImpl.infinite = true;
 
-      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",
-          new Checker()   
-            {
-               @Override
-               public void check(ApplicationContext context) throws Throwable
-               {
-                  // wait until the KeySourceImpl has been created
-                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null; } }));
-                  final KeySourceImpl.KSIterable firstCreated = KeySourceImpl.lastCreated;
-                  
-                  // start things and verify that the init method was called
-                  Dempsy dempsy = (Dempsy)context.getBean("dempsy");
-                  TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+      Checker checker = new Checker()   
+      {
+         @Override
+         public void check(ApplicationContext context) throws Throwable
+         {
+            // wait until the KeySourceImpl has been created
+            assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null; } }));
+            final KeySourceImpl.KSIterable firstCreated = KeySourceImpl.lastCreated;
+            
+            // start things and verify that the init method was called
+            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
 
-                  Dempsy.Application.Cluster c = dempsy.getCluster(new ClusterId("test-app","test-cluster1"));
-                  assertNotNull(c);
-                  Dempsy.Application.Cluster.Node node = c.getNodes().get(0);
-                  assertNotNull(node);
-                  
-                  MpContainer container = node.getMpContainer();
-                  
-                  // let it go and wait until there's a few keys.
-                  firstCreated.m_pause.countDown();
-                  
-                  // as the KeySource iterates, this will increase
-                  assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get() > 10000; } }));
+            Dempsy.Application.Cluster c = dempsy.getCluster(new ClusterId("test-app","test-cluster1"));
+            assertNotNull(c);
+            Dempsy.Application.Cluster.Node node = c.getNodes().get(0);
+            assertNotNull(node);
+            
+            MpContainer container = node.getMpContainer();
+            
+            // let it go and wait until there's a few keys.
+            firstCreated.m_pause.countDown();
+            
+            // as the KeySource iterates, this will increase
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get() > 10000; } }));
 
-                  // prepare the next countdown latch
-                  KeySourceImpl.pause = new CountDownLatch(0); // just let the 2nd one go
-                  
-                  // I want the next one to stop at 2
-                  KeySourceImpl.infinite = false;
+            // prepare the next countdown latch
+            KeySourceImpl.pause = new CountDownLatch(0); // just let the 2nd one go
+            
+            // I want the next one to stop at 2
+            KeySourceImpl.infinite = false;
 
-                  // Now force another call while the first is running
-                  container.keyspaceResponsibilityChanged(node.strategyInbound, false, true);
-                  
-                  // wait until the second one is created
-                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null && firstCreated != KeySourceImpl.lastCreated; } }));
-                  
-                  // now the first one should be done and therefore no longer incrementing.
-                  String lastKeyOfFirstCreated = firstCreated.lastKey;
+            // Now force another call while the first is running
+            container.keyspaceResponsibilityChanged(node.strategyInbound, false, true);
+            
+            // wait until the second one is created
+            assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null && firstCreated != KeySourceImpl.lastCreated; } }));
+            
+            // now the first one should be done and therefore no longer incrementing.
+            String lastKeyOfFirstCreated = firstCreated.lastKey;
 
-                  // and the second one should be done also and stopped at 2.
-                  final KeySourceImpl.KSIterable secondCreated = KeySourceImpl.lastCreated;
-                  assertTrue(firstCreated != secondCreated);
-                  
-                  assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return "test2".equals(secondCreated.lastKey); } }));
-                  
-                  Thread.sleep(50);
-                  assertEquals(lastKeyOfFirstCreated,firstCreated.lastKey); // make sure the first one isn't still moving on
-                  assertEquals("test2",secondCreated.lastKey);
-                  
-                  // prepare for the next run
-                  KeySourceImpl.pause = new CountDownLatch(1);
-                  KeySourceImpl.infinite = true;
-               }
-               
-               public String toString() { return "testOverlappingKeyStoreCalls"; }
-            });
+            // and the second one should be done also and stopped at 2.
+            final KeySourceImpl.KSIterable secondCreated = KeySourceImpl.lastCreated;
+            assertTrue(firstCreated != secondCreated);
+            
+            assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return "test2".equals(secondCreated.lastKey); } }));
+            
+            Thread.sleep(50);
+            assertEquals(lastKeyOfFirstCreated,firstCreated.lastKey); // make sure the first one isn't still moving on
+            assertEquals("test2",secondCreated.lastKey);
+            
+            // prepare for the next run
+            KeySourceImpl.pause = new CountDownLatch(1);
+            KeySourceImpl.infinite = true;
+         }
+         
+         public String toString() { return "testOverlappingKeyStoreCalls"; }
+      };
+      
+      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
+      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
    }   
 }
