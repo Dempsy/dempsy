@@ -20,7 +20,7 @@
          </bean>
       </property>
       <property name="defaultSerializer">
-         <bean class="com.nokia.dempsy.serialization.java.JavaSerializer" />
+         <bean class="com.nokia.dempsy.serialization.kryo.KryoSerializer" />
       </property>
       <property name="defaultStatsCollectorFactory">
       	<bean class="com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory" />
