@@ -19,9 +19,7 @@
             <constructor-arg name="defaultNumNodes" type="int" value="1" />
          </bean>
       </property>
-      <property name="defaultSerializer">
-         <bean class="com.nokia.dempsy.serialization.java.JavaSerializer" />
-      </property>
+      <property name="defaultSerializer" ref="serializer" />
       <property name="defaultStatsCollectorFactory">
       	<bean class="com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda" />
       </property>

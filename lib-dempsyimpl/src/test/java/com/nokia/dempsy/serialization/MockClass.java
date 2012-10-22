@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.serialization.java;
+package com.nokia.dempsy.serialization;
 
 import java.io.Serializable;
 

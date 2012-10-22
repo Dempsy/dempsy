@@ -48,6 +48,9 @@ public class FullApplication
    {
       private static final long serialVersionUID = 1L;
       
+      @SuppressWarnings("unused")
+      private MyMessage() {} // required for Kryo
+      
       Integer value;
       
       public MyMessage(int val) { this.value = val; }
@@ -62,6 +65,9 @@ public class FullApplication
 
       private long count;
       private int value;
+      
+      @SuppressWarnings("unused")
+      private MyMessageCount() {} // required for Kryo
       
       public MyMessageCount(long val) { this.count = val; }
       

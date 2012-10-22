@@ -117,7 +117,7 @@ public class TestRouterClusterManagement
    {
       // check that the message didn't go through.
       ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
-            "testDempsy/Dempsy.xml", "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Dempsy.xml", "testDempsy/ClusterInfo-LocalActx.xml", "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/Transport-PassthroughActx.xml", "testDempsy/SimpleMultistageApplicationActx.xml" );
       Dempsy dempsy = (Dempsy)context.getBean("dempsy");
       ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();

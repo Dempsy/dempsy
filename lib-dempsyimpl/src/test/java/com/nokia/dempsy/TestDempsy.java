@@ -46,6 +46,8 @@ import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.annotations.MessageHandler;
@@ -62,6 +64,7 @@ import com.nokia.dempsy.executor.DefaultDempsyExecutor;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiverAccess;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
+import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 
 public class TestDempsy
 {
@@ -77,6 +80,9 @@ public class TestDempsy
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
          { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml" }
    };
+   
+   String[] serializers = new String[]
+         { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml", "testDempsy/Serializer-KryoOptimizedActx.xml" };
    
    // bad combinations.
    List<ClusterId> badCombos = Arrays.asList(new ClusterId[] {
@@ -112,12 +118,16 @@ public class TestDempsy
       KeySourceImpl.disruptSession = false;
       KeySourceImpl.infinite = false;
       KeySourceImpl.pause = new CountDownLatch(0);
+      TestMp.currentOutputCount = 10;
    }
    
    public static class TestMessage implements Serializable
    {
       private static final long serialVersionUID = 1L;
       private String val;
+      
+      @SuppressWarnings("unused") // required for Kryo
+      private TestMessage() {} 
       
       public TestMessage(String val) { this.val = val; }
       
@@ -131,13 +141,29 @@ public class TestDempsy
       }
    }
    
+   public static class TestKryoOptimizer implements KryoOptimizer
+   {
+
+      @Override
+      public void optimize(Kryo kryo)
+      {
+         kryo.setRegistrationRequired(true);
+         @SuppressWarnings("unchecked")
+         FieldSerializer<TestMessage> valSer = (FieldSerializer<TestMessage>)kryo.getSerializer(TestMessage.class);
+         valSer.setFieldsCanBeNull(false);
+      }
+      
+   }
+   
    @MessageProcessor
    public static class TestMp implements Cloneable
    {
+      public static int currentOutputCount = 10;
+      
       // need a mutable object reference
       public AtomicReference<TestMessage> lastReceived = new AtomicReference<TestMessage>();
       public AtomicLong outputCount = new AtomicLong(0);
-      public CountDownLatch outputLatch = new CountDownLatch(10);
+      public CountDownLatch outputLatch = new CountDownLatch(currentOutputCount);
       public AtomicInteger startCalls = new AtomicInteger(0);
       public AtomicInteger cloneCalls = new AtomicInteger(0);
       public AtomicLong handleCalls = new AtomicLong(0);
@@ -176,7 +202,7 @@ public class TestDempsy
       @Override
       public void overflow(byte[] messageBytes)
       {
-         System.out.println("Overflow:" + messageBytes);
+         logger.debug("Overflow:" + messageBytes);
       }
       
    }
@@ -307,20 +333,22 @@ public class TestDempsy
          {
             // select one of the alternatingTransports
             String transport = alternatingTransports[runCount % alternatingTransports.length];
+            
+            String serializer = serializers[runCount % serializers.length];
 
             // alternate the dempsy configs
             String dempsyConfig = dempsyConfigs[runCount % dempsyConfigs.length];
 
             if (! badCombos.contains(new ClusterId(clusterManager,transport)))
             {
-               String pass = " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + transport;
+               String pass = " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + serializer + "," + transport;
                try
                {
                   logger.debug("*****************************************************************");
                   logger.debug(pass);
                   logger.debug("*****************************************************************");
 
-                  String[] ctx = { dempsyConfig, clusterManager, transport, "testDempsy/" + applicationContext };
+                  String[] ctx = { dempsyConfig, clusterManager, transport, serializer, "testDempsy/" + applicationContext };
 
                   logger.debug("Starting up the appliction context ...");
                   ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
@@ -367,6 +395,7 @@ public class TestDempsy
             "testDempsy/Dempsy-IndividualClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();
@@ -401,6 +430,7 @@ public class TestDempsy
             "testDempsy/Dempsy-InValidClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
    }
@@ -453,6 +483,7 @@ public class TestDempsy
                "testDempsy/Dempsy.xml",
                "testDempsy/Transport-PassthroughActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
+               "testDempsy/Serializer-KryoActx.xml",
                "testDempsy/SimpleMultistageApplicationActx.xml"
                );
          actx.registerShutdownHook();
@@ -661,6 +692,10 @@ public class TestDempsy
    @Test
    public void testCronOutPutMessage() throws Throwable
    {
+      // since the cron output message can only go to 1 second resolution,
+      //  we need to drop the number of attempt from 3. Otherwise this test
+      //  takes way too long.
+      TestMp.currentOutputCount = 3;
       runAllCombinations("SinglestageOutputApplicationActx.xml",
             new Checker()
             {
