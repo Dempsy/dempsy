@@ -380,6 +380,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             {
                if (logger.isInfoEnabled())
                   logger.info("Couldn't find a destination for " + SafeString.objectDescription(message));
+               if (statsCollector != null) statsCollector.messageNotSent(message);
                return false;
             }
 
