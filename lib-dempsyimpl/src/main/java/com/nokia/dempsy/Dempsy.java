@@ -191,17 +191,17 @@ public class Dempsy
                
                // shut the container down prior to the router.
                if (container != null)
-                  try { container.shutdown(); container = null; } catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
+                  try { container.shutdown(); container = null; } catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
                
                // the cluster session is stopped by the router.
                if (router != null)
-                  try { router.stop(); router = null; } catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
+                  try { router.stop(); router = null; } catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
                
                if (statsCollector != null)
-                  try { statsCollector.stop(); statsCollector = null;} catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
+                  try { statsCollector.stop(); statsCollector = null;} catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
 
                if (strategyInbound != null)
-                  try { strategyInbound.stop(); strategyInbound = null;} catch (Throwable th) { logger.error("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
+                  try { strategyInbound.stop(); strategyInbound = null;} catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
             }
             
             // Only called from tests
