@@ -446,6 +446,7 @@ public class TestDempsy
                "testDempsy/Dempsy-IndividualClusterStart.xml",
                "testDempsy/Transport-TcpActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
+               "testDempsy/Serializer-KryoActx.xml",
                "testDempsy/SimpleMultistageApplicationWithExecutorActx.xml"
                );
          actx.registerShutdownHook();
