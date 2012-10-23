@@ -50,6 +50,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.TestUtils.Condition;
+import com.nokia.dempsy.annotations.Activation;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
@@ -145,9 +146,14 @@ public class TestDempsy
    {
 
       @Override
-      public void optimize(Kryo kryo)
+      public void preRegister(Kryo kryo)
       {
          kryo.setRegistrationRequired(true);
+      }
+
+      @Override
+      public void postRegister(Kryo kryo)
+      {
          @SuppressWarnings("unchecked")
          FieldSerializer<TestMessage> valSer = (FieldSerializer<TestMessage>)kryo.getSerializer(TestMessage.class);
          valSer.setFieldsCanBeNull(false);
@@ -167,6 +173,7 @@ public class TestDempsy
       public AtomicInteger startCalls = new AtomicInteger(0);
       public AtomicInteger cloneCalls = new AtomicInteger(0);
       public AtomicLong handleCalls = new AtomicLong(0);
+      public AtomicReference<String> failActivation = new AtomicReference<String>();
       
       @Start
       public void start()
@@ -179,6 +186,13 @@ public class TestDempsy
       {
          lastReceived.set(message);
          handleCalls.incrementAndGet();
+      }
+      
+      @Activation
+      public void setKey(String key)
+      {
+         if (key.equals(failActivation.get()))
+            throw new RuntimeException("Failed Activation For " + key);
       }
       
       @Override
@@ -324,9 +338,9 @@ public class TestDempsy
       
    }
    
+   static int runCount = 0;
    public void runAllCombinations(String applicationContext, Checker checker) throws Throwable
    {
-      int runCount = 0;
       for (String clusterManager : clusterManagers)
       {
          for (String[] alternatingTransports : transports)
@@ -694,7 +708,7 @@ public class TestDempsy
    public void testCronOutPutMessage() throws Throwable
    {
       // since the cron output message can only go to 1 second resolution,
-      //  we need to drop the number of attempt from 3. Otherwise this test
+      //  we need to drop the number of attempt to 3. Otherwise this test
       //  takes way too long.
       TestMp.currentOutputCount = 3;
       runAllCombinations("SinglestageOutputApplicationActx.xml",
@@ -748,7 +762,7 @@ public class TestDempsy
       Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
       return node.clusterDefinition.getAdaptor();
    }
-
+   
    @Test
    public void testMpKeyStore() throws Throwable
    {
@@ -764,7 +778,7 @@ public class TestDempsy
    
    public void runMpKeyStoreTest(final String methodName) throws Throwable
    {
-      Checker checker =           new Checker()   
+      Checker checker = new Checker()   
       {
          @Override
          public void check(ApplicationContext context) throws Throwable
@@ -876,5 +890,70 @@ public class TestDempsy
       
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
+   }
+   
+   @Test
+   public void testFailedMessageHandlingWithKeyStore() throws Throwable
+   {
+      KeySourceImpl.pause = new CountDownLatch(1);
+
+      Checker checker = new Checker()   
+      {
+         @Override
+         public void check(ApplicationContext context) throws Throwable
+         {
+            // start things and verify that the init method was called
+            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+                
+            // verify we haven't called it again, not that there's really
+            // a way to given the code
+            assertEquals(1, mp.startCalls.get());
+            
+            // make sure that there are no Mps
+            MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
+            Thread.sleep(10);
+            assertEquals(0,statsCollector.getMessageProcessorsCreated());
+            
+            mp.failActivation.set("test1");
+            TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
+            adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
+
+            Thread.sleep(100);
+            assertEquals(0,statsCollector.getMessageProcessorsCreated());
+            
+            mp.failActivation.set(null);
+            KeySourceImpl.pause.countDown();
+
+            // instead of the latch we are going to poll for the correct result
+            // wait for it to be received.
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
+            
+            assertTrue(poll(baseTimeoutMillis,statsCollector,new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters mg) {  return mg.getMessageProcessorsCreated()==2; } }));
+            adaptor.pushMessage(new TestMessage("test1"));
+            adaptor.pushMessage(new TestMessage("test2"));
+            adaptor.pushMessage(new TestMessage("test1"));
+            adaptor.pushMessage(new TestMessage("test2"));
+            adaptor.pushMessage(new TestMessage("test1"));
+            adaptor.pushMessage(new TestMessage("test2"));
+
+            // instead of the latch we are going to poll for the correct result
+            // wait for it to be received.
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==6; } }));
+            Thread.sleep(100);
+            assertEquals(6,mp.handleCalls.get());
+            assertEquals(3,mp.cloneCalls.get());
+            assertEquals(2,statsCollector.getMessageProcessorsCreated());
+            
+            // prepare for the next run
+            KeySourceImpl.pause = new CountDownLatch(1);
+         }
+         
+         public String toString() { return "testFailedMessageHandling"; }
+      };
+      
+      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
+//      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
    }   
+
 }

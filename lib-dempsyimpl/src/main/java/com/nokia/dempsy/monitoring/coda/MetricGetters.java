@@ -10,7 +10,10 @@ public interface MetricGetters
    long getMessageFailedCount();
    long getDiscardedMessageCount();
    int getInFlightMessageCount();
+   long getMessagesNotSentCount();
+   long getMessagesSentCount();
    double getPreInstantiationDuration();
    double getOutputInvokeDuration();
    double getEvictionDuration();
+   long getMessageProcessorsCreated();
 }

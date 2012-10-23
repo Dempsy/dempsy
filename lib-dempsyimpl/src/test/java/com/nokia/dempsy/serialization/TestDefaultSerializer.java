@@ -24,12 +24,16 @@ import static org.junit.Assert.assertTrue;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.DefaultSerializers.LongSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
@@ -132,6 +136,7 @@ public class TestDefaultSerializer
    public static class Mock3 extends Mock2
    {
       public int myI = -1;
+      private UUID uuid = UUID.randomUUID();
       
       public Mock3() {}
       
@@ -144,8 +149,10 @@ public class TestDefaultSerializer
       public boolean equals(Object obj)
       {
          Mock3 o = (Mock3)obj;
-         return super.equals(obj) && myI == o.myI;
+         return super.equals(obj) && myI == o.myI && uuid.equals(o.uuid);
       }
+      
+      public UUID getUUID() { return uuid; }
    }
    
    @Test
@@ -159,10 +166,50 @@ public class TestDefaultSerializer
       assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
    }
    
+   com.esotericsoftware.kryo.Serializer<UUID> uuidSerializer = new com.esotericsoftware.kryo.Serializer<UUID>(true,true)
+   {
+      LongSerializer longSerializer = new LongSerializer();
+      {
+         longSerializer.setImmutable(true);
+         longSerializer.setAcceptsNull(false);
+      }
+
+      @Override
+      public UUID read(Kryo kryo, Input input, Class<UUID> clazz)
+      {
+         long mostSigBits = longSerializer.read(kryo, input, long.class);
+         long leastSigBits = longSerializer.read(kryo, input, long.class);
+         return new UUID(mostSigBits,leastSigBits);
+      }
+
+      @Override
+      public void write(Kryo kryo, Output output, UUID uuid)
+      {
+         long mostSigBits = uuid.getMostSignificantBits();
+         long leastSigBits = uuid.getLeastSignificantBits();
+         longSerializer.write(kryo, output, mostSigBits);
+         longSerializer.write(kryo, output, leastSigBits);
+      }
+   };
+   
+   KryoOptimizer defaultMock3Optimizer = new KryoOptimizer()
+   {
+      @Override
+      public void preRegister(Kryo kryo){ }
+      
+      @Override
+      public void postRegister(Kryo kryo)
+      {
+         com.esotericsoftware.kryo.Registration reg = kryo.getRegistration(UUID.class);
+         reg.setSerializer(uuidSerializer);
+      }
+   };
+   
    @Test
    public void testChildClassSerialization() throws Throwable
    {
-      KryoSerializer<Object> ser = new KryoSerializer<Object>();
+      KryoSerializer<Object> ser = new KryoSerializer<Object>(defaultMock3Optimizer);
+      
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
       byte[] data = ser.serialize(o);
       Mock2 o2 = (Mock2)ser.deserialize(data);
@@ -175,11 +222,11 @@ public class TestDefaultSerializer
    @Test
    public void testChildClassSerializationWithRegistration() throws Throwable
    {
-      KryoSerializer<Object> ser = new KryoSerializer<Object>();
+      KryoSerializer<Object> ser = new KryoSerializer<Object>(defaultMock3Optimizer);
       JavaSerializer<Object> serJ = new JavaSerializer<Object>();
-      KryoSerializer<Object> serR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10));
-      KryoSerializer<Object> serRR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
-      KryoSerializer<Object> serRROb = new KryoSerializer<Object>(new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()));
+      KryoSerializer<Object> serR = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName(),10));
+      KryoSerializer<Object> serRR = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
+      KryoSerializer<Object> serRROb = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()),new Registration(UUID.class.getName()));
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
       byte[] data = ser.serialize(o);
       byte[] dataJ = serJ.serialize(o);
@@ -195,21 +242,23 @@ public class TestDefaultSerializer
       assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
       assertTrue(o2 instanceof Mock3);
       assertEquals(1,((Mock3)o2).myI);
+      serRROb.deserialize(dataRROb);
    }
    
    @Test
    public void testChildClassSerializationWithRegistrationAndOptimization() throws Throwable
    {
-      KryoSerializer<Object> ser = new KryoSerializer<Object>();
+      KryoSerializer<Object> ser = new KryoSerializer<Object>(defaultMock3Optimizer);
       JavaSerializer<Object> serJ = new JavaSerializer<Object>();
-      KryoSerializer<Object> serR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10));
-      KryoSerializer<Object> serRR = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
-      KryoSerializer<Object> serRROb = new KryoSerializer<Object>(new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()));
-      KryoSerializer<Object> serRRO  = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
+      KryoSerializer<Object> serR = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName(),10));
+      KryoSerializer<Object> serRR = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
+      KryoSerializer<Object> serRROb = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()));
+      KryoSerializer<Object> serRRO  = new KryoSerializer<Object>(new Registration(MockClass.class.getName(),10),
+            new Registration(Mock3.class.getName(), 11), new Registration(UUID.class.getName(),12));
       serRRO.setKryoOptimizer(new KryoOptimizer()
       {
          @Override
-         public void optimize(Kryo kryo)
+         public void preRegister(Kryo kryo)
          {
             kryo.setRegistrationRequired(true);
             
@@ -220,6 +269,13 @@ public class TestDefaultSerializer
             FieldSerializer<Mock2> mock2Ser = (FieldSerializer<Mock2>)kryo.getSerializer(MockClass.class);
             mock2Ser.setFixedFieldTypes(true);
             mock2Ser.setFieldsCanBeNull(false);
+         }
+
+         @Override
+         public void postRegister(Kryo kryo)
+         {
+            com.esotericsoftware.kryo.Registration reg = kryo.getRegistration(UUID.class);
+            reg.setSerializer(uuidSerializer);
          }
       });
       
@@ -248,7 +304,7 @@ public class TestDefaultSerializer
    @Test
    public void testCollectionSerialization() throws Throwable
    {
-      KryoSerializer<Object> ser = new KryoSerializer<Object>();
+      KryoSerializer<Object> ser = new KryoSerializer<Object>(defaultMock3Optimizer);
       ArrayList<Mock2> mess = new ArrayList<Mock2>();
       for (int i = 0; i < 10; i++)
       {

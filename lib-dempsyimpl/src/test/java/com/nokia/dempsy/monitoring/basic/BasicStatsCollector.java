@@ -192,4 +192,19 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
 	public double getEvictionDuration() {
 		return evictionPassDuration.doubleValue();
 	}
+
+   @Override
+   public long getMessagesNotSentCount()
+   {
+      return messagesUnsent.get();
+   }
+
+   @Override
+   public long getMessagesSentCount()
+   {
+      return messagesSent.get();
+   }
+   
+   public long getMessageProcessorsCreated() { return mpsCreated.get(); }
+	
 }

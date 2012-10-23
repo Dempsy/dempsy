@@ -198,7 +198,8 @@ public class TcpReceiver implements Receiver
             logger.warn("Couldn't release the socket accept for " + destination);
       }
       
-      executor.shutdown();
+      if (executor != null)
+         executor.shutdown();
    }
    
    public synchronized boolean isStarted()

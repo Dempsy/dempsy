@@ -13,8 +13,15 @@ public interface KryoOptimizer
 {
    /**
     * The implementor should provide whatever class specific optimizations they
-    * would like to make. This will be called after any class registrations
+    * would like to make. This will be called before any class registrations
     * the were provided to the {@link KryoSerializer} constructor are registered.
     */
-   public void optimize(Kryo kryo);
+   public void preRegister(Kryo kryo);
+   
+   /**
+    * The implementor should provide whatever additional class specific optimizations they
+    * would like to make. This will be called AFTER any class registrations
+    * the were provided to the {@link KryoSerializer} constructor are registered.
+    */
+   public void postRegister(Kryo kryo);
 }

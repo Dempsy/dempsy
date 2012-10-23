@@ -304,4 +304,22 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    public double getEvictionDuration() {
       return evictionInvokeDuration.meanRate();
    }
+
+   @Override
+   public long getMessagesNotSentCount()
+   {
+      return messagesUnsent.count();
+   }
+
+   @Override
+   public long getMessagesSentCount()
+   {
+      return messagesSent.count();
+   }
+   
+   @Override
+   public long getMessageProcessorsCreated()
+   {
+      return mpsCreated.count();
+   }
 }

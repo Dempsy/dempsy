@@ -160,6 +160,13 @@ public class KryoSerializer<T> implements Serializer<T>
          if (requireRegistration)
             ret.kryo.setRegistrationRequired(requireRegistration);
          
+         if (optimizer != null)
+         {
+            try { optimizer.preRegister(ret.kryo); }
+            catch (Throwable th) { logger.error("Optimizer for KryoSerializer \"" + SafeString.valueOfClass(optimizer) + 
+                  "\" threw and unepexcted exception.... continuing.",th); }
+         }
+
          if (registrations != null)
          {
             for (Registration reg : registrations)
@@ -180,7 +187,7 @@ public class KryoSerializer<T> implements Serializer<T>
          
          if (optimizer != null)
          {
-            try { optimizer.optimize(ret.kryo); }
+            try { optimizer.postRegister(ret.kryo); }
             catch (Throwable th) { logger.error("Optimizer for KryoSerializer \"" + SafeString.valueOfClass(optimizer) + 
                   "\" threw and unepexcted exception.... continuing.",th); }
          }
