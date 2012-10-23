@@ -42,7 +42,7 @@ public class TestDefaultSerializer
    private static final int TEST_NUMBER = 42;
    private static final String TEST_STRING = "life, the universe and everything";
    private static final long baseTimeoutMillis = 20000;
-   private static final int numThreads = 25;
+   private static final int numThreads = 5;
    
    private MockClass o1 = new MockClass(TEST_NUMBER, TEST_STRING);
    
@@ -276,86 +276,91 @@ public class TestDefaultSerializer
       final AtomicLong[] counts = new AtomicLong[numThreads];
       final long maxSerialize = 100000;
       
-      for (int i = 0; i < threads.length; i++)
+      try
       {
-         
-         finished[i] = new AtomicBoolean(true);
-         counts[i] = new AtomicLong(0);
-         
-         final int curIndex = i;
-         
-         Thread t = new Thread(new Runnable()
+         for (int i = 0; i < threads.length; i++)
          {
-            int index = curIndex;
-            @Override
-            public void run()
+
+            finished[i] = new AtomicBoolean(true);
+            counts[i] = new AtomicLong(0);
+
+            final int curIndex = i;
+
+            Thread t = new Thread(new Runnable()
             {
-               try
+               int index = curIndex;
+               @Override
+               public void run()
                {
-                  synchronized(latch)
+                  try
                   {
-                     finished[index].set(false);
-                     latch.wait();
+                     synchronized(latch)
+                     {
+                        finished[index].set(false);
+                        latch.wait();
+                     }
+
+                     while (!done.get())
+                     {
+                        MockClass o = new MockClass(index, "Hello:" + index);
+                        byte[] data = ser.serialize(o);
+                        MockClass dser = ser.deserialize(data);
+                        assertEquals(o,dser);
+                        counts[index].incrementAndGet();
+                     }
                   }
-                  
-                  while (!done.get())
+                  catch (Throwable th)
                   {
-                     MockClass o = new MockClass(index, "Hello:" + index);
-                     byte[] data = ser.serialize(o);
-                     MockClass dser = ser.deserialize(data);
-                     assertEquals(o,dser);
-                     counts[index].incrementAndGet();
+                     failed.set(true);
+                  }
+                  finally
+                  {
+                     finished[index].set(true);
                   }
                }
-               catch (Throwable th)
+            },"Kryo-Test-Thread-" + i);
+
+            t.setDaemon(true);
+            t.start();
+            threads[i] = t;
+         }
+
+         // wait until all the threads have been started.
+         assertTrue(TestUtils.poll(baseTimeoutMillis, finished, new TestUtils.Condition<AtomicBoolean[]>()
                {
-                  failed.set(true);
-               }
-               finally
-               {
-                  finished[index].set(true);
-               }
+            @Override
+            public boolean conditionMet(AtomicBoolean[] o) throws Throwable
+            {
+               for (int i = 0; i < numThreads; i++)
+                  if (o[i].get())
+                     return false;
+               return true;
             }
-         },"Kryo-Test-Thread-" + i);
-         
-         t.setDaemon(true);
-         t.start();
-         threads[i] = t;
+               }));
+
+         Thread.sleep(10);
+
+         synchronized(latch) { latch.notifyAll(); }
+
+         // wait until so many message have been serialized
+         assertTrue(TestUtils.poll(baseTimeoutMillis, counts, new TestUtils.Condition<AtomicLong[]>()
+               {
+            @Override
+            public boolean conditionMet(AtomicLong[] cnts) throws Throwable
+            {
+               for (int i = 0; i < numThreads; i++)
+                  if (cnts[i].get() < maxSerialize)
+                     return false;
+               return true;
+            }
+
+               }));
+      }
+      finally
+      {
+         done.set(true);
       }
       
-      // wait until all the threads have been started.
-      assertTrue(TestUtils.poll(baseTimeoutMillis, finished, new TestUtils.Condition<AtomicBoolean[]>()
-            {
-               @Override
-               public boolean conditionMet(AtomicBoolean[] o) throws Throwable
-               {
-                  for (int i = 0; i < numThreads; i++)
-                     if (o[i].get())
-                        return false;
-                  return true;
-               }
-            }));
-      
-      Thread.sleep(10);
-      
-      synchronized(latch) { latch.notifyAll(); }
-
-      // wait until so many message have been serialized
-      assertTrue(TestUtils.poll(baseTimeoutMillis, counts, new TestUtils.Condition<AtomicLong[]>()
-            {
-               @Override
-               public boolean conditionMet(AtomicLong[] o) throws Throwable
-               {
-                  for (int i = 0; i < numThreads; i++)
-                     if (o[i].get() < maxSerialize)
-                        return false;
-                  return true;
-               }
-         
-            }));
-      
-      
-      done.set(true);
       for (int i = 0; i < threads.length; i++)
          threads[i].join(baseTimeoutMillis);
       
