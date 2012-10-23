@@ -118,7 +118,7 @@ public class TestDempsy extends DempsyTestBase
          actx.registerShutdownHook();
 
          Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
-         for (Dempsy.Application.Cluster cluster : dempsy.applications.get(0).appClusters)
+         for (Dempsy.Application.Cluster cluster : dempsy.applications.values().iterator().next().appClusters)
          {
             // get the receiver from the node
             TcpReceiver r = (TcpReceiver)cluster.getNodes().get(0).receiver;
@@ -616,6 +616,7 @@ public class TestDempsy extends DempsyTestBase
             "testDempsy/Dempsy-IndividualClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/DTSimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();

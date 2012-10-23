@@ -45,6 +45,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
             "testDempsy/Dempsy-IndividualClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/SimpleMultistageApplication/appdef.xml","testDempsy/SimpleMultistageApplication/cluster0.xml",
             "testDempsy/SimpleMultistageApplication/cluster1.xml","testDempsy/SimpleMultistageApplication/cluster2.xml",
             "testDempsy/SimpleMultistageApplication/cluster3.xml"
@@ -82,6 +83,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
             "testDempsy/Dempsy-IndividualClusterStart.xml",
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
+            "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/SimpleMultistageApplication/appdef.xml","testDempsy/SimpleMultistageApplication/cluster2.xml"
             );
       actx.registerShutdownHook();
@@ -162,6 +164,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
                "testDempsy/Dempsy-IndividualClusterStart.xml",
                "testDempsy/Transport-PassthroughActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
+               "testDempsy/Serializer-KryoActx.xml",
                "testDempsy/SinglestageApplication/appdef.xml","testDempsy/SinglestageApplication/bad-cluster0.xml",
                "testDempsy/SinglestageApplication/cluster1.xml"
                );

@@ -5,17 +5,15 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-	<bean name="serializer" class="com.nokia.dempsy.serialization.kryo.KryoSerializer" >
-		<constructor-arg>
-         <bean class="com.nokia.dempsy.DempsyTestBase$TestKryoOptimizer" />
-		</constructor-arg>
-	   <constructor-arg>
-	     <list>
-          <bean class="com.nokia.dempsy.serialization.kryo.Registration" >
-            <constructor-arg value="com.nokia.dempsy.DempsyTestBase$TestMessage" />
-            <constructor-arg value="10" />
-          </bean>
-	     </list>
-	   </constructor-arg>
-	</bean>
+   <bean name="app" class="com.nokia.dempsy.config.ApplicationDefinition">
+      <constructor-arg name="applicationName" value="test-app" />
+   </bean>
+   
+            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+               <constructor-arg name="clusterName" value="test-cluster2" />
+               <property name="messageProcessorPrototype">
+                  <bean class="com.nokia.dempsy.DempsyTestBase$TestMp" />
+               </property>
+               <property name="applicationDefinition" ref="app" />
+            </bean>
 </beans>
