@@ -381,7 +381,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       @Override
       public boolean doesMessageKeyBelongToNode(Object messageKey)
       {
-         return destinationsAcquired.contains(messageKey.hashCode()%defaultTotalSlots);
+         return destinationsAcquired.contains(Math.abs(messageKey.hashCode()%defaultTotalSlots));
       }
 
    } // end Inbound class definition
