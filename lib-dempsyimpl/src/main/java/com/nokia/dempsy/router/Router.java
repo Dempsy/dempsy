@@ -398,7 +398,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
          }
          catch(DempsyException e)
          {
-            logger.error("Failed to determine the destination for " + SafeString.objectDescription(message) + 
+            logger.info("Failed to determine the destination for " + SafeString.objectDescription(message) + 
                   " using the routing strategy " + SafeString.objectDescription(strategyOutbound),e);
          }
          catch (SerializationException e)
