@@ -820,6 +820,8 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       return key;
    }
 
+   ConcurrentHashMap<Object, Boolean> keysBeingWorked = new ConcurrentHashMap<Object, Boolean>();
+   
    /**
     * This is required to return non null or throw a ContainerException
     * @throws IllegalAccessException 
@@ -831,9 +833,15 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       InstanceWrapper wrapper = instances.get(key);
       if(wrapper != null)
          return wrapper;
+      
+      // otherwise we will be working to get one.
+      Boolean tmplock = new Boolean(true);
+      Boolean lock = keysBeingWorked.putIfAbsent(key, tmplock);
+      if (lock == null)
+         lock = tmplock;
 
       // otherwise we'll do an atomic check-and-update
-      synchronized (this)
+      synchronized (lock)
       {
          wrapper = instances.get(key); // double checked lock?????
          if (wrapper != null)
@@ -902,9 +910,11 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
 
          // we only want to create a wrapper and place the instance into the container
          //  if the instance activated correctly. If we got here then the above try block
-         //  must have been succesful.
+         //  must have been successful.
          wrapper = new InstanceWrapper(instance); // null check above.
-         instances.put(key, wrapper);
+         instances.put(key, wrapper); // once it goes into the map, we can remove it from the 'being worked' set
+         keysBeingWorked.remove(key); // remove it from the keysBeingWorked since any subsequent call will get
+                                      //  the newly added one.
          statCollector.messageProcessorCreated(key);
 
          return wrapper;
