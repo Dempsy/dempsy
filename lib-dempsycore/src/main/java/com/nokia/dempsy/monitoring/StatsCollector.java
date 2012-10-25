@@ -33,77 +33,84 @@ public interface StatsCollector {
     */
    void messageReceived(byte[] message);
 
-	/**
-	 * MPContainer calls this method when before invoking an MP's 
-	 * <code>MessageHandler</code> or Output method.
-	 */
-	void messageDispatched(Object message);
+   /**
+    * MPContainer calls this method when before invoking an MP's 
+    * <code>MessageHandler</code> or Output method.
+    */
+   void messageDispatched(Object message);
 
-	/**
-	 * MPContainer calls this method when successfully invoking an MP's
-	 * <code>MessageHandler</code> or Output method.
-	 */
-	void messageProcessed(Object message);	
+   /**
+    * MPContainer calls this method when successfully invoking an MP's
+    * <code>MessageHandler</code> or Output method.
+    */
+   void messageProcessed(Object message);  
 
-	
-	/**
-	 * MPContainer calls this method when invoking an MP's
-	 * <code>MessageHandler</code> or Output method results in an error.
-	 */
-	void messageFailed(boolean mpFailure);
-	
-	/**
-	 * Dispatcher calls this method when emitting a message
-	 */
-	void messageSent(byte[] message);
-	
-	/**
-	 * Dispatcher calls this method when it fails to dispatch
-	 * a message
-	 */
-	void messageNotSent(Object message);
-	
-	/**
-	 *  The dispatcher calls this method in its <code>onMessage</code> handler
-	 *  when it discards a message.
-	 */
-	void messageDiscarded(Object message);
-	
-	/**
-	 *  The MP manager calls this method when it creates a message processor
-	 *  instance.
-	 */
-	void messageProcessorCreated(Object key);
-	
-	/**
-	 *  The instance manager calls this method when it deletes a message processor
-	 *  instance.
-	 */
-	void messageProcessorDeleted(Object key);
 
-	/**
-	 * Some stats collectors need to be stopped.
-	 */
+   /**
+    * MPContainer calls this method when invoking an MP's
+    * <code>MessageHandler</code> or Output method results in an error.
+    */
+   void messageFailed(boolean mpFailure);
+
+   /**
+    * Dispatcher calls this method when emitting a message
+    */
+   void messageSent(byte[] message);
+
+   /**
+    * Dispatcher calls this method when it fails to dispatch
+    * a message
+    */
+   void messageNotSent(Object message);
+
+   /**
+    *  The dispatcher calls this method in its <code>onMessage</code> handler
+    *  when it discards a message.
+    */
+   void messageDiscarded(Object message);
+
+   /**
+    *  The dispatcher calls this method in its <code>onMessage</code> handler
+    *  when it discards a message due to a collision at the Mp. This number will
+    *  ALSO be reflected in the messageDiscarded results.
+    */
+   void messageCollision(Object message);
+
+   /**
+    *  The MP manager calls this method when it creates a message processor
+    *  instance.
+    */
+   void messageProcessorCreated(Object key);
+
+   /**
+    *  The instance manager calls this method when it deletes a message processor
+    *  instance.
+    */
+   void messageProcessorDeleted(Object key);
+
+   /**
+    * Some stats collectors need to be stopped.
+    */
    public void stop();
-   
+
    /**
     * Dempsy calls into this just before starting pre-instantiation.
     */
    public TimerContext preInstantiationStarted();
-   
+
    /**
     * Dempsy calls into this just before invoking an MPs message handler.
     */
    public TimerContext handleMessageStarted();
-   
+
    /**
     * Dempsy calls into this just before calling @Output methods for MPs.
     */
    public TimerContext outputInvokeStarted();
-   
+
    /**
     * Dempsy calls into this just before calling @Output methods for MPs.
     */
    public TimerContext evictionPassStarted();
-   
+
 }

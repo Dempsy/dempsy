@@ -9,6 +9,7 @@ public interface MetricGetters
    long getDispatchedMessageCount();
    long getMessageFailedCount();
    long getDiscardedMessageCount();
+   long getMessageCollisionCount();
    int getInFlightMessageCount();
    long getMessagesNotSentCount();
    long getMessagesSentCount();

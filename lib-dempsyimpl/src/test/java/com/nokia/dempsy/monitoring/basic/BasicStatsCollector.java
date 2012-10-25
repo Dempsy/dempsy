@@ -31,6 +31,7 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
 {
    private final AtomicLong messagesReceived = new AtomicLong();
    private final AtomicLong messagesDiscarded = new AtomicLong();
+   private final AtomicLong messagesCollisions = new AtomicLong();
    private final AtomicLong messagesDispatched = new AtomicLong();
    private final AtomicLong messagesProcessed = new AtomicLong();
    private final AtomicLong messagesFailed = new AtomicLong();
@@ -63,6 +64,12 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    }
 
    @Override
+   public long getMessageCollisionCount()
+   {
+      return messagesCollisions.longValue();
+   }
+
+   @Override
    public long getDispatchedMessageCount()
    {
       return messagesDispatched.longValue();
@@ -91,6 +98,12 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    {
       messagesDiscarded.incrementAndGet();
       inProcessMessages.decrementAndGet();
+   }
+
+   @Override
+   public void messageCollision(Object message)
+   {
+      messagesCollisions.incrementAndGet();
    }
 
    @Override

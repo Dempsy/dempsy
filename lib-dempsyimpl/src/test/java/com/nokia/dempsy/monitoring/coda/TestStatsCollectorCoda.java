@@ -55,12 +55,19 @@ public class TestStatsCollectorCoda {
       assertEquals("got one", 3L, getStatValue(stats, StatsCollectorCoda.MN_BYTES_RCVD));
 	}
 
-	@Test
-	public void testMessageDiscarded() {
-		assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_DISCARD));
-		stats.messageDiscarded("foo");
-		assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_DISCARD));
-	}
+   @Test
+   public void testMessageDiscarded() {
+      assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_DISCARD));
+      stats.messageDiscarded("foo");
+      assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_DISCARD));
+   }
+
+   @Test
+   public void testMessageCollisions() {
+      assertEquals("no messages yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MSG_COLLISION));
+      stats.messageCollision("foo");
+      assertEquals("got one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MSG_COLLISION));
+   }
 
 	@Test
 	public void testMessageDispatched() {

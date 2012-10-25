@@ -54,6 +54,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    public static final String MN_MSG_UNSENT = "messages-unsent";
    public static final String MN_MP_CREATE = "message-processors-created";
    public static final String MN_MP_DELETE = "message-processors-deleted";
+   public static final String MN_MSG_COLLISION = "messages-collisions";
    public static final String GAGE_MPS_IN_PROCESS = "messages-in-process";
    public static final String TM_MP_PREIN = "pre-instantiation-duration";
    public static final String TM_MP_HANDLE = "mp-handle-message-duration";
@@ -66,6 +67,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       MN_MSG_PROC,         MN_MSG_SENT,
       MN_BYTES_SENT,       MN_MSG_UNSENT,
       MN_MP_CREATE,        MN_MP_DELETE,
+      MN_MSG_COLLISION,
       GAGE_MPS_IN_PROCESS,
       TM_MP_PREIN,         TM_MP_HANDLE,
       TM_MP_OUTPUT,        TM_MP_EVIC
@@ -74,6 +76,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    private Meter messagesReceived;
    private Meter bytesReceived;
    private Meter messagesDiscarded;
+   private Meter messagesCollisions;
    private Meter messagesDispatched;
    private Meter messagesFwFailed;
    private Meter messagesMpFailed;
@@ -103,6 +106,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       messagesReceived = Metrics.newMeter(Dempsy.class, MN_MSG_RCVD, scope, "messages", TimeUnit.SECONDS);
       bytesReceived = Metrics.newMeter(Dempsy.class, MN_BYTES_RCVD, scope, "bytes", TimeUnit.SECONDS);
       messagesDiscarded = Metrics.newMeter(Dempsy.class, MN_MSG_DISCARD, scope, "messages", TimeUnit.SECONDS);
+      messagesCollisions = Metrics.newMeter(Dempsy.class, MN_MSG_COLLISION, scope, "messages", TimeUnit.SECONDS);
       messagesDispatched = Metrics.newMeter(Dempsy.class, MN_MSG_DISPATCH, scope, "messages", TimeUnit.SECONDS);
       messagesFwFailed = Metrics.newMeter(Dempsy.class, MN_MSG_FWFAIL, scope, "messages", TimeUnit.SECONDS);
       messagesMpFailed = Metrics.newMeter(Dempsy.class, MN_MSG_MPFAIL, scope, "messages", TimeUnit.SECONDS);
@@ -160,6 +164,11 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    public void messageDiscarded(Object message) {
       messagesDiscarded.mark();
       inProcessMessages.decrementAndGet();
+   }
+
+   @Override
+   public void messageCollision(Object message) {
+      messagesCollisions.mark();
    }
 
    @Override
@@ -238,6 +247,12 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    public long getDiscardedMessageCount()
    {
       return messagesDiscarded.count();
+   }
+
+   @Override
+   public long getMessageCollisionCount()
+   {
+      return messagesCollisions.count();
    }
 
    @Override

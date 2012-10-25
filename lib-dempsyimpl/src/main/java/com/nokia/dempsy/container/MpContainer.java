@@ -481,6 +481,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          Object instance = wrapper.getExclusive(block);
          if (instance != null) // null indicates we didn't get the lock
          {
+            gotLock = true;
             if(wrapper.isEvicted()){
                logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
                      + " due to eviction");
@@ -488,13 +489,13 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                return ret;
             }
 
-            gotLock = true;
             invokeOperation(wrapper.getInstance(), Operation.handle, message);
             ret = true;
          } else {
             if (logger.isTraceEnabled())
                logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
             statCollector.messageDiscarded(message);
+            statCollector.messageCollision(message);
          }
       } finally {
          if (gotLock)
