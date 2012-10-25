@@ -33,6 +33,7 @@ import com.nokia.dempsy.messagetransport.Transport;
 public class TcpTransport implements Transport
 {
    private OverflowHandler overflowHandler = null;
+   private boolean failFast = true;
 
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException
@@ -45,6 +46,7 @@ public class TcpTransport implements Transport
    {
       TcpReceiver receiver = new TcpReceiver();
       receiver.setOverflowHandler(overflowHandler);
+      receiver.setFailFast(failFast);
       receiver.start(executor);
       return receiver;
    }
@@ -54,6 +56,8 @@ public class TcpTransport implements Transport
    {
       this.overflowHandler = overflowHandler;
    }
+   
+   public void setFailFast(boolean failFast) { this.failFast = failFast; }
    
    public static InetAddress getFirstNonLocalhostInetAddress() throws SocketException
    {

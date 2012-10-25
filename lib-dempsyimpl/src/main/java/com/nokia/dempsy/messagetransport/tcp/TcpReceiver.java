@@ -58,6 +58,7 @@ public class TcpReceiver implements Receiver
    private Listener messageTransportListener;
    private Set<ClientThread> clientThreads = new HashSet<ClientThread>();
    private OverflowHandler overflowHandler = null;
+   private boolean failFast = true;
    
    private Object eventLock = new Object();
    private volatile boolean eventSignaled = false;
@@ -71,6 +72,10 @@ public class TcpReceiver implements Receiver
    {
       if (isStarted())
          return;
+      
+      // check to see that the overflowHandler and the failFast setting are consistent.
+      if (!failFast && overflowHandler != null)
+         logger.warn("TcpReceiver/TcpTransport is configured with an OverflowHandler that will never be used because it's also configured to NOT 'fail fast' so it will always block waiting for messages to be processed.");
       
       executor = exec;
 
@@ -159,6 +164,8 @@ public class TcpReceiver implements Receiver
     * and any failed message deliveries end up passed to the overflow handler. 
     */
    public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; }
+   
+   public void setFailFast(boolean failFast) { this.failFast = failFast; }
 
    @PreDestroy
    public synchronized void stop()
@@ -346,8 +353,7 @@ public class TcpReceiver implements Receiver
                               @Override
                               public Object call() throws Exception
                               {
-                                 // if the overflow handler is not null, then we want to fastfail since we have a place to send the failure.
-                                 boolean messageSuccess = messageTransportListener.onMessage( message, overflowHandler != null );  
+                                 boolean messageSuccess = messageTransportListener.onMessage( message, failFast );  
                                  if (overflowHandler != null && !messageSuccess)
                                     overflowHandler.overflow(message);
                                  return null;
