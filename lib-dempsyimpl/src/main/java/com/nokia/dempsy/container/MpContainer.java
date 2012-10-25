@@ -552,15 +552,16 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                      // so add it's key to the list of keys we plan don't
                      // need to return to.
                      keysToRemove.add(key);
+                     
+                     boolean removeInstance = false;
 
                      Object instance = wrapper.getInstance();
                      try {
                         if (prototype.invokeEvictable(instance)) {
+                           removeInstance = true;
                            wrapper.markEvicted();
                            prototype.passivate(wrapper.getInstance());
                            wrapper.markPassivated();
-                           instances.remove(key);
-                           statCollector.messageProcessorDeleted(key);
                         }
                      } 
                      catch (InvocationTargetException e)
@@ -573,10 +574,18 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                         logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
                               " is not defined correctly. Is it visible?",e);
                      }
-                     catch (RuntimeException e)
+                     catch (Throwable e)
                      {
                         logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
                               " resulted in an exception.",e);
+                     }
+                     
+                     // even if passivate throws an exception, if the eviction check returned 'true' then
+                     //  we need to remove the instance.
+                     if (removeInstance)
+                     {
+                        instances.remove(key);
+                        statCollector.messageProcessorDeleted(key);
                      }
                   }
                } finally {
