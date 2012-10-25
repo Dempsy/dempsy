@@ -346,7 +346,8 @@ public class TcpReceiver implements Receiver
                               @Override
                               public Object call() throws Exception
                               {
-                                 boolean messageSuccess = messageTransportListener.onMessage( message, overflowHandler != null );
+                                 // if the overflow handler is not null, then we want to fastfail since we have a place to send the failure.
+                                 boolean messageSuccess = messageTransportListener.onMessage( message, overflowHandler != null );  
                                  if (overflowHandler != null && !messageSuccess)
                                     overflowHandler.overflow(message);
                                  return null;
