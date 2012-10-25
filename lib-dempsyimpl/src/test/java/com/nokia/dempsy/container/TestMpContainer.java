@@ -42,6 +42,7 @@ import com.nokia.dempsy.annotations.Evictable;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
+import com.nokia.dempsy.annotations.Passivation;
 import com.nokia.dempsy.container.mocks.ContainerTestMessage;
 import com.nokia.dempsy.container.mocks.OutputMessage;
 import com.nokia.dempsy.messagetransport.Sender;
@@ -142,6 +143,8 @@ public class TestMpContainer
       
       public static AtomicLong numOutputExecutions = new AtomicLong(0);
       public static CountDownLatch blockAllOutput = new CountDownLatch(0);
+      public AtomicBoolean throwPassivateException = new AtomicBoolean(false);
+      public AtomicLong passivateExceptionCount = new AtomicLong(0);
 
       @Override
       public TestProcessor clone()
@@ -155,6 +158,16 @@ public class TestMpContainer
       public void activate(byte[] data)
       {
          activationCount++;
+      }
+      
+      @Passivation
+      public void passivate()
+      {
+         if (throwPassivateException.get())
+         {
+            passivateExceptionCount.incrementAndGet();
+            throw new RuntimeException("Passivate");
+         }
       }
 
       @MessageHandler
@@ -313,6 +326,37 @@ public class TestMpContainer
       assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount.intValue());
    }
    
+   @Test
+   public void testEvictableWithPassivateException() throws Exception 
+   {
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("did not create MP", 1, container.getProcessorCount());
+
+      TestProcessor mp = (TestProcessor)container.getMessageProcessor("foo");
+      assertNotNull("MP not associated with expected key", mp);
+      assertEquals("activation count, 1st message", 1, mp.activationCount);
+      assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+      mp.throwPassivateException.set(true);
+
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("activation count, 2nd message", 1, mp.activationCount);
+      assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
+      int tmpCloneCount = TestProcessor.cloneCount.intValue();
+      
+      mp.evict.set(true);
+      container.evict();
+      assertEquals("Passivate Exception Thrown",1, mp.passivateExceptionCount.get());
+      
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount.intValue());
+   }
+
    @Test
    public void testEvictableWithBusyMp() throws Throwable
    {
