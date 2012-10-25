@@ -465,44 +465,39 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       InstanceWrapper wrapper;
       wrapper = getInstanceForDispatch(message);
 
-      boolean ret = false;
+      boolean messageDispatchSuccessful = false;
 
       // wrapper cannot be null ... look at the getInstanceForDispatch method
-      boolean gotLock = false;
+      Object instance = wrapper.getExclusive(block);
 
-      if(wrapper.isEvicted()){
-         logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
-               + " due to eviction");
-         statCollector.messageDiscarded(message);
-         return ret;
-      }
-
-      try {
-         Object instance = wrapper.getExclusive(block);
-         if (instance != null) // null indicates we didn't get the lock
+      if (instance != null) // null indicates we didn't get the lock
+      {
+         try
          {
-            gotLock = true;
-            if(wrapper.isEvicted()){
-               logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype)
-                     + " due to eviction");
+            if(wrapper.isEvicted())
+            {
+               if (logger.isTraceEnabled())
+                  logger.trace("the container for " + clusterId + " failed handle message due to evicted Mp " + SafeString.valueOf(prototype));
                statCollector.messageDiscarded(message);
-               return ret;
+               messageDispatchSuccessful = false;
             }
-
-            invokeOperation(wrapper.getInstance(), Operation.handle, message);
-            ret = true;
-         } else {
-            if (logger.isTraceEnabled())
-               logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
-            statCollector.messageDiscarded(message);
-            statCollector.messageCollision(message);
+            else
+            {
+               invokeOperation(wrapper.getInstance(), Operation.handle, message);
+               messageDispatchSuccessful = true;
+            }
          }
-      } finally {
-         if (gotLock)
-            wrapper.releaseLock();
+         finally { wrapper.releaseLock(); }
+      } 
+      else  // ... we didn't get the lock
+      {
+         if (logger.isTraceEnabled())
+            logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
+         statCollector.messageDiscarded(message);
+         statCollector.messageCollision(message);
       }
 
-      return ret;
+      return messageDispatchSuccessful;
    }
 
    /**
