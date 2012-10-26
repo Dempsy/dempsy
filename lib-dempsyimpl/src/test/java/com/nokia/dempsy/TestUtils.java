@@ -11,6 +11,7 @@ import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.router.Router;
 import com.nokia.dempsy.router.RoutingStrategy;
 
@@ -55,6 +56,15 @@ public class TestUtils
       session.mkdir(ret, DirMode.PERSISTENT);
       return ret;
    }
+   
+   public static StatsCollector getStatsCollector(Dempsy dempsy, String appName, String clusterName)
+   {
+      Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId(appName,clusterName));
+      Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
+      return node.statsCollector;
+   }
+   
+
 
    /**
     * This allows tests to wait until a Dempsy application is completely up before
@@ -62,8 +72,7 @@ public class TestUtils
     * of an application, often a test will need to wait until an entire application has
     * been initialized.
     */
-   public static boolean waitForClustersToBeInitialized(long timeoutMillis, 
-         final int numSlotsPerCluster, Dempsy dempsy) throws Throwable
+   public static boolean waitForClustersToBeInitialized(long timeoutMillis, Dempsy dempsy) throws Throwable
    {
       try
       {

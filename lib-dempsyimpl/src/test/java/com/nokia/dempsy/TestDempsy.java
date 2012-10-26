@@ -370,7 +370,7 @@ public class TestDempsy
                   
                   Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
                   
-                  assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, 20, dempsy));
+                  assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
 
                   WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
                   Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
