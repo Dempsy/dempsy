@@ -51,11 +51,11 @@ public class TcpSender implements Sender
    private AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
    private StatsCollector statsCollector = null;
    private long timeoutMillis;
-   private SocketTimeout socketTimeout = null;
+   protected SocketTimeout socketTimeout = null;
    private long maxNumberOfQueuedMessages;
    private boolean batchOutgoingMessages;
 
-   private BlockingQueue<byte[]> sendingQueue = new LinkedBlockingQueue<byte[]>();
+   protected BlockingQueue<byte[]> sendingQueue = new LinkedBlockingQueue<byte[]>();
    
    protected TcpSender(TcpDestination destination, StatsCollector statsCollector, 
          long maxNumberOfQueuedOutgoing, long socketWriteTimeoutMillis, boolean batchOutgoingMessages) throws MessageTransportException

@@ -50,19 +50,22 @@ public class SocketTimeout implements Runnable
 
       long b = startTime.get();
       if (b != 0 && System.currentTimeMillis() - b > timeoutMillis)
-      {
-         // we're going to kill the socket.
-         try { thread.interrupt(); }
-         catch (Throwable th) { logger.error("Interrupt failed.", th); }
-
-         try { socket.close(); }
-         catch (Throwable th) { logger.error("Couldn't close socket.",th); }
-      }
+         disrupt();
       else
       {
          long nextTimeout = (b == 0 ? timeoutMillis : (System.currentTimeMillis() - b));
          if (nextTimeout < 0L) nextTimeout = 1;
          scheduler.schedule(this, nextTimeout + 1, TimeUnit.MILLISECONDS);
       }
+   }
+   
+   public void disrupt()
+   {
+      // we're going to kill the socket.
+      try { thread.interrupt(); }
+      catch (Throwable th) { logger.error("Interrupt failed.", th); }
+
+      try { socket.close(); }
+      catch (Throwable th) { logger.error("Couldn't close socket.",th); }
    }
 }

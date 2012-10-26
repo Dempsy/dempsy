@@ -141,6 +141,28 @@ public class TcpTransportTest
       });
    }
    
+   static TcpReceiver makeHangingReceiver()
+   {
+      return new TcpReceiver(null)
+      {
+         int count = 0;
+         
+         protected ClientThread makeNewClientThread(Socket clientSocket) throws IOException
+         {
+            count++;
+            return count == 1 ? new ClientThread(clientSocket)
+            {
+               @Override
+               public void run()
+               {
+                  while (!stopClient.get())
+                     try { Thread.sleep(1); } catch (Throwable th) {}
+               }
+            } : new ClientThread(clientSocket);
+         }
+      };
+   }
+   
    @Test
    public void transportSimpleMessageHungReciever() throws Throwable
    {
@@ -157,24 +179,7 @@ public class TcpTransportTest
             {
                //===========================================
                // setup the sender and receiver
-               adaptor = new TcpReceiver(null)
-               {
-                  int count = 0;
-                  
-                  protected ClientThread makeNewClientThread(Socket clientSocket) throws IOException
-                  {
-                     count++;
-                     return count == 1 ? new ClientThread(clientSocket)
-                     {
-                        @Override
-                        public void run()
-                        {
-                           while (!stopClient.get())
-                              try { Thread.sleep(1); } catch (Throwable th) {}
-                        }
-                     } : new ClientThread(clientSocket);
-                  }
-               };
+               adaptor = makeHangingReceiver();
                
                adaptor.setStatsCollector(statsCollector);
                final StringListener receiver = new StringListener();
@@ -230,7 +235,7 @@ public class TcpTransportTest
          }
          
          @Override
-         public String toString() { return "testTransportSimpleMessage"; }
+         public String toString() { return "transportSimpleMessageHungReciever"; }
       });
    }
 
@@ -562,7 +567,95 @@ public class TcpTransportTest
    @Test
    public void testBoundedOutputQueue() throws Throwable
    {
-      
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost) throws Throwable
+         {
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            final byte[] message = new byte[1024 * 8];
+            BasicStatsCollector statsCollector = new BasicStatsCollector();
+            try
+            {
+               //===========================================
+               // setup the sender and receiver
+               adaptor = makeHangingReceiver();
+               
+               adaptor.setStatsCollector(statsCollector);
+               final StringListener receiver = new StringListener();
+               adaptor.setListener(receiver);
+               factory = makeSenderFactory(false,statsCollector);
+
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+
+               // send a message
+               final TcpSender sender = (TcpSender)factory.getSender(destination);
+               sender.setMaxNumberOfQueuedMessages(10);
+               
+               assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, new TestUtils.Condition<BasicStatsCollector>()
+               {
+                  @Override
+                  public boolean conditionMet(BasicStatsCollector o) throws Throwable
+                  {
+                     // this should eventually fail
+                     sender.send(message); // this should work
+                     return sender.sendingQueue.size() > 100;
+                  }
+               }));
+               
+               Thread.sleep(100);
+               
+               final int backup = sender.sendingQueue.size();
+               
+               sender.socketTimeout.disrupt(); // kick it.
+               
+               // wait for it to fail
+               assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, new TestUtils.Condition<BasicStatsCollector>()
+               {
+                  @Override
+                  public boolean conditionMet(BasicStatsCollector o) throws Throwable
+                  {
+                     return o.getMessagesNotSentCount() > 90;
+                  }
+               }));
+               
+               Thread.sleep(100);
+               
+               assertTrue("backup is " + backup + " and discarded messages is " + statsCollector.getMessagesNotSentCount(), 
+                     statsCollector.getMessagesNotSentCount() < backup);
+
+               Long numMessagesReceived = receiver.numMessages.get();
+               assertTrue(TestUtils.poll(baseTimeoutMillis, numMessagesReceived, new TestUtils.Condition<Long>()
+               {
+                  @Override
+                  public boolean conditionMet(Long o) throws Throwable
+                  {
+                     sender.send("Hello".getBytes()); // this should work
+                     return receiver.numMessages.get() > o.longValue();
+                  }
+               }));
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "testBoundedOutputQueue"; }
+      });
+
    }
 
    
