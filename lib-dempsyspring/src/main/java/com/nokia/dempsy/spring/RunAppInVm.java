@@ -30,6 +30,9 @@ public class RunAppInVm
    protected static final String appdefParam = "appdef";
    protected static final String applicationParam = "application";
    
+   protected static ClassPathXmlApplicationContext context = null;
+   protected static Object contextLock = new Object();
+   
    public static void main(String[] args)
    {
       try
@@ -60,11 +63,15 @@ public class RunAppInVm
       //======================================================
       
       String contextFile = "classpath:Dempsy-localVm.xml";
-      ClassPathXmlApplicationContext context = null;
+      context = null;
       try
       {
-         // Initialize Spring
-         context = new ClassPathXmlApplicationContext(new String[] {appCtxFilename, contextFile});
+         synchronized(contextLock)
+         {
+            // Initialize Spring
+            context = new ClassPathXmlApplicationContext(new String[] {appCtxFilename, contextFile});
+            contextLock.notifyAll();
+         }
          context.registerShutdownHook();
       }
       catch(Throwable e)
@@ -88,6 +95,16 @@ public class RunAppInVm
          }
          
          logger.info("Shut down dempsy appliction "+appCtxFilename + ", bye!");
+      }
+   }
+   
+   public static ClassPathXmlApplicationContext waitForApplicationContext()
+   {
+      synchronized(contextLock)
+      {
+         while (context == null)
+            try { contextLock.wait(); } catch (InterruptedException e) {}
+         return context;
       }
    }
    
