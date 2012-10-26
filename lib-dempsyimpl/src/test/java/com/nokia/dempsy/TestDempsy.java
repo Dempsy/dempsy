@@ -69,8 +69,13 @@ import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 
 public class TestDempsy
 {
-   private static Logger logger = LoggerFactory.getLogger(TestDempsy.class);
+   /**
+    * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in 
+    * every runAllCombinations call. This can make TestDempsy run for a loooooong time.
+    */
+   public static boolean hardcore = false;
    
+   private static Logger logger = LoggerFactory.getLogger(TestDempsy.class);
    private static long baseTimeoutMillis = 20000; // 20 seconds
    
    String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
@@ -79,7 +84,7 @@ public class TestDempsy
    String[][] transports = new String[][] {
          { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
-         { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
+         { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
    
    String[] serializers = new String[]
@@ -335,10 +340,42 @@ public class TestDempsy
          try { dempsy.waitToBeStopped(); shutdown = true; } catch(InterruptedException e) {}
          waitForShutdownDoneLatch.countDown();
       }
+   }
+   
+   static class AlternatingIterable implements Iterable<String>
+   {
+      boolean hardcore = false;
+      List<String> strings = null;
+      
+      public AlternatingIterable(boolean hardcore, String[] strings)
+      {
+         this.hardcore = hardcore; 
+         this.strings = Arrays.asList(strings);
+      }
+      
+      @Override
+      public Iterator<String> iterator()
+      {
+         return hardcore ? strings.iterator() : 
+            new Iterator<String>()
+         {
+            boolean done = false;
+            
+            @Override
+            public boolean hasNext() { return !done; }
+
+            @Override
+            public String next(){ done = true; return strings.get(runCount % strings.size()); }
+
+            @Override
+            public void remove() { throw new UnsupportedOperationException(); }
+         };
+      }
       
    }
    
    static int runCount = 0;
+   
    public void runAllCombinations(String applicationContext, Checker checker) throws Throwable
    {
       for (String clusterManager : clusterManagers)
@@ -346,57 +383,61 @@ public class TestDempsy
          for (String[] alternatingTransports : transports)
          {
             // select one of the alternatingTransports
-            String transport = alternatingTransports[runCount % alternatingTransports.length];
-            
-            String serializer = serializers[runCount % serializers.length];
-
-            // alternate the dempsy configs
-            String dempsyConfig = dempsyConfigs[runCount % dempsyConfigs.length];
-
-            if (! badCombos.contains(new ClusterId(clusterManager,transport)))
+            for (String transport : new AlternatingIterable(hardcore,alternatingTransports))
             {
-               String pass = " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + serializer + "," + transport;
-               try
+               for (String serializer : new AlternatingIterable(hardcore,serializers))
                {
-                  logger.debug("*****************************************************************");
-                  logger.debug(pass);
-                  logger.debug("*****************************************************************");
+                  // alternate the dempsy configs
+                  for (String dempsyConfig : new AlternatingIterable(hardcore,dempsyConfigs))
+                  {
 
-                  String[] ctx = { dempsyConfig, clusterManager, transport, serializer, "testDempsy/" + applicationContext };
+                     if (! badCombos.contains(new ClusterId(clusterManager,transport)))
+                     {
+                        String pass = applicationContext + " test: " + (checker == null ? "none" : checker) + " using " + dempsyConfig + "," + clusterManager + "," + serializer + "," + transport;
+                        try
+                        {
+                           logger.debug("*****************************************************************");
+                           logger.debug(pass);
+                           logger.debug("*****************************************************************");
 
-                  logger.debug("Starting up the appliction context ...");
-                  ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
-                  actx.registerShutdownHook();
-                  
-                  Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
-                  
-                  assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
+                           String[] ctx = { dempsyConfig, clusterManager, transport, serializer, "testDempsy/" + applicationContext };
 
-                  WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
-                  Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
-                  waitingForShutdownThread.start();
-                  Thread.yield();
+                           logger.debug("Starting up the appliction context ...");
+                           ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
+                           actx.registerShutdownHook();
 
-                  logger.debug("Running test ...");
-                  if (checker != null)
-                     checker.check(actx);
-                  logger.debug("Done with test, stopping the application context ...");
+                           Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
 
-                  actx.stop();
-                  actx.destroy();
+                           assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
 
-                  assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
-                  assertTrue(waitingForShutdown.shutdown);
+                           WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
+                           Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
+                           waitingForShutdownThread.start();
+                           Thread.yield();
 
-                  logger.debug("Finished this pass.");
+                           logger.debug("Running test ...");
+                           if (checker != null)
+                              checker.check(actx);
+                           logger.debug("Done with test, stopping the application context ...");
+
+                           actx.stop();
+                           actx.destroy();
+
+                           assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+                           assertTrue(waitingForShutdown.shutdown);
+
+                           logger.debug("Finished this pass.");
+                        }
+                        catch (AssertionError re)
+                        {
+                           logger.error("***************** FAILED ON: " + pass);
+                           throw re;
+                        }
+
+                        runCount++;
+                     }
+                  }
                }
-               catch (AssertionError re)
-               {
-                  logger.error("***************** FAILED ON: " + pass);
-                  throw re;
-               }
-               
-               runCount++;
             }
          }
       }
@@ -526,7 +567,15 @@ public class TestDempsy
    @Test
    public void testStartupShutdown() throws Throwable
    {
-      runAllCombinations("SimpleMultistageApplicationActx.xml",null);
+      runAllCombinations("SimpleMultistageApplicationActx.xml", new Checker()
+      {
+         @Override
+         public void check(ApplicationContext context) throws Throwable { }
+         
+         public String toString() { return "testStartupShutdown"; }
+
+      });
+
    }
    
    @Test
@@ -673,7 +722,7 @@ public class TestDempsy
                   stopSending.set(true);
                }
                
-               public String toString() { return "testMessageThrough"; }
+               public String toString() { return "testMessageThroughWithClusterFailure"; }
             });
    }
 
@@ -740,9 +789,7 @@ public class TestDempsy
             new Checker()
             {
                @Override
-               public void check(ApplicationContext context) throws Throwable
-               {
-               }
+               public void check(ApplicationContext context) throws Throwable { }
                
                public String toString() { return "testExplicitDesintationsStartup"; }
 
@@ -931,10 +978,15 @@ public class TestDempsy
             
             assertTrue(poll(baseTimeoutMillis,statsCollector,new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters mg) {  return mg.getMessageProcessorsCreated()==2; } }));
             adaptor.pushMessage(new TestMessage("test1"));
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==1; } }));
             adaptor.pushMessage(new TestMessage("test2"));
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==2; } }));
             adaptor.pushMessage(new TestMessage("test1"));
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==3; } }));
             adaptor.pushMessage(new TestMessage("test2"));
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==4; } }));
             adaptor.pushMessage(new TestMessage("test1"));
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==5; } }));
             adaptor.pushMessage(new TestMessage("test2"));
 
             // instead of the latch we are going to poll for the correct result
@@ -949,11 +1001,11 @@ public class TestDempsy
             KeySourceImpl.pause = new CountDownLatch(1);
          }
          
-         public String toString() { return "testFailedMessageHandling"; }
+         public String toString() { return "testFailedMessageHandlingWithKeyStore"; }
       };
       
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
-//      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
+      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
    }   
 
 }
