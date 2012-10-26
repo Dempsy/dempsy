@@ -31,13 +31,12 @@ public class RunAppInVm
    protected static final String applicationParam = "application";
    
    protected static ClassPathXmlApplicationContext context = null;
-   protected static Object contextLock = new Object();
    
    public static void main(String[] args)
    {
       try
       {
-         run(args);
+         run(true);
       }
       catch(Throwable e)
       {
@@ -47,7 +46,8 @@ public class RunAppInVm
       }
       System.exit(0);
    }
-   public static void run(String[] args) throws Throwable
+   
+   public static ClassPathXmlApplicationContext run(boolean startUp) throws Throwable
    {
       //======================================================
       // Handle all of the options.
@@ -66,12 +66,8 @@ public class RunAppInVm
       context = null;
       try
       {
-         synchronized(contextLock)
-         {
-            // Initialize Spring
-            context = new ClassPathXmlApplicationContext(new String[] {appCtxFilename, contextFile});
-            contextLock.notifyAll();
-         }
+         // Initialize Spring
+         context = new ClassPathXmlApplicationContext(new String[] {appCtxFilename, contextFile});
          context.registerShutdownHook();
       }
       catch(Throwable e)
@@ -79,11 +75,14 @@ public class RunAppInVm
          logger.error(MarkerFactory.getMarker("FATAL"), "Failed to start the application ", e);
          throw e;
       }
+      
       if(context != null)
       {
          try
          {
-            context.getBean(Dempsy.class).waitToBeStopped();
+            Dempsy dempsy = context.getBean(Dempsy.class);
+            if (startUp) dempsy.start();
+            else dempsy.waitToBeStopped();
          }
          catch(InterruptedException e)
          {
@@ -91,21 +90,14 @@ public class RunAppInVm
          }
          finally
          {
-            context.stop();
+            if (!startUp)
+               context.stop();
          }
          
          logger.info("Shut down dempsy appliction "+appCtxFilename + ", bye!");
       }
-   }
-   
-   public static ClassPathXmlApplicationContext waitForApplicationContext()
-   {
-      synchronized(contextLock)
-      {
-         while (context == null)
-            try { contextLock.wait(); } catch (InterruptedException e) {}
-         return context;
-      }
+      
+      return context;
    }
    
    public static void usage(String errorMessage) throws DempsyException

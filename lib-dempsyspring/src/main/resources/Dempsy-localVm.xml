@@ -11,7 +11,7 @@
 
    <bean id="localVMContainerClusterSessionFactory" class="com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory"/>
 
-   <bean id="Dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType" init-method="start" destroy-method="stop">
+   <bean id="Dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType" destroy-method="stop">
       <property name="clusterSessionFactory" ref="localVMContainerClusterSessionFactory"/>
       <property name="clusterCheck">
          <bean class="com.nokia.dempsy.router.AlwaysInCurrentCluster" />

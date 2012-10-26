@@ -57,7 +57,7 @@ public class TestRunAppInVm
          @Override public void run() { 
             try
             {
-               RunAppInVm.run(new String[0]);
+               RunAppInVm.run(true);
             }
             catch (Throwable th)
             {
@@ -109,7 +109,7 @@ public class TestRunAppInVm
    {
       System.clearProperty(RunAppInVm.appdefParam);
       System.clearProperty(RunAppInVm.applicationParam);
-      RunAppInVm.run(new String[0]);
+      RunAppInVm.run(true);
    }
    
    @Test(expected=FileNotFoundException.class)
@@ -118,7 +118,7 @@ public class TestRunAppInVm
       System.clearProperty(RunAppInVm.appdefParam);
       try
       {
-         RunAppInVm.run(new String[0]);
+         RunAppInVm.run(true);
       }
       catch(Throwable t)
       {
@@ -132,7 +132,7 @@ public class TestRunAppInVm
       System.setProperty(RunAppInVm.appdefParam,"IDontExist.xml");
       try
       {
-         RunAppInVm.run(new String[0]);
+         RunAppInVm.run(true);
       }
       catch (Throwable th)
       {
