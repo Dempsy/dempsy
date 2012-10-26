@@ -26,12 +26,25 @@ import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpSenderFactory implements SenderFactory
 {
    private volatile boolean isStopped = false;
-   
+   protected StatsCollector statsCollector = null;
    private Map<Destination,TcpSender> senders = new HashMap<Destination, TcpSender>();
+   
+   protected long socketWriteTimeoutMillis;
+   protected boolean batchOutgoingMessages;
+   protected long maxNumberOfQueuedOutbound;
+   
+   protected TcpSenderFactory(StatsCollector statsCollector, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
+   {
+      this.statsCollector = statsCollector;
+      this.socketWriteTimeoutMillis = socketWriteTimeoutMillis;
+      this.batchOutgoingMessages = batchOutgoingMessages;
+      this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
+   }
 
    @Override
    public Sender getSender(Destination destination) throws MessageTransportException
@@ -64,7 +77,7 @@ public class TcpSenderFactory implements SenderFactory
          senders.clear();
       }
       for (TcpSender sender : scol)
-         sender.close();
+         sender.stop();
    }
    
    /**
@@ -73,7 +86,7 @@ public class TcpSenderFactory implements SenderFactory
     */
    protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
    {
-      return new TcpSender( (TcpDestination)destination );
+      return new TcpSender( (TcpDestination)destination, statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages );
    }
 
 }

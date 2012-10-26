@@ -29,36 +29,76 @@ import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpTransport implements Transport
 {
    private OverflowHandler overflowHandler = null;
    private boolean failFast = true;
+   
+   private boolean batchOutgoingMessages = false;
+   private long socketWriteTimeoutMillis = 30000; 
+   private long maxNumberOfQueuedOutbound = 10000;
 
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException
+   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector) throws MessageTransportException
    {
-      return new TcpSenderFactory();
+      return new TcpSenderFactory(statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
    }
 
    @Override
    public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
    {
-      TcpReceiver receiver = new TcpReceiver();
+      TcpReceiver receiver = new TcpReceiver(executor);
       receiver.setOverflowHandler(overflowHandler);
       receiver.setFailFast(failFast);
-      receiver.start(executor);
       return receiver;
    }
 
    @Override
-   public void setOverflowHandler(OverflowHandler overflowHandler) throws MessageTransportException
+   public void setOverflowHandler(OverflowHandler overflowHandler)
    {
       this.overflowHandler = overflowHandler;
    }
    
    public void setFailFast(boolean failFast) { this.failFast = failFast; }
    
+   /**
+    * <p>By default the {@link TcpSender} sends and flushes one message at a time. You can have
+    * any {@link TcpSender} that results from the {@link TcpSenderFactory} from this instance
+    * of the {@link TcpTransport} batch up all pending messages prior to flushing the output 
+    * buffer.</p>
+    * 
+    * <p>The drawback here is that messages can be lost that have been marked as Sent but it can
+    * perform better.</p>
+    */
+   public void setBatchOutgoingMessages(boolean batchOutgoingMessages)
+   {
+      this.batchOutgoingMessages = batchOutgoingMessages;
+   }
+
+   /**
+    * Because the {@link TcpSender} does a blocking write, this will set a timeout on the 
+    * blocking write. The timeout measurement begins with a 'flush' of the data and ends when
+    * either the timeout expires or when the flush is completed.
+    */
+   public void setSocketWriteTimeoutMillis(long socketWriteTimeoutMillis)
+   {
+      this.socketWriteTimeoutMillis = socketWriteTimeoutMillis;
+   }
+   
+   /**
+    * <p>The {@link TcpSender} sends data from a dedicated thread and reads from a queue. This will set
+    * the maximum number of pending sends. When the maximum number of pending sends is reached, the oldest
+    * data will be discarded.</p>
+    * 
+    * <p>Setting the value to -1 will allow the queue to be unbounded. The default is 10000.</p>
+    */
+   public void setMaxNumberOfQueuedOutbound(long maxNumberOfQueuedOutbound)
+   {
+      this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
+   }
+
    public static InetAddress getFirstNonLocalhostInetAddress() throws SocketException
    {
       Enumeration<NetworkInterface> netInterfaces=NetworkInterface.getNetworkInterfaces();

@@ -24,7 +24,14 @@ public interface Receiver
    
    public void setListener(Listener listener) throws MessageTransportException;
    
-   public void setStatsCollector(StatsCollector statsCollector);
-
+   public void start() throws MessageTransportException;
+   
    public void stop();
+   
+   
+   /**
+    * This stats collector should be available to any Sender or Receiver that results
+    * from this Transport instance.
+    */
+   public void setStatsCollector(StatsCollector statsCollector);
 }

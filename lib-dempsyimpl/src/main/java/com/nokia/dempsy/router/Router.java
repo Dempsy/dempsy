@@ -391,8 +391,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             else
             {
                byte[] data = serializer.serialize(message);
-               sender.send(data);
-               statsCollector.messageSent(data);
+               sender.send(data); // the sender is assumed to increment the stats collector.
                messageFailed = false;
             }
          }

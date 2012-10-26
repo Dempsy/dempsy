@@ -48,6 +48,10 @@ public class BlockingQueueSenderFactory implements SenderFactory
       return blockingQueueSender;
    }
    
-   public void stop() {}
+   public void stop()
+   {
+      for (BlockingQueueSender sender : senders.values())
+         sender.shuttingDown();
+   }
 
 }

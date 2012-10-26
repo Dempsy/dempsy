@@ -102,7 +102,6 @@ public class Dempsy
                   router.setCurrentCluster(currentClusterId);
                   router.setClusterSession(clusterSession);
                   // get the executor if one is set
-                  router.setDefaultSenderFactory(transport.createOutbound(executor));
                   
                   container = new MpContainer(currentClusterId);
                   container.setDispatcher(router);
@@ -126,6 +125,7 @@ public class Dempsy
                   {
                      receiver = transport.createInbound(executor);
                      receiver.setListener(container);
+                     receiver.start();
                      thisDestination = receiver.getDestination();
                   }
 
@@ -140,6 +140,8 @@ public class Dempsy
                         receiver.setStatsCollector(statsCollector);
                   }
                   
+                  router.setDefaultSenderFactory(transport.createOutbound(executor, statsCollector));
+
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
                   
                   KeySource<?> keySource = clusterDefinition.getKeySource();

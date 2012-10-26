@@ -8,18 +8,13 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-   <context:annotation-config />
-
-   <!-- This will trigger processing of @PostConstruct and @PreDestroy -->
-   <bean class="org.springframework.context.annotation.CommonAnnotationBeanPostProcessor" />
-
    <!-- input: test adds messages directly to queue, they get delivered to container -->
    <bean id="inputQueue" class="java.util.concurrent.ArrayBlockingQueue">
       <constructor-arg value="16" />
    </bean>
 
    <bean id="inputTransport"
-      class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor">
+      class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="stop">
       <property name="queue" ref="inputQueue" />
       <property name="listener" ref="container" />
    </bean>

@@ -18,8 +18,6 @@ package com.nokia.dempsy.messagetransport.util;
 
 import java.util.concurrent.BlockingQueue;
 
-import javax.annotation.PreDestroy;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,7 +94,6 @@ public class QueuingReceiver implements Listener
     * This implements the MessageTransportListener requirement. It does nothing.
     */
    @Override
-   @PreDestroy
    public void shuttingDown() {  }
    
 }

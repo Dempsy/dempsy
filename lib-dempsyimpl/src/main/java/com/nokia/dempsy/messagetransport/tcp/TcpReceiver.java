@@ -31,8 +31,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.annotation.PreDestroy;
-
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,7 +67,10 @@ public class TcpReceiver implements Receiver
    protected boolean iStartedIt = false;
    protected StatsCollector statsCollector;
    
-   public synchronized void start(DempsyExecutor exec) throws MessageTransportException
+   protected TcpReceiver(DempsyExecutor executor) { this.executor = executor; }
+   
+   @Override
+   public synchronized void start() throws MessageTransportException
    {
       if (isStarted())
          return;
@@ -78,8 +79,6 @@ public class TcpReceiver implements Receiver
       if (!failFast && overflowHandler != null)
          logger.warn("TcpReceiver/TcpTransport is configured with an OverflowHandler that will never be used because it's also configured to NOT 'fail fast' so it will always block waiting for messages to be processed.");
       
-      executor = exec;
-
       // this sets the destination instance
       getDestination();
       
@@ -110,7 +109,7 @@ public class TcpReceiver implements Receiver
                               if (!stopMe.get())
                               {
                                  // This should come from a thread pool
-                                 ClientThread clientThread = new ClientThread(clientSocket);
+                                 ClientThread clientThread = makeNewClientThread(clientSocket);
                                  Thread thread = new Thread(clientThread, "Client Handler for " + getClientDescription(clientSocket));
                                  thread.setDaemon(true);
                                  thread.start();
@@ -158,9 +157,6 @@ public class TcpReceiver implements Receiver
       serverThread.start();
     }
    
-   @Override
-   public void setStatsCollector(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
-   
    /**
     * When an overflow handler is set the Adaptor indicates that a 'failFast' should happen
     * and any failed message deliveries end up passed to the overflow handler. 
@@ -169,7 +165,6 @@ public class TcpReceiver implements Receiver
    
    public void setFailFast(boolean failFast) { this.failFast = failFast; }
 
-   @PreDestroy
    public synchronized void stop()
    {
       stopMe.set(true);
@@ -234,6 +229,9 @@ public class TcpReceiver implements Receiver
       this.messageTransportListener = messageTransportListener;
    }
    
+   @Override
+   public void setStatsCollector(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
+   
    public TcpDestination doGetDestination() throws MessageTransportException
    {
       try
@@ -297,12 +295,18 @@ public class TcpReceiver implements Receiver
       }
    }
    
+   // protected to be overridden in tests
+   protected ClientThread makeNewClientThread(Socket clientSocket) throws IOException
+   {
+      return new ClientThread(clientSocket);
+   }
+   
    protected class ClientThread implements Runnable
    {
       private Socket clientSocket;
       private DataInputStream dataInputStream;
       private Thread thisThread;
-      private AtomicBoolean stopClient = new AtomicBoolean(false);
+      protected AtomicBoolean stopClient = new AtomicBoolean(false);
       
       protected ClientThread(Socket clientSocket) throws IOException
       { 
@@ -326,8 +330,15 @@ public class TcpReceiver implements Receiver
                   byte[] messageBytes = null;
                   try
                   {
-                      messageBytes = new byte[ dataInputStream.readInt() ];
-                      dataInputStream.readFully( messageBytes );
+                     int size = dataInputStream.readShort();
+                     if (size == -1)
+                        size = dataInputStream.readInt();
+                     if (size < 0)
+                        // assume we have a corrupt channel
+                        throw new IOException("Read negative message size. Assuming a corrupt channel.");
+                        
+                     messageBytes = new byte[ size ];
+                     dataInputStream.readFully( messageBytes );
                   }
                   // either a problem with the socket OR a thread interruption (InterruptedIOException)
                   catch (EOFException eof)
@@ -380,7 +391,7 @@ public class TcpReceiver implements Receiver
                         }
                      }
                   }
-                  else if (clientIsApparentlyGone == null && logger.isDebugEnabled())
+                  else if (clientIsApparentlyGone == null)
                   {
                      if (logger.isDebugEnabled())
                         logger.debug("Received a null message on destination " + destination);
@@ -432,6 +443,9 @@ public class TcpReceiver implements Receiver
          stopClient.set(true);
          if (thisThread != null)
             thisThread.interrupt();
+         
+         // close this SOB
+         closeQuietly(clientSocket);
       }
    }
    

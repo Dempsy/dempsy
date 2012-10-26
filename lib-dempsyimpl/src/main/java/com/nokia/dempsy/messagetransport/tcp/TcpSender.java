@@ -22,6 +22,10 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.Arrays;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -29,6 +33,8 @@ import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
+import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.util.SocketTimeout;
 
 public class TcpSender implements Sender
 {
@@ -36,32 +42,193 @@ public class TcpSender implements Sender
    
    private TcpDestination destination;
    private Socket socket = null;
-   private DataOutputStream dataOutputStream = null;
-   
+
    private enum IsLocalAddress { Yes, No, Unknown };
    private IsLocalAddress isLocalAddress = IsLocalAddress.Unknown;
    
-   protected TcpSender(TcpDestination destination) throws MessageTransportException
+   private AtomicReference<Thread> senderThread = new AtomicReference<Thread>();
+   private AtomicBoolean isSenderRunning = new AtomicBoolean(false);
+   private AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
+   private StatsCollector statsCollector = null;
+   private long timeoutMillis;
+   private SocketTimeout socketTimeout = null;
+   private long maxNumberOfQueuedMessages;
+   private boolean batchOutgoingMessages;
+
+   private BlockingQueue<byte[]> sendingQueue = new LinkedBlockingQueue<byte[]>();
+   
+   protected TcpSender(TcpDestination destination, StatsCollector statsCollector, 
+         long maxNumberOfQueuedOutgoing, long socketWriteTimeoutMillis, boolean batchOutgoingMessages) throws MessageTransportException
    {
       this.destination = destination;
+      this.statsCollector = statsCollector;
+      this.timeoutMillis = socketWriteTimeoutMillis;
+      this.batchOutgoingMessages = batchOutgoingMessages;
+      this.maxNumberOfQueuedMessages = maxNumberOfQueuedOutgoing;
+      this.start();
    }
    
-   @Override
-   public synchronized void send(byte[] messageBytes) throws MessageTransportException
-   {
-      try
-      {
-         DataOutputStream localDataOutputStream = getDataOutputStream();
+   public void setTimeoutMillis(long timeoutMillis) { this.timeoutMillis = timeoutMillis; }
 
-         localDataOutputStream.writeInt( messageBytes.length );
-         localDataOutputStream.write( messageBytes );
-         localDataOutputStream.flush();
-      }
-      catch (IOException ioe)
+   public void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
+   
+   @Override
+   public void send(byte[] messageBytes) throws MessageTransportException
+   {
+      try { sendingQueue.put(messageBytes); }
+      catch (InterruptedException e)
       {
-         close();
-         throw new MessageTransportException("It appears the client " + destination + " is no longer taking calls.",ioe);
+         if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+         throw new MessageTransportException("Failed to enqueue message to " + destination + ".",e);
       }
+   }
+   
+   private void start()
+   {
+      senderThread.set(new Thread(new Runnable()
+      {
+         private DataOutputStream dataOutputStream = null;
+
+         @Override
+         public void run()
+         {
+            byte[] messageBytes = null;
+            try
+            {
+               isSenderRunning.set(true);
+               senderKeepRunning.set(true);
+               
+               while (senderKeepRunning.get())
+               {
+                  try
+                  {
+                     messageBytes = batchOutgoingMessages ? sendingQueue.poll() : sendingQueue.take();
+                     
+                     DataOutputStream localDataOutputStream = getDataOutputStream();
+
+                     if (messageBytes == null)
+                     {
+                        socketTimeout.begin();
+                        localDataOutputStream.flush();
+                        socketTimeout.end();
+                        messageBytes = sendingQueue.take();
+                     }
+                  
+                     if (maxNumberOfQueuedMessages < 0 || sendingQueue.size() <= maxNumberOfQueuedMessages)
+                     {
+                        int size = messageBytes.length;
+                        if (size > Short.MAX_VALUE)
+                           size = -1;
+                        socketTimeout.begin();
+                        localDataOutputStream.writeShort( size );
+                        if (size == -1)
+                           localDataOutputStream.writeInt(messageBytes.length);
+                        localDataOutputStream.write( messageBytes );
+                        if (!batchOutgoingMessages)
+                           localDataOutputStream.flush(); // flush individual message
+                        socketTimeout.end();
+
+                        if (statsCollector != null) statsCollector.messageSent(messageBytes);
+                     }
+                     else
+                        if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                  }
+                  catch (IOException ioe)
+                  {
+                     socketTimeout.end();
+                     if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                     close();
+                     logger.warn("It appears the client " + destination + " is no longer taking calls.",ioe);
+                  }
+                  catch (InterruptedException ie)
+                  {
+                     socketTimeout.end();
+                     if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                     if (senderKeepRunning.get()) // if we're supposed to be running still, then we're not shutting down. Not sure why we reset.
+                        logger.warn("Sending data to " + destination + " was interrupted for no good reason.",ie);
+                  }
+                  catch (Throwable th)
+                  {
+                     socketTimeout.end();
+                     if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                     logger.error("Unknown exception thrown while trying to send a message to " + destination);
+                  }
+               }
+            }
+            finally
+            {
+               senderThread.set(null);
+               isSenderRunning.set(false);
+               socketTimeout.stop();
+            }
+         }
+         
+         // this should ONLY be called from the read thread
+         private DataOutputStream getDataOutputStream() throws MessageTransportException, IOException
+         {
+            if ( dataOutputStream == null) // socket must also be null.
+            {
+               if (socketTimeout != null)
+                  socketTimeout.stop();
+               
+               socket = makeSocket(destination);
+               socketTimeout = new SocketTimeout(socket, timeoutMillis);
+               
+               // There is a really odd circumstance (at least on Linux) where a connection 
+               //  to a port in the dynamic range, while there is no listener on that port,
+               //  from the same system/network interface, can result in a local port selection
+               //  that's the same as the port that the connection attempt is to. In this case,
+               //  for some reason the Socket instantiation (and connection) succeeds without
+               //  a listener. We need to force a failure if this is the case.
+               if (isLocalAddress == IsLocalAddress.Unknown)
+               {
+                  if (socket.isBound())
+                  {
+                     InetAddress localSocketAddress = socket.getLocalAddress();
+                     isLocalAddress = 
+                        (Arrays.equals(localSocketAddress.getAddress(),destination.inetAddress.getAddress())) ?
+                              IsLocalAddress.Yes : IsLocalAddress.No;
+                  }
+               }
+               
+               if (isLocalAddress == IsLocalAddress.Yes)
+               {
+                  if (socket.getLocalPort() == destination.port)
+                     throw new IOException("Connection to self same port!!!");
+               }
+
+                dataOutputStream = new DataOutputStream( new BufferedOutputStream(socket.getOutputStream(), 1024 * 1024) );
+            }
+            
+            return dataOutputStream;
+         }
+         
+         // this ONLY be called from the run thread
+         private void close()
+         {
+            if ( dataOutputStream != null) IOUtils.closeQuietly( dataOutputStream );
+            dataOutputStream = null;
+            
+            closeQuietly(socket); 
+            socket = null;
+         }
+
+      },"TcpSender to " + destination));
+      senderThread.get().setDaemon(true);
+      senderThread.get().start();
+   }
+   
+   protected void stop()
+   {
+      Thread t = senderThread.get();
+      senderKeepRunning.set(false);
+      if (t != null)
+         t.interrupt();
+      
+      // and just because
+      closeQuietly(socket);
+      if (socketTimeout != null)
+         socketTimeout.stop();
    }
    
    /**
@@ -71,52 +238,6 @@ public class TcpSender implements Sender
    protected Socket makeSocket(TcpDestination destination) throws IOException
    {
       return new Socket(destination.inetAddress,destination.port); 
-   }
-   
-   // this shouldn't be called without holding a lock
-   private DataOutputStream getDataOutputStream() throws MessageTransportException, IOException
-   {
-      if ( dataOutputStream == null) // socket must also be null.
-      {
-         socket = makeSocket(destination);
-         
-         // There is a really odd circumstance (at least on Linux) where a connection 
-         //  to a port in the dynamic range, while there is no listener on that port,
-         //  from the same system/network interface, can result in a local port selection
-         //  that's the same as the port that the connection attempt is to. In this case,
-         //  for some reason the Socket instantiation (and connection) succeeds without
-         //  a listener. We need to force a failure if this is the case.
-         if (isLocalAddress == IsLocalAddress.Unknown)
-         {
-            if (socket.isBound())
-            {
-               InetAddress localSocketAddress = socket.getLocalAddress();
-               isLocalAddress = 
-                  (Arrays.equals(localSocketAddress.getAddress(),destination.inetAddress.getAddress())) ?
-                        IsLocalAddress.Yes : IsLocalAddress.No;
-            }
-         }
-         
-         if (isLocalAddress == IsLocalAddress.Yes)
-         {
-            if (socket.getLocalPort() == destination.port)
-               throw new IOException("Connection to self same port!!!");
-         }
-
-          dataOutputStream = new DataOutputStream( new BufferedOutputStream(socket.getOutputStream(), 1024 * 8) );
-      }
-      
-      return dataOutputStream;
-   }
-   
-   // this shouldn't be called without holding a lock
-   protected void close()
-   {
-      if ( dataOutputStream != null) IOUtils.closeQuietly( dataOutputStream );
-      dataOutputStream = null;
-      
-      closeQuietly(socket); 
-      socket = null;
    }
    
    protected void closeQuietly(Socket socket) 
@@ -129,6 +250,7 @@ public class TcpSender implements Sender
             if (logger.isDebugEnabled())
                logger.debug("close socket failed for " + destination); 
          }
+         catch (Throwable th) { logger.debug("Socket close resulted in ",th); }
       }
    }
 }

@@ -29,11 +29,11 @@
     <constructor-arg type="int" value="1" />
   </bean>
 
-  <bean id="receiver" class="com.nokia.dempsy.messagetransport.util.QueuingReceiver">
+  <bean id="receiver" class="com.nokia.dempsy.messagetransport.util.QueuingReceiver" destroy-method="shuttingDown">
      <property name="queue" ref="receiveBlockingQueue" />
   </bean>
    
-  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor">
+  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="stop">
      <property name="queue" ref="transportBlockingQueue" />
      <property name="listener" ref="receiver" />
      <property name="overflowHandler" ref="testOverflowHandler" />
@@ -45,7 +45,7 @@
   
   <bean id="testOverflowHandler" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyOverflowHandler" />
     
-  <bean id="sender" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueSender" >
+  <bean id="sender" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueSender" destroy-method="shuttingDown">
      <property name="queue" ref="transportBlockingQueue" />
      <property name="overflowHandler" ref="testOverflowHandler" />
   </bean>

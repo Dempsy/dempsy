@@ -19,10 +19,8 @@ package com.nokia.dempsy.messagetransport.blockingqueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.annotation.PreDestroy;
-
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
+import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
 
 /**
@@ -45,7 +43,6 @@ public class BlockingQueueSender implements Sender
     * containers that handle standard bean lifecycle annotations will automatically issue 
     * a 'shutdown' when the container is stopped.
     */
-   @PreDestroy
    public void shuttingDown()
    {
       shutdown.set(true);

@@ -17,6 +17,7 @@
 package com.nokia.dempsy.messagetransport;
 
 import com.nokia.dempsy.executor.DempsyExecutor;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 /**
  * <p>A transport represents a handle to both the send side and the receive side. It
@@ -40,7 +41,7 @@ public interface Transport
     * null. The executor will have already been started and should not be started
     * by the transport.
     */
-   public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException;
+   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector) throws MessageTransportException;
    
    /**
     * Create a new instance of the Receiver for this transport.This
@@ -60,6 +61,5 @@ public interface Transport
     * created SenderFactory and/or Receiver. If it's not supported it will
     * throw an exception.
     */
-   public void setOverflowHandler(OverflowHandler overflowHandler) throws MessageTransportException;
-   
+   public void setOverflowHandler(OverflowHandler overflowHandler);
 }

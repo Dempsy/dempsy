@@ -20,17 +20,14 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.messagetransport.Destination;
+import com.nokia.dempsy.messagetransport.Listener;
+import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
-import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
 /**
@@ -68,7 +65,7 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
     * @throws MessageTransportException if the BlockingQueue implementation isn't set or
     * if the listener to send the messages to isn't set.
     */
-   @PostConstruct
+   @Override
    public synchronized void start() throws MessageTransportException
    {
       running = name == null ? new Thread(this) : new Thread(this,name);
@@ -76,7 +73,7 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
       running.start();
    }
    
-   @PreDestroy
+   @Override
    public synchronized void stop()
    {
       synchronized(this)
@@ -87,9 +84,6 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
       }
    }
    
-   @Override
-   public void setStatsCollector(StatsCollector statsCollector) { }
-
    @Override
    public void run()
    {
@@ -156,5 +150,8 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    
    @Override
    public Destination getDestination() { return this.destination; }
+
+   @Override
+   public void setStatsCollector(StatsCollector statsCollector) { }
 
 }

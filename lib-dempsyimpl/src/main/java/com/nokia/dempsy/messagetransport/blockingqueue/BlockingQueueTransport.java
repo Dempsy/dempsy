@@ -25,6 +25,7 @@ import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class BlockingQueueTransport implements Transport
 {
@@ -37,7 +38,7 @@ public class BlockingQueueTransport implements Transport
    private OverflowHandler overflowHandler = null;
 
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException
+   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector)
    {
       BlockingQueueSenderFactory ret = new BlockingQueueSenderFactory();
       if (overflowHandler != null)

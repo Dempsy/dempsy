@@ -51,7 +51,7 @@ public class PassthroughTransport implements Transport
    private boolean failFast = true;
    
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor) throws MessageTransportException
+   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector)
    {
       return new SenderFactory()
       {
@@ -79,9 +79,6 @@ public class PassthroughTransport implements Transport
       {
          List<Listener> listeners = new CopyOnWriteArrayList<Listener>();
          
-         @Override
-         public void setStatsCollector(StatsCollector statsCollector) { }
-
          Sender sender = new Sender()
          {
             @Override
@@ -108,6 +105,12 @@ public class PassthroughTransport implements Transport
          
          @Override
          public void stop() {}
+         
+         @Override
+         public void start() {}
+         
+         @Override
+         public void setStatsCollector(StatsCollector statsCollector) {}
          
       };
    }
