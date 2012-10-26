@@ -204,6 +204,10 @@ public class Dempsy
 
                if (strategyInbound != null)
                   try { strategyInbound.stop(); strategyInbound = null;} catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
+               
+               DempsyExecutor executor = (DempsyExecutor)clusterDefinition.getExecutor(); // this can be null
+               if (executor != null)
+                  try { executor.shutdown(); } catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
             }
             
             // Only called from tests

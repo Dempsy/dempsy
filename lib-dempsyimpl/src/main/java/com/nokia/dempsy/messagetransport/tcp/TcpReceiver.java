@@ -66,6 +66,7 @@ public class TcpReceiver implements Receiver
    protected boolean useLocalhost = false;
    protected int port = -1;
    protected DempsyExecutor executor = null;
+   protected boolean iStartedIt = false;
    protected StatsCollector statsCollector;
    
    public synchronized void start(DempsyExecutor exec) throws MessageTransportException
@@ -150,6 +151,7 @@ public class TcpReceiver implements Receiver
          defexecutor.setAdditionalThreads(1);
          defexecutor.setMaxNumberOfQueuedLimitedTasks(10000);
          executor = defexecutor;
+         iStartedIt = true;
          executor.start();
       }
 
@@ -205,7 +207,7 @@ public class TcpReceiver implements Receiver
             logger.warn("Couldn't release the socket accept for " + destination);
       }
       
-      if (executor != null)
+      if (executor != null && iStartedIt)
          executor.shutdown();
    }
    
