@@ -74,6 +74,10 @@ public class TestUtils
     */
    public static boolean waitForClustersToBeInitialized(long timeoutMillis, Dempsy dempsy) throws Throwable
    {
+      // wait for it to be running
+      if (!poll(timeoutMillis, dempsy,new Condition<Dempsy>() { @Override public boolean conditionMet(Dempsy dempsy) { return dempsy.isRunning(); } }))
+         return false;
+      
       try
       {
          final List<ClusterId> clusters = new ArrayList<ClusterId>();
