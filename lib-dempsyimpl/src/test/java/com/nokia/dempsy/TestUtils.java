@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.junit.Ignore;
 
+import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;

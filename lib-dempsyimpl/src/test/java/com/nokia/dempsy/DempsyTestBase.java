@@ -431,10 +431,10 @@ public class DempsyTestBase
                            logger.debug(pass);
                            logger.debug("*****************************************************************");
 
-                           String[] ctx = new String[4 + applicationContexts.length];
+                           int count = 4;
+                           String[] ctx = new String[count + applicationContexts.length];
                            ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer;
 
-                           int count = 3;
                            for (String appctx : applicationContexts)
                               ctx[count++] = "testDempsy/" + appctx;
 
@@ -511,10 +511,10 @@ public class DempsyTestBase
                            int dempsyCount = 0;
                            for (String[] applicationContexts : applicationContextsArray)
                            {
-                              String[] ctx = new String[4 + applicationContexts.length];
+                              int count = 4;
+                              String[] ctx = new String[count + applicationContexts.length];
                               ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer;
 
-                              int count = 3;
                               for (String appctx : applicationContexts)
                                  ctx[count++] = "testDempsy/" + appctx;
 
