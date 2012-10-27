@@ -22,8 +22,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.inject.Inject;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MarkerFactory;
@@ -427,7 +425,6 @@ public class Dempsy
    /**
     * This is meant to be autowired by type.
     */
-   @Inject
    public void setApplicationDefinitions(List<ApplicationDefinition> applicationDefinitions)
    {
       this.applicationDefinitions = applicationDefinitions;
@@ -524,12 +521,10 @@ public class Dempsy
       return clusterSessionFactory;
    }
 
-   @Inject
    public void setClusterSessionFactory(ClusterInfoSessionFactory clusterFactory)   {
       this.clusterSessionFactory = clusterFactory;
    }
    
-   @Inject
    public void setClusterCheck(CurrentClusterCheck clusterCheck)
    {
       this.clusterCheck = clusterCheck;
@@ -537,16 +532,12 @@ public class Dempsy
    
 //   public void setMultithreadedStart(boolean multiThreadedStart) { this.multiThreadedStart = multiThreadedStart; }
    
-   @Inject
    public void setDefaultTransport(Transport transport) { this.transport = transport; }
    
-   @Inject
    public void setDefaultRoutingStrategy(RoutingStrategy defaultRoutingStrategy) { this.defaultRoutingStrategy = defaultRoutingStrategy; }
 
-   @Inject
    public void setDefaultSerializer(Serializer<Object> defaultSerializer) { this.defaultSerializer = defaultSerializer; }
 
-   @Inject
    public void setDefaultStatsCollectorFactory(StatsCollectorFactory defaultfactory) { this.defaultStatsCollectorFactory = defaultfactory; }
       
    public Application.Cluster getCluster(ClusterId clusterId)

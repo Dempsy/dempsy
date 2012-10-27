@@ -16,8 +16,6 @@
 
 package com.nokia.dempsy.router;
 
-import javax.inject.Inject;
-
 import com.nokia.dempsy.config.ClusterId;
 
 /**
@@ -29,7 +27,6 @@ public class SpecificClusterCheck implements CurrentClusterCheck
 {
    private ClusterId currentCluster = null;
    
-   @Inject
    public SpecificClusterCheck(ClusterId clusterId) { this.currentCluster = clusterId; }
    
    @Override
@@ -44,7 +41,4 @@ public class SpecificClusterCheck implements CurrentClusterCheck
       String curApplicationName = currentCluster == null ? null : currentCluster.getApplicationName();
       return curApplicationName == null ? false : curApplicationName.equals(applicationName);
    }
-   
-   
-
 }

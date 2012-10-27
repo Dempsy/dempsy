@@ -18,8 +18,6 @@ package com.nokia.dempsy.cluster.zookeeper;
 
 import java.io.IOException;
 
-import javax.inject.Inject;
-
 import org.apache.zookeeper.ZooKeeper;
 
 import com.nokia.dempsy.cluster.ClusterInfoException;
@@ -32,7 +30,6 @@ public class ZookeeperSessionFactory implements ClusterInfoSessionFactory
    private String connectString;
    private int sessionTimeout;
    
-   @Inject
    public ZookeeperSessionFactory(String connectString, int sessionTimeout)
    {
       this.connectString = connectString;
