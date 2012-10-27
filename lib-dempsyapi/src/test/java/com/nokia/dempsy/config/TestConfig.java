@@ -95,8 +95,6 @@ public class TestConfig
       app.add(cd);
       app.initialize();
       
-      System.out.println(app);
-      
       // if we get to here without an error we should be okay
       app.validate(); // this throws if there's a problem.
       
@@ -157,8 +155,6 @@ public class TestConfig
       // if we get to here without an error we should be okay
       app.validate(); // this throws if there's a problem.
 
-      System.out.println(app);
-      
       assertTrue(app.getClusterDefinitions().get(0).isRouteAdaptorType());
       assertEquals(new ClusterId("test", "test-slot2"), app.getClusterDefinitions().get(1).getClusterId());
       assertEquals("test",app.getClusterDefinitions().get(1).getClusterId().getApplicationName());
@@ -191,7 +187,6 @@ public class TestConfig
       ApplicationDefinition app = new ApplicationDefinition("test");
       ClusterDefinition cd = new ClusterDefinition("test-slot1");
       app.add(cd); // no prototype or adaptor
-      System.out.println(app);
       app.initialize();
    }
 
@@ -213,7 +208,6 @@ public class TestConfig
       cd.setMessageProcessorPrototype(new GoodTestMp());
       cd.setAdaptor(new GoodAdaptor());
       app.add(cd);
-      System.out.println(app);
       app.initialize();
    }
    
