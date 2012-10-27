@@ -93,6 +93,13 @@ public class DempsyTestBase
       System.setProperty("application", "test-app");
       System.setProperty("cluster", "test-cluster2");
       zkServer = new InitZookeeperServerBean();
+      
+      // check for the system property that will set the hardcore flag to true
+      if (System.getProperties().containsKey("test.hardcore"))
+         hardcore = true;
+      
+      if (hardcore)
+         System.out.println("Hardcore testing in progress. This will take a while, you might as well go get a coffee.");
    }
 
    @AfterClass
