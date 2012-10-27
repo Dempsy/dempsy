@@ -629,9 +629,10 @@ public class TcpTransportTest
                
 //               Thread.sleep(100);
                
-               System.out.println("backup is " + backup + " and discarded messages is " + statsCollector.getMessagesNotSentCount());
+               logger.info("there are " + backup + " message baked up, and " + 
+                     statsCollector.getMessagesNotSentCount() + " have been discarded.");
                
-               // This cannot be determined reliably on Cloudbees which is too busy
+               // This cannot be determined reliably on Cloudbees which is usually too busy
 //               assertTrue("backup is " + backup + " and discarded messages is " + statsCollector.getMessagesNotSentCount(), 
 //                     statsCollector.getMessagesNotSentCount() < backup);
 
