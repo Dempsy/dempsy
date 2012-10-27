@@ -31,19 +31,25 @@ import org.junit.Test;
 
 import com.nokia.dempsy.Dempsy;
 import com.nokia.dempsy.DempsyException;
+import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer;
+import com.nokia.dempsy.config.ClusterId;
 
 public class TestRunNode
 {
    private static Logger logger = LoggerFactory.getLogger(TestRunNode.class);
-   
+   public static final int baseTimeoutMillis = 20000;
+
    // internal test state
    volatile boolean failed = false;
    volatile CountDownLatch finished = new CountDownLatch(0);
    
+   ClusterId clusterToStart = null;
+   
    @Before
    public void setup()
    {
+      clusterToStart = new ClusterId("test-app","test-cluster");
       System.setProperty(RunNode.appdefParam, "TestDempsyApplication.xml");
       System.setProperty(RunNode.applicationParam, "test-app:test-cluster");
       System.setProperty(RunNode.zk_connectParam, "127.0.0.1:2081");
@@ -54,14 +60,14 @@ public class TestRunNode
       failed = false;
    }
    
-   public static interface Checker { public void check() throws Throwable; }
+   public static interface Checker { public void check(boolean withZookeeper) throws Throwable; }
    
    public void withAndWithoutZookeeper(Checker toCheck) throws Throwable
    {
       logger.info("********************************************************");
       logger.info("Running " + toCheck + " without zookeeper.");
       // without zookeeper
-      toCheck.check();
+      toCheck.check(false);
       
       logger.info("********************************************************");
       logger.info("Running " + toCheck + " with zookeeper.");
@@ -80,7 +86,7 @@ public class TestRunNode
       {
          server.start();
          
-         toCheck.check();
+         toCheck.check(true);
       }
       finally
       {
@@ -114,7 +120,7 @@ public class TestRunNode
    {
       withAndWithoutZookeeper(new Checker()
       {
-         public void check() throws Throwable
+         public void check(boolean withZookeeper) throws Throwable
          {
             finished = new CountDownLatch(1); // need to wait on the clean shutdown
 
@@ -123,15 +129,22 @@ public class TestRunNode
             t.start();
 
             // wait for DempsyGrabber
-            for (long endTime = System.currentTimeMillis() + 60000; endTime > System.currentTimeMillis() && SimpleAppForTesting.grabber.get() == null;) Thread.sleep(1);
+            for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && SimpleAppForTesting.grabber.get() == null;) Thread.sleep(1);
             assertNotNull(SimpleAppForTesting.grabber.get());
 
-            assertTrue(SimpleAppForTesting.grabber.get().waitForDempsy(60000));
+            assertTrue(SimpleAppForTesting.grabber.get().waitForDempsy(baseTimeoutMillis));
 
             Dempsy dempsy = SimpleAppForTesting.grabber.get().dempsy.get();
+            
+            if (withZookeeper) // the clusters will only come up if zookeeper is running.
+            {
+               assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
+               Dempsy.Application.Cluster cluster = dempsy.getCluster(clusterToStart);
+               assertNotNull(cluster);
+            }
 
             // wait for Dempsy to be running
-            for (long endTime = System.currentTimeMillis() + 60000; endTime > System.currentTimeMillis() && !dempsy.isRunning();) Thread.sleep(1);
+            for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && !dempsy.isRunning();) Thread.sleep(1);
             assertTrue(dempsy.isRunning());
 
             Thread.sleep(500); // let the thing run for a bit.
@@ -139,7 +152,7 @@ public class TestRunNode
             dempsy.stop();
 
             // wait for Dempsy to be stopped
-            for (long endTime = System.currentTimeMillis() + 60000; endTime > System.currentTimeMillis() && dempsy.isRunning();) Thread.sleep(1);
+            for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && dempsy.isRunning();) Thread.sleep(1);
             assertFalse(dempsy.isRunning());
 
             assertFalse(failed);
@@ -153,6 +166,7 @@ public class TestRunNode
    @Test
    public void testNormalStartupTestApp1() throws Throwable
    {
+      clusterToStart = new ClusterId("testApp1","test-cluster");
       System.setProperty(RunNode.applicationParam, "testApp1:test-cluster");
       System.clearProperty(RunNode.appdefParam);
       testNormalStartup();
