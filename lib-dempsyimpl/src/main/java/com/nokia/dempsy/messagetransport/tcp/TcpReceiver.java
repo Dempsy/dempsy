@@ -56,7 +56,7 @@ public class TcpReceiver implements Receiver
    private Listener messageTransportListener;
    private Set<ClientThread> clientThreads = new HashSet<ClientThread>();
    private OverflowHandler overflowHandler = null;
-   private boolean failFast = true;
+   private boolean failFast = false;
    
    private Object eventLock = new Object();
    private volatile boolean eventSignaled = false;

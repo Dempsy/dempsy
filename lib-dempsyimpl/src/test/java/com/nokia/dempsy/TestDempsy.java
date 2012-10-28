@@ -179,6 +179,7 @@ public class TestDempsy
       public AtomicInteger cloneCalls = new AtomicInteger(0);
       public AtomicLong handleCalls = new AtomicLong(0);
       public AtomicReference<String> failActivation = new AtomicReference<String>();
+      public AtomicBoolean haveWaitedOnce = new AtomicBoolean(false);
       
       @Start
       public void start()
@@ -196,6 +197,14 @@ public class TestDempsy
       @Activation
       public void setKey(String key)
       {
+         // we need to wait at least once because sometime pre-instantiation 
+         // goes so fast the test fails becuase it fails to register on the statsCollector.
+         if (!haveWaitedOnce.get())
+         {
+            try { Thread.sleep(3); } catch (Throwable th) {}
+            haveWaitedOnce.set(true);
+         }
+
          if (key.equals(failActivation.get()))
             throw new RuntimeException("Failed Activation For " + key);
       }
