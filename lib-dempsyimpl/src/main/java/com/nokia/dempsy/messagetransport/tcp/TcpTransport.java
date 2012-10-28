@@ -34,7 +34,7 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 public class TcpTransport implements Transport
 {
    private OverflowHandler overflowHandler = null;
-   private boolean failFast = true;
+   private boolean failFast = false;
    
    private boolean batchOutgoingMessages = false;
    private long socketWriteTimeoutMillis = 30000; 
@@ -49,9 +49,8 @@ public class TcpTransport implements Transport
    @Override
    public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
    {
-      TcpReceiver receiver = new TcpReceiver(executor);
+      TcpReceiver receiver = new TcpReceiver(executor,failFast);
       receiver.setOverflowHandler(overflowHandler);
-      receiver.setFailFast(failFast);
       return receiver;
    }
 

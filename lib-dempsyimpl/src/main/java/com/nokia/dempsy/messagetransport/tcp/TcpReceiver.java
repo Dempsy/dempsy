@@ -56,7 +56,7 @@ public class TcpReceiver implements Receiver
    private Listener messageTransportListener;
    private Set<ClientThread> clientThreads = new HashSet<ClientThread>();
    private OverflowHandler overflowHandler = null;
-   private boolean failFast = false;
+   private boolean failFast;
    
    private Object eventLock = new Object();
    private volatile boolean eventSignaled = false;
@@ -67,7 +67,7 @@ public class TcpReceiver implements Receiver
    protected boolean iStartedIt = false;
    protected StatsCollector statsCollector;
    
-   protected TcpReceiver(DempsyExecutor executor) { this.executor = executor; }
+   protected TcpReceiver(DempsyExecutor executor, boolean failFast) { this.executor = executor; this.failFast = failFast;}
    
    @Override
    public synchronized void start() throws MessageTransportException
@@ -163,8 +163,6 @@ public class TcpReceiver implements Receiver
     */
    public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; }
    
-   public void setFailFast(boolean failFast) { this.failFast = failFast; }
-
    public synchronized void stop()
    {
       stopMe.set(true);

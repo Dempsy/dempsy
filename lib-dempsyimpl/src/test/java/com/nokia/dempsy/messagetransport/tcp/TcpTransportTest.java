@@ -63,6 +63,13 @@ public class TcpTransportTest
       public void check(int port, boolean localhost) throws Throwable;
    }
    
+   private static int failFastCalls = 0;
+   private static boolean getFailFast()
+   {
+      failFastCalls++;
+      return (failFastCalls & 0x00000001) != 0;
+   }
+   
    private void runAllCombinations(Checker check) throws Throwable
    {
       logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
@@ -97,7 +104,7 @@ public class TcpTransportTest
             {
                //===========================================
                // setup the sender and receiver
-               adaptor = new TcpReceiver(null);
+               adaptor = new TcpReceiver(null,getFailFast());
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
@@ -143,7 +150,7 @@ public class TcpTransportTest
    
    static TcpReceiver makeHangingReceiver()
    {
-      return new TcpReceiver(null)
+      return new TcpReceiver(null,getFailFast())
       {
          int count = 0;
          
@@ -258,7 +265,7 @@ public class TcpTransportTest
       {
          //===========================================
          // setup the sender and receiver
-         adaptor = new TcpReceiver(null);
+         adaptor = new TcpReceiver(null,getFailFast());
          factory = makeSenderFactory(false,null); // distruptible sender factory
          receiveLargeMessageLatch = new CountDownLatch(1);
          adaptor.setListener( new Listener()
@@ -337,7 +344,7 @@ public class TcpTransportTest
             {
                //===========================================
                // setup the sender and receiver
-               adaptor = new TcpReceiver(null);
+               adaptor = new TcpReceiver(null,getFailFast());
                adaptor.setStatsCollector(statsCollector);
                factory = makeSenderFactory(true,statsCollector); // distruptible sender factory
 
@@ -455,7 +462,7 @@ public class TcpTransportTest
             {
                //===========================================
                // setup the sender and receiver
-               adaptor = new TcpReceiver(null);
+               adaptor = new TcpReceiver(null,getFailFast());
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
@@ -858,7 +865,7 @@ public class TcpTransportTest
             {
                //===========================================
                // setup the sender and receiver
-               adaptor = new TcpReceiver(null);
+               adaptor = new TcpReceiver(null,getFailFast());
                final Object latch = new Object();
                BasicStatsCollector statsCollector = new BasicStatsCollector();
                adaptor.setStatsCollector(statsCollector);
