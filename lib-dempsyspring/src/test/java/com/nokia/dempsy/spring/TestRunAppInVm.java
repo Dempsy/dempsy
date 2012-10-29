@@ -86,6 +86,8 @@ public class TestRunAppInVm
       assertTrue(dempsy.isRunning());
 
       Thread.sleep(500); // let the thing run for a bit.
+      
+      assertTrue(dempsy.isRunning());
 
       dempsy.stop();
 
