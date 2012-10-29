@@ -39,7 +39,7 @@ public class BlockingQueueSender implements Sender
    protected boolean blocking = true;
    protected StatsCollector statsCollector;
    
-   protected BlockingQueueSender(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
+   public BlockingQueueSender(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
    
    /**
     * This satisfies the requirement of a MessageTransportSender. It will stop the thread

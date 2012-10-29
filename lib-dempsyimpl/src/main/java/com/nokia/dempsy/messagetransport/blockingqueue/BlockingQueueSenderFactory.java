@@ -32,7 +32,7 @@ public class BlockingQueueSenderFactory implements SenderFactory
    private OverflowHandler overflowHandler = null;
    private StatsCollector statsCollector;
    
-   protected BlockingQueueSenderFactory(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
+   public BlockingQueueSenderFactory(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
    
    public void setOverflowHandler(OverflowHandler overflowHandler) { this.overflowHandler = overflowHandler; }
    
