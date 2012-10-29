@@ -40,7 +40,7 @@ public class BlockingQueueTransport implements Transport
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector)
    {
-      BlockingQueueSenderFactory ret = new BlockingQueueSenderFactory();
+      BlockingQueueSenderFactory ret = new BlockingQueueSenderFactory(statsCollector);
       if (overflowHandler != null)
          ret.setOverflowHandler(overflowHandler);
       return ret;

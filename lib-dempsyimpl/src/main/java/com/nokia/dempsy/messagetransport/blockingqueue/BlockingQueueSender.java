@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 /**
  * <p>The Message transport default library comes with this BlockingQueue implementation.</p>
@@ -36,6 +37,9 @@ public class BlockingQueueSender implements Sender
    protected AtomicBoolean shutdown = new AtomicBoolean(false);
 
    protected boolean blocking = true;
+   protected StatsCollector statsCollector;
+   
+   protected BlockingQueueSender(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
    
    /**
     * This satisfies the requirement of a MessageTransportSender. It will stop the thread
@@ -61,7 +65,7 @@ public class BlockingQueueSender implements Sender
       {
          while (true)
          {
-            try { queue.put(messageBytes);  break; }
+            try { queue.put(messageBytes); if (statsCollector != null) statsCollector.messageSent(messageBytes); break; }
             catch (InterruptedException ie)
             {
                if (shutdown.get())
@@ -69,12 +73,18 @@ public class BlockingQueueSender implements Sender
             }
          }
       }
-      else if (! queue.offer(messageBytes))
+      else
       {
-         if (overflowHandler != null)
-            overflowHandler.overflow(messageBytes);
+         if (! queue.offer(messageBytes))
+         {
+            if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+            if (overflowHandler != null)
+               overflowHandler.overflow(messageBytes);
+            else
+               throw new MessageTransportException("Failed to queue message due to capacity.");
+         }
          else
-            throw new MessageTransportException("Failed to queue message due to capacity.");
+            if (statsCollector != null) statsCollector.messageSent(messageBytes);
       }
    }
    

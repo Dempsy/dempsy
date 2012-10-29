@@ -24,11 +24,15 @@ import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
+import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class BlockingQueueSenderFactory implements SenderFactory
 {
    private Map<Destination,BlockingQueueSender> senders = new HashMap<Destination,BlockingQueueSender>();
    private OverflowHandler overflowHandler = null;
+   private StatsCollector statsCollector;
+   
+   protected BlockingQueueSenderFactory(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
    
    public void setOverflowHandler(OverflowHandler overflowHandler) { this.overflowHandler = overflowHandler; }
    
@@ -38,7 +42,7 @@ public class BlockingQueueSenderFactory implements SenderFactory
       BlockingQueueSender blockingQueueSender = senders.get(destination);
       if (blockingQueueSender == null)
       {
-         blockingQueueSender = new BlockingQueueSender();
+         blockingQueueSender = new BlockingQueueSender(statsCollector);
          blockingQueueSender.setQueue(((BlockingQueueDestination)destination).queue);
          if (overflowHandler != null)
             blockingQueueSender.setOverflowHandler(overflowHandler);
