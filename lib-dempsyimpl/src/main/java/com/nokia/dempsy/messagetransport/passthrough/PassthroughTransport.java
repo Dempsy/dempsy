@@ -51,11 +51,12 @@ public class PassthroughTransport implements Transport
    private boolean failFast = true;
    
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector)
+   public SenderFactory createOutbound(DempsyExecutor executor, final StatsCollector statsCollector)
    {
       return new SenderFactory()
       {
          private volatile boolean isStopped = false;
+         private StatsCollector sc = statsCollector;
 
          @Override
          public Sender getSender(Destination destination) throws MessageTransportException
@@ -64,12 +65,32 @@ public class PassthroughTransport implements Transport
                throw new MessageTransportException("getSender called for the destination " + SafeString.valueOf(destination) + 
                      " on a stopped " + SafeString.valueOfClass(this));
 
-            return ((PassthroughDestination)destination).sender;
+            PassthroughSender ret = (PassthroughSender)(((PassthroughDestination)destination).sender);
+            ret.statsCollector = sc;
+            return ret;
          }
          
          @Override
          public void stop() { isStopped = true; }
       };
+   }
+   
+   private class PassthroughSender implements Sender
+   {
+      StatsCollector statsCollector = null;
+      List<Listener> listeners;
+      
+      private PassthroughSender(List<Listener> listeners) { this.listeners = listeners; }
+
+      @Override
+      public void send(byte[] messageBytes) throws MessageTransportException
+      {
+         for (Listener listener : listeners)
+         {
+            if (statsCollector != null) statsCollector.messageSent(messageBytes);
+            listener.onMessage(messageBytes, failFast);
+         }
+      }
    }
    
    @Override
@@ -79,17 +100,7 @@ public class PassthroughTransport implements Transport
       {
          List<Listener> listeners = new CopyOnWriteArrayList<Listener>();
          
-         Sender sender = new Sender()
-         {
-            @Override
-            public void send(byte[] messageBytes) throws MessageTransportException
-            {
-               for (Listener listener : listeners)
-                  listener.onMessage(messageBytes, failFast);
-            }
-         };
-         
-         PassthroughDestination destination = new PassthroughDestination(sender);
+         PassthroughDestination destination = new PassthroughDestination(new PassthroughSender(listeners));
          
          @Override
          public void setListener(Listener listener) throws MessageTransportException
@@ -110,7 +121,7 @@ public class PassthroughTransport implements Transport
          public void start() {}
          
          @Override
-         public void setStatsCollector(StatsCollector statsCollector) {}
+         public void setStatsCollector(StatsCollector statsCollector) { }
          
       };
    }
