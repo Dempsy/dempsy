@@ -81,8 +81,11 @@ public class RunAppInVm
          try
          {
             Dempsy dempsy = context.getBean(Dempsy.class);
-            if (startUp) dempsy.start();
-            else dempsy.waitToBeStopped();
+            if (startUp)
+            {
+               dempsy.start();
+               dempsy.waitToBeStopped();
+            }
          }
          catch(InterruptedException e)
          {
@@ -90,7 +93,7 @@ public class RunAppInVm
          }
          finally
          {
-            if (!startUp)
+            if (startUp)
                context.stop();
          }
          
