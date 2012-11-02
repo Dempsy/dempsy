@@ -47,6 +47,9 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    private final AtomicLong outputInvokeDuration = new AtomicLong();
    private final AtomicLong evictionPassDuration = new AtomicLong();
    
+   private final AtomicLong bytesReceived = new AtomicLong();
+   private final AtomicLong bytesSent = new AtomicLong();
+   
    private static class BasicTimerContext implements StatsCollector.TimerContext
    {
       private long startTime = System.currentTimeMillis();
@@ -218,6 +221,24 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
       return messagesSent.get();
    }
    
+   @Override
+   public long getMessagesReceivedCount()
+   {
+      return messagesReceived.get();
+   }
+   
    public long getMessageProcessorsCreated() { return mpsCreated.get(); }
+
+   @Override
+   public long getMessageBytesSent()
+   {
+      return bytesSent.get();
+   }
+
+   @Override
+   public long getMessageBytesReceived()
+   {
+      return bytesReceived.get();
+   }
 	
 }
