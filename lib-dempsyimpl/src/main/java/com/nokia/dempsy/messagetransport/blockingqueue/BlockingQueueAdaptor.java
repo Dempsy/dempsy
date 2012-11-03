@@ -50,6 +50,8 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    private AtomicBoolean shutdown = new AtomicBoolean(false);
    private BlockingQueueDestination destination = null;
    private OverflowHandler overflowHandler = null;
+   private boolean failFast = false; // this has been the default - since it's equivalent to there being no overflowHandler
+   private boolean explicitFailFast = false;
    
    /**
     * <p>This method starts a background thread that reads messages from the queue and sends
@@ -68,6 +70,10 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    @Override
    public synchronized void start() throws MessageTransportException
    {
+      // check to see that the overflowHandler and the failFast setting are consistent.
+      if (!failFast && overflowHandler != null)
+         logger.warn("BlockingQueueAdaptor is configured with an OverflowHandler that will never be used because it's also configured to NOT 'fail fast' so it will always block waiting for messages to be processed.");
+
       running = name == null ? new Thread(this) : new Thread(this,name);
       running.setDaemon(true);
       running.start();
@@ -100,7 +106,7 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
             byte[] val = destination.queue.take();
             Listener curListener = listener.get();
             
-            boolean messageSuccess = curListener == null ? false : curListener.onMessage(val, overflowHandler != null);
+            boolean messageSuccess = curListener == null ? false : curListener.onMessage(val, failFast);
             if (overflowHandler != null && !messageSuccess)
                overflowHandler.overflow(val);
          }
@@ -142,7 +148,13 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
     * When an overflow handler is set the Adaptor indicates that a 'failFast' should happen
     * and any failed message deliveries end up passed to the overflow handler.
     */
-   public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; }
+   public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; if (!explicitFailFast) failFast = (handler != null); }
+   
+   public void setFailFast(boolean failFast) 
+   {
+      explicitFailFast = true; 
+      this.failFast = failFast; 
+   }
 
    public BlockingQueue<byte[]> getQueue() { return destination == null ? null : destination.queue; }
 

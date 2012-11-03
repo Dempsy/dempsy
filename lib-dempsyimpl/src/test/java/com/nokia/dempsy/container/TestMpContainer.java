@@ -46,9 +46,10 @@ import com.nokia.dempsy.annotations.Passivation;
 import com.nokia.dempsy.container.mocks.ContainerTestMessage;
 import com.nokia.dempsy.container.mocks.OutputMessage;
 import com.nokia.dempsy.messagetransport.Sender;
+import com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
-
 
 //
 // NOTE: this test simply puts messages on an input queue, and expects
@@ -100,11 +101,13 @@ public class TestMpContainer
    }
 
 
-   @SuppressWarnings("unchecked")
    @Before
-   public void setUp()
-   throws Exception
+   public void setUp() throws Throwable { setUp("true"); }
+   
+   @SuppressWarnings("unchecked")
+   public void setUp(String failFast) throws Exception
    {
+      System.setProperty("failFast", failFast);
       context = new ClassPathXmlApplicationContext("TestMPContainer.xml");
       container = (MpContainer)context.getBean("container");
       assertNotNull(container.getSerializer());
@@ -114,13 +117,15 @@ public class TestMpContainer
 
 
    @After
-   public void tearDown()
-   throws Exception
+   public void tearDown() throws Exception
    {
       container.shutdown();
       context.close();
       context.destroy();
       context = null;
+      container = null;
+      inputQueue = null;
+      outputQueue = null;
    }
 
 
@@ -143,6 +148,7 @@ public class TestMpContainer
       
       public static AtomicLong numOutputExecutions = new AtomicLong(0);
       public static CountDownLatch blockAllOutput = new CountDownLatch(0);
+      public CountDownLatch blockPassivate = new CountDownLatch(0);
       public AtomicBoolean throwPassivateException = new AtomicBoolean(false);
       public AtomicLong passivateExceptionCount = new AtomicLong(0);
 
@@ -161,8 +167,10 @@ public class TestMpContainer
       }
       
       @Passivation
-      public void passivate()
+      public void passivate() throws InterruptedException
       {
+         blockPassivate.await();
+         
          if (throwPassivateException.get())
          {
             passivateExceptionCount.incrementAndGet();
@@ -360,6 +368,8 @@ public class TestMpContainer
    @Test
    public void testEvictableWithBusyMp() throws Throwable
    {
+      // first set the receiver to failFast
+      
       // This forces the instantiation of an Mp
       inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
       // Once the poll finishes the Mp is instantiated and handling messages.
@@ -416,4 +426,150 @@ public class TestMpContainer
       assertEquals("Clone count, 2nd message", tmpCloneCount+1, TestProcessor.cloneCount.intValue());
    }
 
+   @Test
+   public void testEvictCollision() throws Throwable
+   {
+      // This forces the instantiation of an Mp
+      BlockingQueueAdaptor adaptor = context.getBean(BlockingQueueAdaptor.class);
+      assertNotNull(adaptor);
+      adaptor.setFailFast(true);
+      
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      // Once the poll finishes the Mp is instantiated and handling messages.
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("did not create MP", 1, container.getProcessorCount());
+
+      TestProcessor mp = (TestProcessor)container.getMessageProcessor("foo");
+      assertNotNull("MP not associated with expected key", mp);
+      assertEquals("activation count, 1st message", 1, mp.activationCount);
+      assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+      
+      // now we're going to cause the passivate to be held up.
+      mp.blockPassivate = new CountDownLatch(1);
+      mp.evict.set(true); // allow eviction
+
+      // now kick off the evict in a separate thread since we expect it to hang
+      // until the mp becomes unstuck.
+      final AtomicBoolean evictIsComplete = new AtomicBoolean(false); // this will allow us to see the evict pass complete
+      Thread thread = new Thread(new Runnable() { @Override public void run() { container.evict(); evictIsComplete.set(true); } });
+      thread.start();
+      
+      Thread.sleep(50); //let it get going.
+      assertFalse(evictIsComplete.get()); // check to see we're hung.
+
+      final MetricGetters sc = (MetricGetters)container.getStatsCollector();
+      assertEquals(0,sc.getMessageCollisionCount());
+      
+      // sending it a message will now cause it to have the collision tick up
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      
+      assertTrue(TestUtils.poll(baseTimeoutMillis, sc, new TestUtils.Condition<MetricGetters>() 
+            { @Override public boolean conditionMet(MetricGetters o) { return o.getMessageCollisionCount() == 1; } }));
+      
+      // now let the evict finish
+      mp.blockPassivate.countDown();
+      
+      // wait until the eviction completes
+      assertTrue(TestUtils.poll(baseTimeoutMillis, evictIsComplete, new TestUtils.Condition<AtomicBoolean>() 
+            { @Override public boolean conditionMet(AtomicBoolean o) { return o.get(); } }));
+      
+      // invocationCount should still be 1 from the initial invocation that caused the clone
+      assertEquals(1,mp.invocationCount);
+
+      // send a message that should go through
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+
+      // Once the poll finishes a new Mp is instantiated and handling messages.
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      TestProcessor mp2 = (TestProcessor)container.getMessageProcessor("foo");
+
+      // make sure this new Mp isn't the old one.
+      assertTrue(mp != mp2);
+
+   }
+
+   @Test
+   public void testEvictCollisionWithBlocking() throws Throwable
+   {
+      // for this test we need to undo the setup
+      tearDown();
+      
+      // and re-setUp setting failFast to false.
+      setUp("false");
+      
+      // This forces the instantiation of an Mp
+      BlockingQueueAdaptor adaptor = context.getBean(BlockingQueueAdaptor.class);
+      assertNotNull(adaptor);
+      
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      // Once the poll finishes the Mp is instantiated and handling messages.
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals("did not create MP", 1, container.getProcessorCount());
+
+      TestProcessor mp = (TestProcessor)container.getMessageProcessor("foo");
+      assertNotNull("MP not associated with expected key", mp);
+      assertEquals("activation count, 1st message", 1, mp.activationCount);
+      assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+      
+      // now we're going to cause the passivate to be held up.
+      mp.blockPassivate = new CountDownLatch(1);
+      mp.evict.set(true); // allow eviction
+
+      // now kick off the evict in a separate thread since we expect it to hang
+      // until the mp becomes unstuck.
+      final AtomicBoolean evictIsComplete = new AtomicBoolean(false); // this will allow us to see the evict pass complete
+      Thread thread = new Thread(new Runnable() { @Override public void run() { container.evict(); evictIsComplete.set(true); } });
+      thread.start();
+      
+      Thread.sleep(500); //let it get going.
+      assertFalse(evictIsComplete.get()); // check to see we're hung.
+
+      final MetricGetters sc = (MetricGetters)container.getStatsCollector();
+      assertEquals(0,sc.getMessageCollisionCount());
+      
+      // sending it a message will now cause it to have the collision tick up
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+      
+      // give it some time.
+      Thread.sleep(100);
+      
+      // make sure there's no collision
+      assertEquals(0,sc.getMessageCollisionCount());
+      
+      // make sure the message didn't get through
+      assertNull(outputQueue.peek());
+      
+      // make sure no message got handled
+      assertEquals(1,mp.invocationCount); // 1 is the initial invocation that caused the instantiation.
+      
+      // now let the evict finish
+      mp.blockPassivate.countDown();
+      
+      // wait until the eviction completes
+      assertTrue(TestUtils.poll(baseTimeoutMillis, evictIsComplete, new TestUtils.Condition<AtomicBoolean>() 
+            { @Override public boolean conditionMet(AtomicBoolean o) { return o.get(); } }));
+
+      // Once the poll finishes a new Mp is instantiated and handling messages.
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      // get the new Mp
+      TestProcessor mp2 = (TestProcessor)container.getMessageProcessor("foo");
+
+      // invocationCount should be 1 from the initial invocation that caused the clone, and no more
+      assertEquals(1,mp.invocationCount);
+      assertEquals(1,mp2.invocationCount);
+      assertTrue(mp != mp2);
+
+      // send a message that should go through
+      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
+
+      // Once the poll finishes mp2 invocationCount should be incremented
+      assertNotNull(outputQueue.poll(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+
+      assertEquals(1,mp.invocationCount);
+      assertEquals(2,mp2.invocationCount);
+   }
 }

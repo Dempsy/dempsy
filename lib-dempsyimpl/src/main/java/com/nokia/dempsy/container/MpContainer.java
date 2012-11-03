@@ -106,7 +106,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    {
       private Object instance;
       private Semaphore lock = new Semaphore(1,true); // basically a mutex
-      private AtomicBoolean evicted = new AtomicBoolean(false);
+      private boolean evicted = false;
 
       /**
        * DO NOT CALL THIS WITH NULL OR THE LOCKING LOGIC WONT WORK
@@ -151,30 +151,31 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       {
          return lock.tryAcquire();
       }
-
-      /**
-       * This will set the instance reference to null. MAKE SURE
-       * YOU OWN THE LOCK BEFORE CALLING.
-       */
-      public void markPassivated() { instance = null; }
-
-      /**
-       * This will tell you if the instance reference is null. MAKE SURE
-       * YOU OWN THE LOCK BEFORE CALLING.
-       */
-      public boolean isPassivated() { return instance == null; }
+      
+//      /**
+//       * This will set the instance reference to null. MAKE SURE
+//       * YOU OWN THE LOCK BEFORE CALLING.
+//       */
+//      public void markPassivated() { instance = null; }
+//
+//      /**
+//       * This will tell you if the instance reference is null. MAKE SURE
+//       * YOU OWN THE LOCK BEFORE CALLING.
+//       */
+//      public boolean isPassivated() { return instance == null; }
 
 
       /**
        * This will prevent further operations on this instance. 
        * MAKE SURE YOU OWN THE LOCK BEFORE CALLING.
        */
-      public void markEvicted() { evicted.set(true); }
+      public void markEvicted() { evicted = true; }
 
       /**
        * Flag to indicate this instance has been evicted and no further operations should be enacted.
+       * THIS SHOULDN'T BE CALLED WITHOUT HOLDING THE LOCK.
        */
-      public boolean isEvicted() { return evicted.get(); }
+      public boolean isEvicted() { return evicted; }
 
       //----------------------------------------------------------------------------
       //  Test access
@@ -446,7 +447,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
     *  <p>
     *  <em>This method exists for testing; don't do anything stupid</em>
     */
-   public Object getMessageProcessor(Object key)
+   protected Object getMessageProcessor(Object key)
    {
       InstanceWrapper wrapper = instances.get(key);
       return (wrapper != null) ? wrapper.getInstance() : null;
@@ -461,41 +462,58 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    protected boolean dispatch(Object message, boolean block) throws ContainerException {
       if (message == null)
          return false; // No. We didn't process the null message
-
-      InstanceWrapper wrapper;
-      wrapper = getInstanceForDispatch(message);
-
+      
+      boolean evictedAndBlocking;
       boolean messageDispatchSuccessful = false;
 
-      // wrapper cannot be null ... look at the getInstanceForDispatch method
-      Object instance = wrapper.getExclusive(block);
+      do
+      {
+         evictedAndBlocking = false;
+         InstanceWrapper wrapper = getInstanceForDispatch(message);
 
-      if (instance != null) // null indicates we didn't get the lock
-      {
-         try
+         // wrapper cannot be null ... look at the getInstanceForDispatch method
+         Object instance = wrapper.getExclusive(block);
+
+         if (instance != null) // null indicates we didn't get the lock
          {
-            if(wrapper.isEvicted())
+            try
             {
-               if (logger.isTraceEnabled())
-                  logger.trace("the container for " + clusterId + " failed handle message due to evicted Mp " + SafeString.valueOf(prototype));
-               statCollector.messageDiscarded(message);
-               messageDispatchSuccessful = false;
+               if(wrapper.isEvicted())
+               {
+                  // if we're not blocking then we need to just return a failure. Otherwise we want to try again
+                  // because eventually the current Mp will be passivated and removed from the container and
+                  // a subsequent call to getInstanceForDispatch will create a new one.
+                  if (block)
+                  {
+                     Thread.yield();
+                     evictedAndBlocking = true; // we're going to try again.
+                  }
+                  else // otherwise it's just like we couldn't get the lock. The Mp is busy being killed off.
+                  {
+                     if (logger.isTraceEnabled())
+                        logger.trace("the container for " + clusterId + " failed handle message due to evicted Mp " + SafeString.valueOf(prototype));
+                     
+                     statCollector.messageDiscarded(message);
+                     statCollector.messageCollision(message);
+                     messageDispatchSuccessful = false;
+                  }
+               }
+               else
+               {
+                  invokeOperation(wrapper.getInstance(), Operation.handle, message);
+                  messageDispatchSuccessful = true;
+               }
             }
-            else
-            {
-               invokeOperation(wrapper.getInstance(), Operation.handle, message);
-               messageDispatchSuccessful = true;
-            }
+            finally { wrapper.releaseLock(); }
+         } 
+         else  // ... we didn't get the lock
+         {
+            if (logger.isTraceEnabled())
+               logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
+            statCollector.messageDiscarded(message);
+            statCollector.messageCollision(message);
          }
-         finally { wrapper.releaseLock(); }
-      } 
-      else  // ... we didn't get the lock
-      {
-         if (logger.isTraceEnabled())
-            logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
-         statCollector.messageDiscarded(message);
-         statCollector.messageCollision(message);
-      }
+      } while (evictedAndBlocking);
 
       return messageDispatchSuccessful;
    }
@@ -561,7 +579,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                            removeInstance = true;
                            wrapper.markEvicted();
                            prototype.passivate(wrapper.getInstance());
-                           wrapper.markPassivated();
+//                           wrapper.markPassivated();
                         }
                      } 
                      catch (InvocationTargetException e)

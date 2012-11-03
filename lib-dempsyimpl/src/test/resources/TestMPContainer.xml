@@ -8,6 +8,9 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
+   <bean id="properties"
+      class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" />
+
    <bean name="statsCollector" class="com.nokia.dempsy.monitoring.basic.BasicStatsCollector" />
    
    <!-- input: test adds messages directly to queue, they get delivered to container -->
@@ -19,6 +22,7 @@
       class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="stop">
       <property name="queue" ref="inputQueue" />
       <property name="listener" ref="container" />
+      <property name="failFast" value="${failFast}" />
    </bean>
 
    <!-- output: dispatcher sends messages to transport wrapping output queue -->
@@ -45,16 +49,7 @@
       </constructor-arg>
       <property name="prototype" ref="testMP" />
       <property name="dispatcher" ref="distributor" />
-      <property name="statCollector">
-        <bean class="com.nokia.dempsy.monitoring.coda.StatsCollectorCoda">
-           <constructor-arg>
-              <bean class="com.nokia.dempsy.config.ClusterId">
-                 <constructor-arg index="0" value="test" />
-                 <constructor-arg index="1" value="test" />
-               </bean>
-           </constructor-arg>
-        </bean>
-      </property>
+      <property name="statCollector" ref="statsCollector" />
    </bean>
 
    <!-- in a real app, these would be inner beans; for testing, we want to access them -->
