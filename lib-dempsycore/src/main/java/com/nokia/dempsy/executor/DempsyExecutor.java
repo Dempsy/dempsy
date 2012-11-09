@@ -38,6 +38,16 @@ public interface DempsyExecutor
    public <V> Future<V> schedule(Callable<V> r, long delay, TimeUnit timeUnit);
    
    /**
+    * How many pending tasks are there.
+    */
+   public int getNumberPending();
+   
+   /**
+    * How many pending limited tasks are there
+    */
+   public int getNumberLimitedPending();
+   
+   /**
     * Start up the executor
     */
    public void start();

@@ -153,6 +153,18 @@ public class TcpReceiver implements Receiver
          iStartedIt = true;
          executor.start();
       }
+      
+      if (statsCollector != null)
+      {
+         statsCollector.setMessagesPendingGauge(new StatsCollector.Gauge()
+         {
+            @Override
+            public long value()
+            {
+               return executor.getNumberPending();
+            }
+         });
+      }
 
       serverThread.start();
     }

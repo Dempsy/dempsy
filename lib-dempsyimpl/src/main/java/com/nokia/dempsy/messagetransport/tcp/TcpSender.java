@@ -65,6 +65,17 @@ public class TcpSender implements Sender
       this.timeoutMillis = socketWriteTimeoutMillis;
       this.batchOutgoingMessages = batchOutgoingMessages;
       this.maxNumberOfQueuedMessages = maxNumberOfQueuedOutgoing;
+      if (this.statsCollector != null)
+      {
+         this.statsCollector.setMessagesOutPendingGauge(new StatsCollector.Gauge()
+         {
+            @Override
+            public long value()
+            {
+               return sendingQueue.size();
+            }
+         });
+      }
       this.start();
    }
    

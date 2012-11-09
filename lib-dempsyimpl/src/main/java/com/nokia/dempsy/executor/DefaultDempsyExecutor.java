@@ -2,11 +2,11 @@ package com.nokia.dempsy.executor;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class DefaultDempsyExecutor implements DempsyExecutor
 {
    private ScheduledExecutorService schedule = null;
-   private ExecutorService executor = null;
+   private ThreadPoolExecutor executor = null;
    private AtomicLong numLimited = null;
    private long maxNumWaitingLimitedTasks = -1;
    private int threadPoolSize = -1;
@@ -66,7 +66,7 @@ public class DefaultDempsyExecutor implements DempsyExecutor
                                                                                           //   then use the other constructor
          threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
       }
-      executor = Executors.newFixedThreadPool(threadPoolSize);
+      executor = (ThreadPoolExecutor)Executors.newFixedThreadPool(threadPoolSize);
       schedule = Executors.newSingleThreadScheduledExecutor();
       numLimited = new AtomicLong(0);
       
@@ -77,8 +77,6 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    public int getMaxNumberOfQueuedLimitedTasks() { return (int)maxNumWaitingLimitedTasks; }
    
    public void setMaxNumberOfQueuedLimitedTasks(int maxNumWaitingLimitedTasks) { this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks; }
-   
-   public int getCurrentQueuedLimitedTasks() { return (int)numLimited.get(); }
    
    @Override
    public int getNumThreads() { return threadPoolSize; }
@@ -92,6 +90,19 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       if (schedule != null)
          schedule.shutdown();
    }
+
+   @Override
+   public int getNumberPending()
+   {
+      return executor.getQueue().size();
+   }
+   
+   @Override
+   public int getNumberLimitedPending()
+   {
+      return numLimited.intValue();
+   }
+
    
    public boolean isRunning() { return (schedule != null && executor != null) &&
          !(schedule.isShutdown() || schedule.isTerminated()) &&

@@ -21,4 +21,7 @@ public interface MetricGetters
    
    long getMessageBytesSent();
    long getMessageBytesReceived();
+   
+   long getMessagesPending();
+   long getMessagesOutPending();
 }

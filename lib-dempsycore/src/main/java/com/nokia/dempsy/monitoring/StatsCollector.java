@@ -17,6 +17,11 @@
 package com.nokia.dempsy.monitoring;
 
 public interface StatsCollector {
+   
+   public interface Gauge
+   {
+      long value();
+   }
 
    /**
     * A timer context is returned from start calls on the Stats collector
@@ -75,6 +80,20 @@ public interface StatsCollector {
     *  ALSO be reflected in the messageDiscarded results.
     */
    void messageCollision(Object message);
+   
+   /**
+    * If the transport supports the queuing of incoming messages, then it
+    * can optionally supply a Gauge instance that provides this metric
+    * on demand.
+    */
+   void setMessagesPendingGauge(Gauge currentMessagesPendingGauge);
+   
+   /**
+    * If the transport supports the queuing of outgoing messages, then it
+    * can optionally supply a Gauge instance that provides this metric
+    * on demand.
+    */
+   void setMessagesOutPendingGauge(Gauge currentMessagesOutPendingGauge);
 
    /**
     *  The MP manager calls this method when it creates a message processor

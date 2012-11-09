@@ -24,7 +24,6 @@ import com.nokia.dempsy.Dempsy;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.yammer.metrics.Metrics;
-import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricsRegistry;
 import com.yammer.metrics.core.Timer;
@@ -56,6 +55,9 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    public static final String MN_MP_DELETE = "message-processors-deleted";
    public static final String MN_MSG_COLLISION = "messages-collisions";
    public static final String GAGE_MPS_IN_PROCESS = "messages-in-process";
+   public static final String GAGE_MPS = "message-processors";
+   public static final String GAGE_MSG_PENDING = "messages-pending";
+   public static final String GAGE_MSG_OUT_PENDING = "messages-out-pending";
    public static final String TM_MP_PREIN = "pre-instantiation-duration";
    public static final String TM_MP_HANDLE = "mp-handle-message-duration";
    public static final String TM_MP_OUTPUT = "outputInvoke-duration";
@@ -68,9 +70,11 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       MN_BYTES_SENT,       MN_MSG_UNSENT,
       MN_MP_CREATE,        MN_MP_DELETE,
       MN_MSG_COLLISION,
-      GAGE_MPS_IN_PROCESS,
+      GAGE_MPS_IN_PROCESS, GAGE_MPS,
+      GAGE_MSG_PENDING,    GAGE_MSG_OUT_PENDING,
       TM_MP_PREIN,         TM_MP_HANDLE,
       TM_MP_OUTPUT,        TM_MP_EVIC
+      
    };
 
    private Meter messagesReceived;
@@ -85,19 +89,32 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    private Meter bytesSent;
    private Meter messagesUnsent;
    private AtomicInteger inProcessMessages;
-   @SuppressWarnings("unused")
-   private Gauge<Integer> messagesInProcess;
    private AtomicLong numberOfMPs;
    private Meter mpsCreated;
    private Meter mpsDeleted;
-   @SuppressWarnings("unused")
-   private Gauge<Long> messageProcessors;
    private String scope;
-
+   
    private Timer preInstantiationDuration;
    private Timer mpHandleMessageDuration;
    private Timer outputInvokeDuration;
    private Timer evictionInvokeDuration;
+   
+   private StatsCollector.Gauge currentMessagesPendingGauge;
+   private StatsCollector.Gauge currentMessagesOutPendingGauge;
+   
+   {
+      StatsCollector.Gauge tmp = new Gauge()
+      {
+         @Override
+         public long value()
+         {
+            return 0;
+         }
+      };
+      
+      currentMessagesPendingGauge = tmp;
+      currentMessagesOutPendingGauge = tmp;
+   }
 
 
    public StatsCollectorCoda(ClusterId clusterId)
@@ -115,8 +132,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       bytesSent = Metrics.newMeter(Dempsy.class, MN_BYTES_SENT, scope, "bytes", TimeUnit.SECONDS);
       messagesUnsent = Metrics.newMeter(Dempsy.class, MN_MSG_UNSENT, scope, "messsages", TimeUnit.SECONDS);
       inProcessMessages = new AtomicInteger();
-      messagesInProcess = Metrics.newGauge(Dempsy.class, GAGE_MPS_IN_PROCESS,
-            scope, new Gauge<Integer>() {
+      Metrics.newGauge(Dempsy.class, GAGE_MPS_IN_PROCESS, scope, new com.yammer.metrics.core.Gauge<Integer>() {
          @Override
          public Integer value()
          {
@@ -127,11 +143,26 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       numberOfMPs = new AtomicLong();
       mpsCreated = Metrics.newMeter(Dempsy.class, MN_MP_CREATE, scope, "instances", TimeUnit.SECONDS);
       mpsDeleted = Metrics.newMeter(Dempsy.class, MN_MP_DELETE, scope, "instances", TimeUnit.SECONDS);
-      messageProcessors = Metrics.newGauge(Dempsy.class, "message-processors",
-            scope, new Gauge<Long>() {
+      Metrics.newGauge(Dempsy.class, GAGE_MPS, scope, new com.yammer.metrics.core.Gauge<Long>() {
          @Override
          public Long value() {
             return numberOfMPs.get();
+         }
+      });
+      
+      Metrics.newGauge(Dempsy.class, GAGE_MSG_PENDING, scope, new com.yammer.metrics.core.Gauge<Long>() {
+         @Override
+         public Long value()
+         {
+            return StatsCollectorCoda.this.currentMessagesPendingGauge.value();
+         }
+      });
+
+      Metrics.newGauge(Dempsy.class, GAGE_MSG_OUT_PENDING, scope, new com.yammer.metrics.core.Gauge<Long>() {
+         @Override
+         public Long value()
+         {
+            return StatsCollectorCoda.this.currentMessagesOutPendingGauge.value();
          }
       });
 
@@ -356,4 +387,29 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       return bytesReceived.count();
    }
 
+   @Override
+   public synchronized void setMessagesPendingGauge(StatsCollector.Gauge currentMessagesPendingGauge)
+   {
+      if (currentMessagesPendingGauge != null)
+         this.currentMessagesPendingGauge = currentMessagesPendingGauge;
+   }
+
+   @Override
+   public synchronized void setMessagesOutPendingGauge(StatsCollector.Gauge currentMessagesOutPendingGauge)
+   {
+      if (currentMessagesOutPendingGauge != null)
+         this.currentMessagesOutPendingGauge = currentMessagesOutPendingGauge;
+   }
+
+   @Override
+   public long getMessagesPending()
+   {
+      return currentMessagesPendingGauge.value();
+   }
+
+   @Override
+   public long getMessagesOutPending()
+   {
+      return currentMessagesOutPendingGauge.value();
+   }
 }

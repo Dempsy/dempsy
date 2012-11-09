@@ -50,6 +50,9 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    private final AtomicLong bytesReceived = new AtomicLong();
    private final AtomicLong bytesSent = new AtomicLong();
    
+   private Gauge currentMessagesPendingGauge = null;
+   private Gauge currentMessagesOutPendingGauge = null;
+   
    private static class BasicTimerContext implements StatsCollector.TimerContext
    {
       private long startTime = System.currentTimeMillis();
@@ -239,6 +242,30 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    public long getMessageBytesReceived()
    {
       return bytesReceived.get();
+   }
+
+   @Override
+   public synchronized void setMessagesPendingGauge(Gauge currentMessagesPendingGauge)
+   {
+      this.currentMessagesPendingGauge = currentMessagesPendingGauge;
+   }
+
+   @Override
+   public synchronized void setMessagesOutPendingGauge(Gauge currentMessagesOutPendingGauge)
+   {
+      this.currentMessagesOutPendingGauge = currentMessagesOutPendingGauge;
+   }
+
+   @Override
+   public synchronized long getMessagesPending()
+   {
+      return currentMessagesPendingGauge == null ? 0 : currentMessagesPendingGauge.value();
+   }
+
+   @Override
+   public synchronized long getMessagesOutPending()
+   {
+      return currentMessagesOutPendingGauge == null ? 0 : currentMessagesOutPendingGauge.value();
    }
 	
 }
