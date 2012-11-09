@@ -18,11 +18,15 @@ package com.nokia.dempsy.monitoring.coda;
 
 import static org.junit.Assert.assertEquals;
 
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.nokia.dempsy.Dempsy;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.monitoring.StatsCollector;
 import com.yammer.metrics.core.Metered;
 import com.yammer.metrics.core.MetricName;
 import com.yammer.metrics.core.MetricsRegistry;
@@ -33,11 +37,15 @@ public class TestStatsCollectorCoda {
 	ClusterId clusterId = new ClusterId("appliction", "cluster");
 	String scope = clusterId.getApplicationName() + "." + clusterId.getMpClusterName();
 	
-	long getStatValue(StatsCollectorCoda statCollector, String metricName)
+	@SuppressWarnings("unchecked")
+   long getStatValue(StatsCollectorCoda statCollector, String metricName)
 	{
 		MetricsRegistry metricReg = statCollector.getMetricsRegistry();
-		Metered meter = (Metered)metricReg.allMetrics().get(new MetricName(Dempsy.class, metricName, scope));
-		return meter.count();
+		Object meter = metricReg.allMetrics().get(new MetricName(Dempsy.class, metricName, scope));
+		if (!com.yammer.metrics.core.Gauge.class.isAssignableFrom(meter.getClass()))
+		   return ((Metered)metricReg.allMetrics().get(new MetricName(Dempsy.class, metricName, scope))).count();
+		else
+	       return ((com.yammer.metrics.core.Gauge<Long>)metricReg.allMetrics().get(new MetricName(Dempsy.class, metricName, scope))).value();
 	}
 	
 
@@ -45,6 +53,16 @@ public class TestStatsCollectorCoda {
 	public void setUp() throws Exception {
 		stats = new StatsCollectorCoda(clusterId);
 		
+	}
+	
+	@After
+	public void tearDown() throws Throwable
+	{
+	   if (stats != null)
+	   {
+	      stats.stop();
+	      stats = null;
+	   }
 	}
 
 	@Test
@@ -111,11 +129,53 @@ public class TestStatsCollectorCoda {
 		
 	}
 
-	@Test
-	public void testMessageProcessorDeleted() {
-		assertEquals("none yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MP_DELETE));
-		stats.messageProcessorDeleted("abc");
-		assertEquals("del one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MP_DELETE));
-	}
+   @Test
+   public void testMessageProcessorDeleted() 
+   {
+      assertEquals("none yet", 0L, getStatValue(stats, StatsCollectorCoda.MN_MP_DELETE));
+      stats.messageProcessorDeleted("abc");
+      assertEquals("del one", 1L, getStatValue(stats, StatsCollectorCoda.MN_MP_DELETE));
+   }
 
+   @Test
+   public void testMessagesPending() {
+      assertEquals("none yet", 0L, getStatValue(stats, StatsCollectorCoda.GAGE_MSG_PENDING));
+      assertEquals("none yet", 0L, stats.getMessagesPending());
+      final AtomicLong count = new AtomicLong(0);
+      StatsCollector.Gauge gauge = new StatsCollector.Gauge()
+      {
+         @Override
+         public long value()
+         {
+            return count.get();
+         }
+      };
+      stats.setMessagesPendingGauge(gauge);
+      assertEquals("none yet", 0L, getStatValue(stats, StatsCollectorCoda.GAGE_MSG_PENDING));
+      assertEquals("none yet", 0L, stats.getMessagesPending());
+      count.set(10);
+      assertEquals("final value", 10L, getStatValue(stats, StatsCollectorCoda.GAGE_MSG_PENDING));
+      assertEquals("final value", 10L, stats.getMessagesPending());
+   }
+   
+   @Test
+   public void testMessagesOutPending() {
+      assertEquals("none yet", 0L, getStatValue(stats, StatsCollectorCoda.GAGE_MSG_OUT_PENDING));
+      assertEquals("none yet", 0L, stats.getMessagesPending());
+      final AtomicLong count = new AtomicLong(0);
+      StatsCollector.Gauge gauge = new StatsCollector.Gauge()
+      {
+         @Override
+         public long value()
+         {
+            return count.get();
+         }
+      };
+      stats.setMessagesOutPendingGauge(gauge);
+      assertEquals("none yet", 0L, getStatValue(stats, StatsCollectorCoda.GAGE_MSG_OUT_PENDING));
+      assertEquals("none yet", 0L, stats.getMessagesOutPending());
+      count.set(10);
+      assertEquals("final value", 10L, getStatValue(stats, StatsCollectorCoda.GAGE_MSG_OUT_PENDING));
+      assertEquals("final value", 10L, stats.getMessagesOutPending());
+   }
 }
