@@ -154,17 +154,7 @@ public class TcpReceiver implements Receiver
          executor.start();
       }
       
-      if (statsCollector != null)
-      {
-         statsCollector.setMessagesPendingGauge(new StatsCollector.Gauge()
-         {
-            @Override
-            public long value()
-            {
-               return executor.getNumberPending();
-            }
-         });
-      }
+      setPendingGague();
 
       serverThread.start();
     }
@@ -240,7 +230,11 @@ public class TcpReceiver implements Receiver
    }
    
    @Override
-   public void setStatsCollector(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
+   public synchronized void setStatsCollector(StatsCollector statsCollector) 
+   {
+      this.statsCollector = statsCollector;
+      setPendingGague();
+   }
    
    public TcpDestination doGetDestination() throws MessageTransportException
    {
@@ -309,6 +303,21 @@ public class TcpReceiver implements Receiver
    protected ClientThread makeNewClientThread(Socket clientSocket) throws IOException
    {
       return new ClientThread(clientSocket);
+   }
+   
+   protected void setPendingGague()
+   {
+      if (statsCollector != null && executor != null)
+      {
+         statsCollector.setMessagesPendingGauge(new StatsCollector.Gauge()
+         {
+            @Override
+            public long value()
+            {
+               return executor.getNumberPending();
+            }
+         });
+      }
    }
    
    protected class ClientThread implements Runnable
