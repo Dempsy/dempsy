@@ -314,121 +314,214 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       return instances.size();
    }
    
-   AtomicBoolean isRunningMpInst = new AtomicBoolean(false);
-   AtomicBoolean stopRunningMpInst = new AtomicBoolean(false);
-   Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
+   /**
+    * This is a helper class with unique synchronizataion behavior. It can be used to start
+    * a worker in another thread, allow the initiating thread to verify that's it's been 
+    * started, and allow the early termination of that worker thread.
+    */
+   private class RunningEventSwitch
+   {
+      final AtomicBoolean isRunning = new AtomicBoolean(false);
+      final AtomicBoolean stopRunning = new AtomicBoolean(false);
+      // this flag is used to hold up the calling thread's exit of this method
+      //  until the worker is underway.
+      final AtomicBoolean runningGate = new AtomicBoolean(false);
+      
+      /**
+       * This is called from the worker thread to notify the fact that
+       * it's been started.
+       */
+      public void workerInitiateRun()
+      {
+         // this is synchronized because it's used as a condition variable 
+         // along with the condition.
+         synchronized(isRunning) { isRunning.set(true); }
+         stopRunning.set(false);
+         
+         synchronized(runningGate)
+         {
+            runningGate.set(true);
+            runningGate.notify();
+         }
+      }
+      
+      /**
+       * The worker thread can use this method to check if it's been explicitly preempted.
+       * @return
+       */
+      public boolean wasPreempted() { return stopRunning.get(); }
+      
+      /**
+       * The worker thread should indicate that it's done in a finally clause on it's way
+       * out.
+       */
+      public void workerStopping()
+      {
+         // This kicks the preemptWorkerAndWait out.
+         synchronized(isRunning)
+         {
+            isRunning.set(false);
+            isRunning.notify();
+         }
+      }
+      
+      /**
+       * The main thread uses this method when it needs to preempt the worker and
+       * wait for the worker to finish before continuing.
+       */
+      public void preemptWorkerAndWait()
+      {
+         // We need to see if we're already executing
+         stopRunning.set(true); // kick out any running instantiation thread
+         // wait for it to exit, it it's even running - also consider the overall
+         //  Mp isRunning flag.
+         synchronized(isRunning)
+         {
+            while (isRunning.get() && MpContainer.this.isRunning)
+            {
+               try { isRunning.wait(); } catch (InterruptedException e) {}
+            }
+         }
+      }
+      
+      /**
+       * This allows the main thread to wait until the worker is started in order
+       * to continue. This method only works once. It resets the flag so a second
+       * call will block until another thread calls to workerInitiateRun().
+       */
+      public void waitForWorkerToStart()
+      {
+         // make sure the thread is running before we head out from the synchronized block
+         synchronized(runningGate)
+         {
+            while (runningGate.get() == false && MpContainer.this.isRunning)
+            {
+               try { runningGate.wait(); } catch (InterruptedException ie) {}
+            }
+
+            runningGate.set(false); // reset this flag
+         }
+      }
+   }
+   
+   final RunningEventSwitch expand = new RunningEventSwitch();
+   final RunningEventSwitch contract = new RunningEventSwitch();
+   final Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
+   
+   private void runExpandKeyspace(final RoutingStrategy.Inbound strategyInbound)
+   {
+      List<Future<Object>> futures = new ArrayList<Future<Object>>();
+      expand.workerInitiateRun();
+
+      StatsCollector.TimerContext tcontext = null;
+      try{
+         tcontext = statCollector.preInstantiationStarted();
+         Iterable<?> iterable = keySource.getAllPossibleKeys();
+         for(final Object key: iterable)
+         {
+            if (expand.wasPreempted() || !isRunning)
+               break;
+            
+            if(strategyInbound.doesMessageKeyBelongToNode(key))
+            {
+               Callable<Object> callable = new Callable<Object>()
+               {
+                  Object k = key;
+                  
+                  @Override
+                  public Object call()
+                  {
+                     try { getInstanceForKey(k); }
+                     catch(ContainerException e)
+                     {
+                        logger.error("Failed to instantiate MP for Key "+key +
+                              " of type "+key.getClass().getSimpleName(), e);
+                     }
+                     return null;
+                  }
+               };
+               
+               if (executor != null)
+                  futures.add(executor.submit(callable));
+               else
+                  callable.call();
+            }
+         }
+      }
+      catch(Throwable e)
+      {
+         logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
+               keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
+      }
+      finally
+      {
+         if (tcontext != null) tcontext.stop();
+         if (expand.wasPreempted()) // this run is being preempted
+         {
+            for (Future<Object> f : futures)
+               try { f.cancel(false); } catch (Throwable th) { logger.warn("Error trying to cancel an attempt to pre-instantiate a Mp",th); }
+         }
+         expand.workerStopping();
+      }
+   }
    
    @Override
    public void keyspaceResponsibilityChanged(final RoutingStrategy.Inbound strategyInbound, boolean less, boolean more)
    {
       synchronized(keyspaceResponsibilityChangedLock)
       {
-         // need to handle less by passivating ... but we'll ignore for now.
+         // need to handle less by passivating
+         if (less)
+         {
+            contract.preemptWorkerAndWait();
+            
+            Thread t = new Thread(new Runnable()
+            {
+               @Override
+               public void run() 
+               {
+                  try
+                  {
+                     contract.workerInitiateRun();
+                     doEvict(new EvictCheck()
+                     {
+                        // we shouldEvict if the message key no longer belongs as 
+                        //  part of this container.
+                        @Override
+                        public boolean shouldEvict(Object key, InstanceWrapper wrapper) { return !strategyInbound.doesMessageKeyBelongToNode(key); }
+                        // In this case, it's evictable.
+                        @Override
+                        public boolean isGenerallyEvitable() { return true; }
+                        @Override
+                        public boolean shouldStopEvicting() { return contract.wasPreempted(); }
+                     });
+                  }
+                  finally { contract.workerStopping(); }
+               }
+            }, "Keyspace Contraction Thread");
+            t.setDaemon(true);
+            t.start();
+
+            contract.waitForWorkerToStart();
+         }
 
          // If more were added and we have a keySource we need to do
          //  preinstantiation
          if (more && keySource != null)
          {
-            // We need to see if we're already executing
-            stopRunningMpInst.set(true); // kick out any running instantiation thread
-            // wait for it to exit, it it's even running
-            synchronized(isRunningMpInst)
-            {
-               while (isRunningMpInst.get() && isRunning)
-               {
-                  try { isRunningMpInst.wait(); } catch (InterruptedException e) {}
-               }
-            }
-
-            // this flag is used to hold up the calling thread's exit of this method
-            //  until the Runnable is underway.
-            final AtomicBoolean running = new AtomicBoolean(false);
-
+            expand.preemptWorkerAndWait();
+            
             Thread t = new Thread(new Runnable()
             {
                @Override
-               public void run()
-               {
-                  synchronized(isRunningMpInst) { isRunningMpInst.set(true); }
-                  List<Future<Object>> futures = new ArrayList<Future<Object>>();
-
-                  stopRunningMpInst.set(false); // reset this flag in case it's been set
-
-                  synchronized(running)
-                  {
-                     running.set(true);
-                     running.notify();
-                  }
-
-                  StatsCollector.TimerContext tcontext = null;
-                  try{
-                     tcontext = statCollector.preInstantiationStarted();
-                     Iterable<?> iterable = keySource.getAllPossibleKeys();
-                     for(final Object key: iterable)
-                     {
-                        if (stopRunningMpInst.get() || !isRunning)
-                           break;
-                        
-                        if(strategyInbound.doesMessageKeyBelongToNode(key))
-                        {
-                           Callable<Object> callable = new Callable<Object>()
-                           {
-                              Object k = key;
-                              
-                              @Override
-                              public Object call()
-                              {
-                                 try { getInstanceForKey(k); }
-                                 catch(ContainerException e)
-                                 {
-                                    logger.error("Failed to instantiate MP for Key "+key +
-                                          " of type "+key.getClass().getSimpleName(), e);
-                                 }
-                                 return null;
-                              }
-                           };
-                           
-                           if (executor != null)
-                              futures.add(executor.submit(callable));
-                           else
-                              callable.call();
-                        }
-                     }
-                  }
-                  catch(Throwable e)
-                  {
-                     logger.error("Exception occured while processing keys during pre-instantiation using KeyStore method"+
-                           keySource.getClass().getSimpleName()+":getAllPossibleKeys()", e);
-                  }
-                  finally
-                  {
-                     if (tcontext != null) tcontext.stop();
-                     if (stopRunningMpInst.get()) // this run is being preempted
-                     {
-                        for (Future<Object> f : futures)
-                           try { f.cancel(false); } catch (Throwable th) { logger.warn("Error trying to cancel an attempt to pre-instantiate a Mp",th); }
-                     }
-                     synchronized(isRunningMpInst)
-                     {
-                        isRunningMpInst.set(false);
-                        isRunningMpInst.notify();
-                     }
-                  }
-               }
+               public void run() { runExpandKeyspace(strategyInbound);  }
             }, "Pre-Instantation Thread");
             t.setDaemon(true);
             t.start();
 
-
-            // make sure the thread is running before we head out from the synchronized block
-            synchronized(running)
-            {
-               while (running.get() == false && isRunning)
-               {
-                  try { running.wait(); } catch (InterruptedException ie) {}
-               }
-            }
+            expand.waitForWorkerToStart();
          }
+         
       }
    }
 
@@ -537,8 +630,51 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       return wrapper;
    }
 
-   public void evict() {
-      if (!prototype.isEvictableSupported() || !isRunning)
+   public void evict()
+   {
+      doEvict(new EvictCheck()
+      {
+         @Override
+         public boolean shouldEvict(Object key, InstanceWrapper wrapper)
+         {
+            Object instance = wrapper.getInstance();
+            try 
+            {
+               return prototype.invokeEvictable(instance);
+            } 
+            catch (InvocationTargetException e)
+            {
+               logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                     " resulted in an exception.",e.getCause());
+            }
+            catch (IllegalAccessException e)
+            {
+               logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
+                     " is not defined correctly. Is it visible?",e);
+            }
+            
+            return false;
+         }
+         
+         @Override
+         public boolean isGenerallyEvitable() { return prototype.isEvictableSupported(); }
+         @Override
+         public boolean shouldStopEvicting() { return false; }
+      });
+   }
+   
+   private interface EvictCheck
+   {
+      boolean isGenerallyEvitable();
+      
+      boolean shouldEvict(Object key, InstanceWrapper wrapper);
+      
+      boolean shouldStopEvicting();
+   }
+   
+   private void doEvict(EvictCheck check)
+   {
+      if (!check.isGenerallyEvitable() || !isRunning)
          return;
 
       StatsCollector.TimerContext tctx = null;
@@ -551,7 +687,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
          instancesToEvict.putAll(instances);
 
-         while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning)
+         while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning && !check.shouldStopEvicting())
          {
             // store off anything that passes for later removal. This is to avoid a
             // ConcurrentModificationException.
@@ -559,6 +695,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
 
             for (Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet())
             {
+               if (check.shouldStopEvicting())
+                  break;
+               
                Object key = entry.getKey();
                InstanceWrapper wrapper = entry.getValue();
                boolean gotLock = false;
@@ -573,28 +712,21 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                      
                      boolean removeInstance = false;
 
-                     Object instance = wrapper.getInstance();
-                     try {
-                        if (prototype.invokeEvictable(instance)) {
+                     try 
+                     {
+                        if (check.shouldEvict(key,wrapper))
+                        {
                            removeInstance = true;
                            wrapper.markEvicted();
                            prototype.passivate(wrapper.getInstance());
 //                           wrapper.markPassivated();
                         }
                      } 
-                     catch (InvocationTargetException e)
-                     {
-                        logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
-                              " resulted in an exception.",e.getCause());
-                     }
-                     catch (IllegalAccessException e)
-                     {
-                        logger.warn("It appears that the method for checking the eviction or passivating the Mp " + SafeString.objectDescription(instance) + 
-                              " is not defined correctly. Is it visible?",e);
-                     }
                      catch (Throwable e)
                      {
-                        logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) + 
+                        Object instance = null;
+                        try { instance = wrapper.getInstance(); } catch(Throwable th) {} // not sure why this would ever happen
+                        logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance == null ? wrapper : instance) + 
                               " resulted in an exception.",e);
                      }
                      
