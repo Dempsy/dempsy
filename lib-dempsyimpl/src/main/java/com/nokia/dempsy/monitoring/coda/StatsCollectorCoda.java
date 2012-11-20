@@ -20,11 +20,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.nokia.dempsy.Dempsy;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
+import com.yammer.metrics.core.MetricName;
 import com.yammer.metrics.core.MetricsRegistry;
 import com.yammer.metrics.core.Timer;
 
@@ -92,7 +92,6 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    private AtomicLong numberOfMPs;
    private Meter mpsCreated;
    private Meter mpsDeleted;
-   private String scope;
    
    private Timer preInstantiationDuration;
    private Timer mpHandleMessageDuration;
@@ -101,6 +100,8 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    
    private StatsCollector.Gauge currentMessagesPendingGauge;
    private StatsCollector.Gauge currentMessagesOutPendingGauge;
+   private ClusterId clusterId;
+   private StatsCollectorFactoryCoda.MetricNamingStrategy namer;
    
    {
       StatsCollector.Gauge tmp = new Gauge()
@@ -116,23 +117,23 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       currentMessagesOutPendingGauge = tmp;
    }
 
-
-   public StatsCollectorCoda(ClusterId clusterId)
+   public StatsCollectorCoda(ClusterId clusterId, StatsCollectorFactoryCoda.MetricNamingStrategy namer)
    {
-      scope = clusterId.getApplicationName() + "." + clusterId.getMpClusterName();
-      messagesReceived = Metrics.newMeter(Dempsy.class, MN_MSG_RCVD, scope, "messages", TimeUnit.SECONDS);
-      bytesReceived = Metrics.newMeter(Dempsy.class, MN_BYTES_RCVD, scope, "bytes", TimeUnit.SECONDS);
-      messagesDiscarded = Metrics.newMeter(Dempsy.class, MN_MSG_DISCARD, scope, "messages", TimeUnit.SECONDS);
-      messagesCollisions = Metrics.newMeter(Dempsy.class, MN_MSG_COLLISION, scope, "messages", TimeUnit.SECONDS);
-      messagesDispatched = Metrics.newMeter(Dempsy.class, MN_MSG_DISPATCH, scope, "messages", TimeUnit.SECONDS);
-      messagesFwFailed = Metrics.newMeter(Dempsy.class, MN_MSG_FWFAIL, scope, "messages", TimeUnit.SECONDS);
-      messagesMpFailed = Metrics.newMeter(Dempsy.class, MN_MSG_MPFAIL, scope, "messages", TimeUnit.SECONDS);
-      messagesProcessed = Metrics.newMeter(Dempsy.class, MN_MSG_PROC, scope, "messages", TimeUnit.SECONDS);
-      messagesSent = Metrics.newMeter(Dempsy.class, MN_MSG_SENT, scope, "messages", TimeUnit.SECONDS);
-      bytesSent = Metrics.newMeter(Dempsy.class, MN_BYTES_SENT, scope, "bytes", TimeUnit.SECONDS);
-      messagesUnsent = Metrics.newMeter(Dempsy.class, MN_MSG_UNSENT, scope, "messsages", TimeUnit.SECONDS);
+      this.namer = namer;
+      this.clusterId = clusterId;
+      messagesReceived = Metrics.newMeter(createName(MN_MSG_RCVD), "messages", TimeUnit.SECONDS);
+      bytesReceived = Metrics.newMeter(createName(MN_BYTES_RCVD), "bytes", TimeUnit.SECONDS);
+      messagesDiscarded = Metrics.newMeter(createName(MN_MSG_DISCARD), "messages", TimeUnit.SECONDS);
+      messagesCollisions = Metrics.newMeter(createName(MN_MSG_COLLISION), "messages", TimeUnit.SECONDS);
+      messagesDispatched = Metrics.newMeter(createName(MN_MSG_DISPATCH), "messages", TimeUnit.SECONDS);
+      messagesFwFailed = Metrics.newMeter(createName(MN_MSG_FWFAIL), "messages", TimeUnit.SECONDS);
+      messagesMpFailed = Metrics.newMeter(createName(MN_MSG_MPFAIL), "messages", TimeUnit.SECONDS);
+      messagesProcessed = Metrics.newMeter(createName(MN_MSG_PROC), "messages", TimeUnit.SECONDS);
+      messagesSent = Metrics.newMeter(createName(MN_MSG_SENT), "messages", TimeUnit.SECONDS);
+      bytesSent = Metrics.newMeter(createName(MN_BYTES_SENT), "bytes", TimeUnit.SECONDS);
+      messagesUnsent = Metrics.newMeter(createName(MN_MSG_UNSENT), "messsages", TimeUnit.SECONDS);
       inProcessMessages = new AtomicInteger();
-      Metrics.newGauge(Dempsy.class, GAGE_MPS_IN_PROCESS, scope, new com.yammer.metrics.core.Gauge<Integer>() {
+      Metrics.newGauge(createName(GAGE_MPS_IN_PROCESS), new com.yammer.metrics.core.Gauge<Integer>() {
          @Override
          public Integer value()
          {
@@ -141,16 +142,16 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       });
 
       numberOfMPs = new AtomicLong();
-      mpsCreated = Metrics.newMeter(Dempsy.class, MN_MP_CREATE, scope, "instances", TimeUnit.SECONDS);
-      mpsDeleted = Metrics.newMeter(Dempsy.class, MN_MP_DELETE, scope, "instances", TimeUnit.SECONDS);
-      Metrics.newGauge(Dempsy.class, GAGE_MPS, scope, new com.yammer.metrics.core.Gauge<Long>() {
+      mpsCreated = Metrics.newMeter(createName(MN_MP_CREATE), "instances", TimeUnit.SECONDS);
+      mpsDeleted = Metrics.newMeter(createName(MN_MP_DELETE), "instances", TimeUnit.SECONDS);
+      Metrics.newGauge(createName(GAGE_MPS), new com.yammer.metrics.core.Gauge<Long>() {
          @Override
          public Long value() {
             return numberOfMPs.get();
          }
       });
       
-      Metrics.newGauge(Dempsy.class, GAGE_MSG_PENDING, scope, new com.yammer.metrics.core.Gauge<Long>() {
+      Metrics.newGauge(createName(GAGE_MSG_PENDING), new com.yammer.metrics.core.Gauge<Long>() {
          @Override
          public Long value()
          {
@@ -158,7 +159,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
          }
       });
 
-      Metrics.newGauge(Dempsy.class, GAGE_MSG_OUT_PENDING, scope, new com.yammer.metrics.core.Gauge<Long>() {
+      Metrics.newGauge(createName(GAGE_MSG_OUT_PENDING), new com.yammer.metrics.core.Gauge<Long>() {
          @Override
          public Long value()
          {
@@ -166,19 +167,18 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
          }
       });
 
-      preInstantiationDuration = Metrics.newTimer(Dempsy.class, TM_MP_PREIN,
-            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      preInstantiationDuration = Metrics.newTimer(createName(TM_MP_PREIN), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 
-      mpHandleMessageDuration = Metrics.newTimer(Dempsy.class, TM_MP_HANDLE,
-            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      mpHandleMessageDuration = Metrics.newTimer(createName(TM_MP_HANDLE), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 
-      outputInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_OUTPUT,
-            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      outputInvokeDuration = Metrics.newTimer(createName(TM_MP_OUTPUT), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
 
-      evictionInvokeDuration = Metrics.newTimer(Dempsy.class, TM_MP_EVIC,
-            scope, TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
-
+      evictionInvokeDuration = Metrics.newTimer(createName(TM_MP_EVIC), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
    }
+   
+   public ClusterId getClusterId() { return clusterId; }
+   
+   protected MetricName createName(String metric) { return namer.createName(clusterId, metric); }
 
    protected MetricsRegistry getMetricsRegistry()
    {
@@ -297,7 +297,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    {
       Metrics.shutdown();
       for (String name: METRIC_NAMES){
-         Metrics.defaultRegistry().removeMetric(Dempsy.class, name, scope);
+          Metrics.defaultRegistry().removeMetric(createName(name));
       }
    }
 

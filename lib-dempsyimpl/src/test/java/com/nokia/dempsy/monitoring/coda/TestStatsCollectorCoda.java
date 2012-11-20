@@ -24,34 +24,32 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.nokia.dempsy.Dempsy;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.yammer.metrics.core.Metered;
-import com.yammer.metrics.core.MetricName;
 import com.yammer.metrics.core.MetricsRegistry;
 
 public class TestStatsCollectorCoda {
 		
 	StatsCollectorCoda stats;
 	ClusterId clusterId = new ClusterId("appliction", "cluster");
-	String scope = clusterId.getApplicationName() + "." + clusterId.getMpClusterName();
 	
 	@SuppressWarnings("unchecked")
    long getStatValue(StatsCollectorCoda statCollector, String metricName)
 	{
 		MetricsRegistry metricReg = statCollector.getMetricsRegistry();
-		Object meter = metricReg.allMetrics().get(new MetricName(Dempsy.class, metricName, scope));
+		Object meter = metricReg.allMetrics().get(statCollector.createName(metricName));
 		if (!com.yammer.metrics.core.Gauge.class.isAssignableFrom(meter.getClass()))
-		   return ((Metered)metricReg.allMetrics().get(new MetricName(Dempsy.class, metricName, scope))).count();
+		   return ((Metered)metricReg.allMetrics().get(statCollector.createName(metricName))).count();
 		else
-	       return ((com.yammer.metrics.core.Gauge<Long>)metricReg.allMetrics().get(new MetricName(Dempsy.class, metricName, scope))).value();
+	       return ((com.yammer.metrics.core.Gauge<Long>)metricReg.allMetrics().get(statCollector.createName(metricName))).value();
 	}
 	
 
 	@Before
 	public void setUp() throws Exception {
-		stats = new StatsCollectorCoda(clusterId);
+	   
+		stats = new StatsCollectorCoda(clusterId,new StatsCollectorFactoryCoda().getNamingStrategy());
 		
 	}
 	
