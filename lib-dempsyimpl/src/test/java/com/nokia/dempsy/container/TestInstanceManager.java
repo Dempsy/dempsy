@@ -38,6 +38,7 @@ import com.nokia.dempsy.container.MpContainer.InstanceWrapper;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
+import com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 
@@ -218,7 +219,7 @@ public class TestInstanceManager
    public MpContainer setupContainer(Object prototype) throws ContainerException
    {
       DummyDispatcher dispatcher = new DummyDispatcher();
-      StatsCollector stats = new StatsCollectorCoda(new ClusterId("test", "test"));
+      StatsCollector stats = new StatsCollectorCoda(new ClusterId("test", "test"), new StatsCollectorFactoryCoda().getNamingStrategy());
       JavaSerializer<Object> serializer = new JavaSerializer<Object>();
 
       manager = new MpContainer(new ClusterId("test","test"));
