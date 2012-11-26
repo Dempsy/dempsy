@@ -27,8 +27,16 @@ public class TcpDestination implements Destination, Serializable
    
    protected InetAddress inetAddress;
    protected int port;
+   protected int sequence = 0;
    
    public TcpDestination() {   }
+   
+   public TcpDestination(TcpDestination destination, int sequence)
+   {
+      this.inetAddress = destination.inetAddress;
+      this.port = destination.port;
+      this.sequence = sequence;
+   }
    
    protected TcpDestination(InetAddress inetAddress, int port)
    {
@@ -44,42 +52,34 @@ public class TcpDestination implements Destination, Serializable
       return "(" + inetAddress.getHostAddress() + (port > 0 ? (":" + port + ")") : "");
    }
    
+   public TcpDestination baseDestination() {  return new TcpDestination(inetAddress,port); }
+   
    @Override
    public boolean equals(Object other)
    {
       if (other == null)
          return false;
       TcpDestination otherTcpDestination = (TcpDestination)other;
-      return inetAddress.equals(otherTcpDestination.inetAddress ) && (port == otherTcpDestination.port);
+      return inetAddress.equals(otherTcpDestination.inetAddress ) && (port == otherTcpDestination.port) && (sequence == otherTcpDestination.sequence);
    }
    
    @Override
-   public int hashCode()
-   {
-      return inetAddress.hashCode() ^ port;
-   }
+   public int hashCode() { return inetAddress.hashCode() ^ port ^ (int)sequence; }
    
    /**
     * Get the IP address we are listening to.
     * Called by StatsCollectorFactory to make pretty names for nodes.
     * @return the InternetAddress of teh listner.
     */
-   public InetAddress getInetAddress() {
-      return inetAddress;
-   }
+   public InetAddress getInetAddress() { return inetAddress; }
 
-   public void setInetAddress(InetAddress inetAddress)
-   {
-      this.inetAddress = inetAddress;
-   }
+   public void setInetAddress(InetAddress inetAddress) { this.inetAddress = inetAddress; }
 
-   public void setPort(int port)
-   {
-      this.port = port;
-   }
+   public void setPort(int port) { this.port = port; }
    
-   public int getPort()
-   {
-      return this.port;
-   }
+   public int getPort() { return this.port; }
+   
+   public int getSequence() { return this.sequence; }
+   
+   public void setSequence(int sequence) { this.sequence = sequence; }
 }

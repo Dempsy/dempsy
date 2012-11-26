@@ -5,6 +5,8 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
+	<bean name="adaptor" class="com.nokia.dempsy.DempsyTestBase$TestAdaptor" />
+
    <bean class="com.nokia.dempsy.config.ApplicationDefinition">
       <constructor-arg name="applicationName" value="test-app" />
       <property name="executor">
@@ -18,9 +20,7 @@
          <list>
             <bean class="com.nokia.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster0" />
-               <property name="adaptor">
-                  <bean class="com.nokia.dempsy.DempsyTestBase$TestAdaptor" />
-               </property>
+               <property name="adaptor" ref="adaptor" />
             </bean>
             <bean class="com.nokia.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster1" />

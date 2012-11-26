@@ -68,9 +68,30 @@ public class Dempsy
       public class Cluster
       {
          /**
-          * A Node is essentially an {@link MpContainer} with all of the attending infrastructure.
+          * <p>A Node is essentially an {@link MpContainer} with all of the attending infrastructure.
           * Currently a Node is instantiated within the Dempsy orchestrator as a one to one with the
-          * {@link Cluster}.
+          * {@link Cluster}. The following things are important to keep in mind:</p>
+          * 
+          * <li>There is an {@link MpContainer} local to each Node</li>
+          * <li>There is a single {@link ClusterInfoSessionFactory} for all of the Node's in this 
+          * {@link Dempsy} instance.</li>
+          * <li>There is a unique call to the {@link ClusterInfoSessionFactory}'s createSession method
+          * for each Node. For zookeeper, this means there is a separate ZooKeeper client for each Node.
+          * This may change in the future.</li>
+          * <li>There is a single {@link Transport} instance for ALL Nodes in this Dempsy instance</li>
+          * <li>There is a separate call to the {@link Transport}'s createInbound for each Node in order
+          * to obtain the {@link Receiver}.</li>
+          * <li>By default, there is one executor for ALL Node's running in a Dempsy instance. This is 
+          * configurable by setting a separate instance per {@link ClusterDefinition} in the 
+          * {@link ApplicationDefinition}. This can be done using a factory in the DI injection 
+          * container configuration or using a prototype bean scope.</li>
+          * <li>There is an individual call to StatsCollectorFactory.createStatsCollector on the
+          * StatsCollectorFactory for each Node.</li>
+          * <li>There is a {@link Router} instance local to each Node</li>
+          * <li>The {@link RoutingStrategy} defaults to the same instance for ALL Node's but can be set
+          * on a per-Node bases using the {@link ClusterDefinition}.</li>
+          * <li>There is a unique call to the RoutingStrategy's createInbound to obtain a
+          * {@link RoutingStrategy.Inbound} instance for each Node.</li>
           */
          public class Node
          {
@@ -208,7 +229,6 @@ public class Dempsy
             // Only called from tests
             public Router retouRteg() { return router; }
 
-            
          } // end Node definition
          
          private List<Node> nodes = new ArrayList<Node>(1);

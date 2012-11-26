@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
@@ -33,17 +34,20 @@ public class TcpSenderFactory implements SenderFactory
    private volatile boolean isStopped = false;
    protected StatsCollector statsCollector = null;
    private Map<Destination,TcpSender> senders = new HashMap<Destination, TcpSender>();
+   private ConcurrentHashMap<Destination,TcpSenderConnection> connections = null;
    
    protected long socketWriteTimeoutMillis;
    protected boolean batchOutgoingMessages;
    protected long maxNumberOfQueuedOutbound;
    
-   protected TcpSenderFactory(StatsCollector statsCollector, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
+   protected TcpSenderFactory(ConcurrentHashMap<Destination,TcpSenderConnection> connections, StatsCollector statsCollector,
+         long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
    {
       this.statsCollector = statsCollector;
       this.socketWriteTimeoutMillis = socketWriteTimeoutMillis;
       this.batchOutgoingMessages = batchOutgoingMessages;
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
+      this.connections = connections;
    }
 
    @Override
@@ -86,7 +90,11 @@ public class TcpSenderFactory implements SenderFactory
     */
    protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
    {
-      return new TcpSender( (TcpDestination)destination, statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages );
+      TcpDestination baseDestination = destination.baseDestination();
+      TcpSenderConnection tmpCon = new TcpSenderConnection(baseDestination,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
+      TcpSenderConnection connection = this.connections.putIfAbsent(baseDestination, tmpCon);
+      if (connection == null) connection = tmpCon;
+      return new TcpSender(connection, (TcpDestination)destination, statsCollector);
    }
 
 }

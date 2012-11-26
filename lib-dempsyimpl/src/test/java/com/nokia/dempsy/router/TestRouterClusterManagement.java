@@ -142,6 +142,7 @@ public class TestRouterClusterManagement
    public void testChangingClusterInfo() throws Throwable
    {
       // check that the message didn't go through.
+      System.setProperty("nodecount", "1");
       ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
             "testDempsy/Dempsy.xml", "testDempsy/ClusterInfo-LocalActx.xml", "testDempsy/Serializer-KryoActx.xml",
             "testDempsy/Transport-PassthroughActx.xml", "testDempsy/SimpleMultistageApplicationActx.xml" );

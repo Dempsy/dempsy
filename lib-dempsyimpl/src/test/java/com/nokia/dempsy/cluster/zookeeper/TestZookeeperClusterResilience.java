@@ -56,7 +56,7 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
 import com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory;
 import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
-import com.nokia.dempsy.router.SpecificClusterCheck;
+import com.nokia.dempsy.router.RegExClusterCheck;
 import com.nokia.dempsy.router.microshard.MicroShardUtils;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
@@ -379,7 +379,7 @@ public class TestZookeeperClusterResilience
    
    private static void initDempsy(Dempsy dempsy, ClusterId clusterId)
    {
-      dempsy.setClusterCheck(new SpecificClusterCheck(clusterId));
+      dempsy.setClusterCheck(new RegExClusterCheck(clusterId));
       dempsy.setDefaultRoutingStrategy(new DecentralizedRoutingStrategy(20, 1));
       dempsy.setDefaultSerializer(new JavaSerializer<Object>());
       dempsy.setDefaultStatsCollectorFactory(new BasicStatsCollectorFactory()

@@ -28,8 +28,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import junit.framework.Assert;
-
 import org.junit.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.BeanCreationException;
@@ -417,6 +415,7 @@ public class TestDempsy extends DempsyTestBase
    public void testMpKeyStoreWithFailingClusterManager() throws Throwable
    {
       KeySourceImpl.disruptSession = true;
+      TestMp.alwaysPauseOnActivation = true;
       runMpKeyStoreTest("testMpKeyStoreWithFailingClusterManager");
    }
    
@@ -435,29 +434,29 @@ public class TestDempsy extends DempsyTestBase
             // a way to given the code
             assertEquals(1, mp.startCalls.get());
 
-            // instead of the latch we are going to poll for the correct result
-            // wait for it to be received.
+            // The KeySourceImpl ought to create 2 Mps (given infinite is 'false'). Wait for them
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
             
             TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
-            adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
+            adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone a third Mp
 
-            // instead of the latch we are going to poll for the correct result
-            // wait for it to be received.
+            // Wait for that third to be created
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
             
+            // This ought to result in a message sent to a preinstantiation Mp and
+            //  so no increment in the clone count.
             adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
 
-            // instead of the latch we are going to poll for the correct result
-            // wait for it to be received.
-            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
+            Thread.sleep(100); // give it time to work it's way through
+            assertEquals(3, mp.cloneCalls.get()); // check that it didn't cause a clone.
+            
+            // make sure that the PreInstantiation ran.
             List<Node> nodes = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes();
-            Assert.assertNotNull(nodes);
-            Assert.assertTrue(nodes.size()>0);
+            assertNotNull(nodes);
+            assertTrue(nodes.size()>0);
             Node node = nodes.get(0);
-            Assert.assertNotNull(node);
-            double duration = ((MetricGetters)node.getStatsCollector()).getPreInstantiationDuration();
-            Assert.assertTrue(duration>0.0);
+            assertNotNull(node);
+            assertTrue(((MetricGetters)node.getStatsCollector()).getPreInstantiationCount() > 0);
          }
          
          public String toString() { return methodName; }
@@ -644,4 +643,42 @@ public class TestDempsy extends DempsyTestBase
       actx.destroy();
 
    }
+   
+   @Test
+   public void testMultiNodeDempsy() throws Throwable
+   {
+      final int nodeCount = 5;
+      System.setProperty("nodecount", "" + nodeCount);
+      TestZookeeperSessionFactory.useSingletonSession = true;
+      
+      String[][] acts = new String[nodeCount][];
+      for (int i = 0; i < nodeCount; i++)
+         acts[i] = new String[]{ "SimpleMultistageApplicationWithExecutorActx.xml" };
+               
+      runAllCombinationsMultiDempsy(new MultiCheck()
+      {
+         @Override
+         public void check(ApplicationContext[] actx) throws Throwable
+         {
+            // each run we need to reset the globalHandleCalls
+            TestMp.globalHandleCalls.set(0);
+
+            TestAdaptor adaptor = actx[0].getBean(TestAdaptor.class);
+            adaptor.dispatcher.dispatch(new TestMessage("Hello"));
+
+            // send a message through ... it should go to an Mp in all three clusters.
+            assertTrue(poll(baseTimeoutMillis,null,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return TestMp.globalHandleCalls.get()==3; } }));
+
+            Thread.sleep(100);
+            assertEquals(3,TestMp.globalHandleCalls.get());
+         }
+         
+         @Override
+         public String toString() { return "testMultiNodeDempsy"; }
+         
+      },acts);
+      
+
+   }
+
 }

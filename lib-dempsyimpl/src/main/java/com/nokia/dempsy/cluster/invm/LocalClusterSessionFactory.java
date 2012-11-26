@@ -56,8 +56,13 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
    // This section pertains to the management of the tree information
    private static Map<String,Entry> entries = new HashMap<String,Entry>();
    static {
-      entries.put("/", new Entry()); /// initially add the root.
+      reset();
    }
+   
+   public static Map<String,Entry> getEntries() { return entries; }
+   
+   /// initially add the root. 
+   public static void reset() { entries.clear(); entries.put("/", new Entry()); }
 
    private static class Entry
    {
@@ -68,36 +73,57 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       private Map<String,AtomicLong> childSequences = new HashMap<String, AtomicLong>();
 
       private volatile boolean inProcess = false;
-      private volatile boolean recursionAttempt = false;
       private Lock processLock = new ReentrantLock();
+      
+      @Override
+      public String toString()
+      {
+         return children.toString() + " " + SafeString.valueOf(data.get());
+      }
+      
+      private Set<ClusterInfoWatcher> gatherWatchers(boolean node, boolean child)
+      {
+         synchronized(LocalClusterSessionFactory.class)
+         {
+            Set<ClusterInfoWatcher> twatchers = new HashSet<ClusterInfoWatcher>();
+            if (node)
+            {
+               twatchers.addAll(nodeWatchers);
+               nodeWatchers = new HashSet<ClusterInfoWatcher>();
+            }
+            if (child)
+            {
+               twatchers.addAll(childWatchers);
+               childWatchers = new HashSet<ClusterInfoWatcher>();
+            }
+            return twatchers;
+         }
+      }
+      
+      private Set<ClusterInfoWatcher> toCallQueue = new HashSet<ClusterInfoWatcher>();
       
       private void callWatchers(boolean node, boolean child)
       {
-         Set<ClusterInfoWatcher> twatchers = new HashSet<ClusterInfoWatcher>();
-         if (node)
-         {
-            twatchers.addAll(nodeWatchers);
-            nodeWatchers = new HashSet<ClusterInfoWatcher>();
-         }
-         if (child)
-         {
-            twatchers.addAll(childWatchers);
-            childWatchers = new HashSet<ClusterInfoWatcher>();
-         }
+         Set<ClusterInfoWatcher> twatchers = gatherWatchers(node,child);
          
          processLock.lock();
          try {
             if (inProcess)
             {
-               recursionAttempt = true;
+               toCallQueue.addAll(twatchers);
                return;
             }
 
             do
             {
-               recursionAttempt = false;
                inProcess = true;
-
+               
+               // remove everything in twatchers from the toCallQueue
+               // since we are about to call them all. If some end up back
+               // on here then when we're done the toCallQueue will not be empty
+               // and we'll run it again.
+               toCallQueue.removeAll(twatchers);
+               
                for(ClusterInfoWatcher watcher: twatchers)
                {
                   try
@@ -114,7 +140,12 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
                      processLock.lock();
                   }
                }
-            } while (recursionAttempt);
+               
+               // now we need to reset twatchers to any new toCallQueue
+               twatchers = new HashSet<ClusterInfoWatcher>();
+               twatchers.addAll(toCallQueue); // in case we run again
+               
+            } while (toCallQueue.size() > 0);
 
             inProcess = false;
          }
@@ -176,7 +207,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       synchronized(LocalClusterSessionFactory.class)
       {
          if (oexists(path,null))
-            return path;
+            return null;
 
          String parentPath = parent(path);
 
@@ -197,7 +228,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
          }
 
          pathToUse = seq >= 0 ? (path + seq) : path;
-
+         
          entries.put(pathToUse, new Entry());
          // find the relative path
          int lastSlash = pathToUse.lastIndexOf('/');

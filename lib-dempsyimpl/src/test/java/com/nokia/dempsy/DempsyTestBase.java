@@ -20,6 +20,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -46,6 +47,7 @@ import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.cluster.DisruptibleSession;
+import com.nokia.dempsy.cluster.zookeeper.ZookeeperSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
@@ -106,6 +108,19 @@ public class DempsyTestBase
    public static void shutdownZookeeper()
    {
       zkServer.stop();
+      TestZookeeperSessionFactory.useSingletonSession = false;
+   }
+   
+   public static class TestZookeeperSessionFactory extends ZookeeperSessionFactory
+   {
+      public TestZookeeperSessionFactory(String connectString, int sessionTimeout)
+      {
+         super(connectString, sessionTimeout);
+         if (useSingletonSession)
+            setUseSingletonSession(useSingletonSession);
+      }
+      
+      public static boolean useSingletonSession = false;
    }
 
    @Before
@@ -116,6 +131,9 @@ public class DempsyTestBase
       KeySourceImpl.pause = new CountDownLatch(0);
       TestMp.currentOutputCount = 10;
       TestMp.activateCheckedException = false;
+      TestMp.alwaysPauseOnActivation = false;
+      System.setProperty("nodecount","1");
+      TestZookeeperSessionFactory.useSingletonSession = false;
    }
 
    public static class TestMessage implements Serializable
@@ -169,12 +187,14 @@ public class DempsyTestBase
       public static int currentOutputCount = 10;
 
       // need a mutable object reference
+      public static volatile boolean alwaysPauseOnActivation = false;
       public AtomicReference<TestMessage> lastReceived = new AtomicReference<TestMessage>();
       public AtomicLong outputCount = new AtomicLong(0);
       public CountDownLatch outputLatch = new CountDownLatch(currentOutputCount);
       public AtomicInteger startCalls = new AtomicInteger(0);
       public AtomicInteger cloneCalls = new AtomicInteger(0);
       public AtomicLong handleCalls = new AtomicLong(0);
+      public static AtomicLong globalHandleCalls = new AtomicLong(0);
       public AtomicReference<String> failActivation = new AtomicReference<String>();
       public AtomicBoolean haveWaitedOnce = new AtomicBoolean(false);
       public static boolean activateCheckedException = false;
@@ -190,6 +210,7 @@ public class DempsyTestBase
       {
          lastReceived.set(message);
          handleCalls.incrementAndGet();
+         globalHandleCalls.incrementAndGet();
       }
 
       @Activation
@@ -197,7 +218,7 @@ public class DempsyTestBase
       {
          // we need to wait at least once because sometime pre-instantiation 
          // goes so fast the test fails because it fails to register on the statsCollector.
-         if (!haveWaitedOnce.get())
+         if (!haveWaitedOnce.get() || alwaysPauseOnActivation)
          {
             try { Thread.sleep(3); } catch (Throwable th) {}
             haveWaitedOnce.set(true);
@@ -432,6 +453,11 @@ public class DempsyTestBase
                      {
                         String pass = Arrays.asList(applicationContexts).toString() + " test: " + (checker == null ? "none" : checker) + " using " + 
                               dempsyConfig + "," + clusterManager + "," + serializer + "," + transport;
+
+                        ClassPathXmlApplicationContext actx = null;
+                        Thread waitingForShutdownThread = null;
+                        WaitForShutdown waitingForShutdown = null;
+                        
                         try
                         {
                            logger.debug("*****************************************************************");
@@ -446,15 +472,15 @@ public class DempsyTestBase
                               ctx[count++] = "testDempsy/" + appctx;
 
                            logger.debug("Starting up the appliction context ...");
-                           ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
+                           actx = new ClassPathXmlApplicationContext(ctx);
                            actx.registerShutdownHook();
 
                            Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
 
                            assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
 
-                           WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
-                           Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
+                           waitingForShutdown = new WaitForShutdown(dempsy);
+                           waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
                            waitingForShutdownThread.start();
                            Thread.yield();
 
@@ -463,18 +489,34 @@ public class DempsyTestBase
                               checker.check(actx);
                            logger.debug("Done with test, stopping the application context ...");
 
-                           actx.stop();
-                           actx.destroy();
-
-                           assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
-                           assertTrue(waitingForShutdown.shutdown);
-
-                           logger.debug("Finished this pass.");
                         }
                         catch (AssertionError re)
                         {
                            logger.error("***************** FAILED ON: " + pass);
                            throw re;
+                        }
+                        finally
+                        {
+                           try
+                           {
+                              if (actx != null)
+                              {
+                                 actx.stop();
+                                 actx.destroy();
+                              }
+                              
+                              if (waitingForShutdown != null)
+                              {
+                                 assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+                                 assertTrue(waitingForShutdown.shutdown);
+                              }
+                           }
+                           catch (Throwable th)
+                           {
+                              logger.error("FAILED TO SHUT DOWN TEST. SUBSEQUENT TESTS MAY BE CORRUPTED!",th);
+                           }
+
+                           logger.debug("Finished this pass.");
                         }
 
                         runCount++;
@@ -502,20 +544,25 @@ public class DempsyTestBase
                   {
                      if (! badCombos.contains(new ClusterId(clusterManager,transport)))
                      {
-                        String pass = Arrays.asList(applicationContextsArray).toString() + " test: " + (checker == null ? "none" : checker) + " using " + 
+                        // for the sake of the 'pass' string we need to convert the String[][] to a list of lists.
+                        List<List<String>> tpassname = new ArrayList<List<String>>();
+                        for (String[] cur : applicationContextsArray)
+                           tpassname.add(Arrays.asList(cur));
+                        String pass = tpassname.toString() + " test: " + (checker == null ? "none" : checker) + " using " + 
                               dempsyConfig + "," + clusterManager + "," + serializer + "," + transport;
+
+                        ClassPathXmlApplicationContext[] contexts = new ClassPathXmlApplicationContext[applicationContextsArray.length];
+                        WaitForShutdown[] shutdownWaits = new WaitForShutdown[applicationContextsArray.length];
+                        Dempsy[] dempsys = new Dempsy[applicationContextsArray.length];
+                        int dempsyCount = 0;
+
                         try
                         {
                            logger.debug("*****************************************************************");
                            logger.debug(pass);
                            logger.debug("*****************************************************************");
 
-                           ClassPathXmlApplicationContext[] contexts = new ClassPathXmlApplicationContext[applicationContextsArray.length];
-                           WaitForShutdown[] shutdownWaits = new WaitForShutdown[applicationContextsArray.length];
-                           Dempsy[] dempsys = new Dempsy[applicationContextsArray.length];
-
                            // instantiate each Dempsy
-                           int dempsyCount = 0;
                            for (String[] applicationContexts : applicationContextsArray)
                            {
                               int count = 4;
@@ -551,24 +598,39 @@ public class DempsyTestBase
                               checker.check(contexts);
                            logger.debug("Done with test, stopping the application context ...");
 
-                           for (ClassPathXmlApplicationContext actx : contexts)
-                           {
-                              actx.stop();
-                              actx.destroy();
-                           }
-
-                           for (WaitForShutdown waitingForShutdown : shutdownWaits)
-                           {
-                              assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
-                              assertTrue(waitingForShutdown.shutdown);
-                           }
-
                            logger.debug("Finished this pass.");
                         }
                         catch (AssertionError re)
                         {
                            logger.error("***************** FAILED ON: " + pass);
                            throw re;
+                        }
+                        finally
+                        {
+                           try
+                           {
+                              for (ClassPathXmlApplicationContext actx : contexts)
+                              {
+                                 if (actx != null)
+                                 {
+                                    actx.stop();
+                                    actx.destroy();
+                                 }
+                              }
+
+                              for (WaitForShutdown waitingForShutdown : shutdownWaits)
+                              {
+                                 if (waitingForShutdown != null)
+                                 {
+                                    assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+                                    assertTrue(waitingForShutdown.shutdown);
+                                 }
+                              }
+                           }
+                           catch (Throwable th)
+                           {
+                              logger.error("FAILED TO SHUT DOWN TEST. SUBSEQUENT TESTS MAY BE CORRUPTED!",th);
+                           }
                         }
 
                         runCount++;

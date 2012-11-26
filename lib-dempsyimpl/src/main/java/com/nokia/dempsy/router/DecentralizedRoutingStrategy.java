@@ -688,6 +688,11 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       
       public Destination getDestination() { return destination; }
       public void setDestination(Destination destination) { this.destination = destination; }
+
+      @Override
+      public String toString() { 
+         return "{ slotIndex:" + slotIndex + ", totalAddress:" + totalAddress + ", destination:" + SafeString.objectDescription(destination) + "}";
+      }
    }
    
    static class DefaultRouterClusterInfo implements Serializable
@@ -716,6 +721,9 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
 
       public Set<Class<?>> getMessageClasses() { return messageClasses;}
       public void setMessageClasses(Set<Class<?>> messageClasses){ this.messageClasses = messageClasses; }
+
+      @Override
+      public String toString() { return "{ minNodeCount:" + minNodeCount + ", totalSlotCount:" + totalSlotCount + ", messageClasses:" + messageClasses + "}"; }
 
    }
    

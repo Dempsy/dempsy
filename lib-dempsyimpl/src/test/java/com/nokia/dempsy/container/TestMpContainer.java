@@ -612,6 +612,9 @@ public class TestMpContainer
       @Override
       public boolean doesMessageKeyBelongToNode(Object messageKey) { return validKeys.get().contains(messageKey); }
       
+      @Override
+      public boolean isInitialized() { return true; }
+
       public FixedInbound set(Object... keys) { validKeys.set(new HashSet<Object>(Arrays.asList(keys))); return this; }
       
       public FixedInbound clear() { validKeys.set(new HashSet<Object>(Arrays.asList())); return this; }
