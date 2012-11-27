@@ -74,7 +74,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
    protected String connectString;
    protected int sessionTimeout;
    private Serializer<Object> serializer = new JSONSerializer<Object>();
-         //new JavaSerializer<Object>();
    
    private Set<WatcherProxy> registeredWatchers = new HashSet<WatcherProxy>();
    
