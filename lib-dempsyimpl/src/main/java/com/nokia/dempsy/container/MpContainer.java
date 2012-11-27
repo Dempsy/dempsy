@@ -936,10 +936,11 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    }
 
    @Override
-   public void invokeOutput() {
+   public void invokeOutput()
+   {
       StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted();
-      outputPass();
-      tctx.stop();
+      try { outputPass(); }
+      finally { tctx.stop(); }
    }
 
    //----------------------------------------------------------------------------
