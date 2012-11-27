@@ -17,6 +17,7 @@
 package com.nokia.dempsy.container;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,10 +41,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MarkerFactory;
 
 import com.nokia.dempsy.Dispatcher;
 import com.nokia.dempsy.KeySource;
 import com.nokia.dempsy.annotations.MessageKey;
+import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.internal.AnnotatedMethodInvoker;
 import com.nokia.dempsy.container.internal.LifecycleHelper;
@@ -191,9 +194,55 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    {
       this.prototype = new LifecycleHelper(prototype);
       
+      preInitializePrototype(prototype);
+      
       if (outputConcurrency > 0)
          setupOutputConcurrency();
    }
+   
+   /**
+    * Run any methods annotated PreInitilze on the MessageProcessor prototype
+    * @param prototype reference to MessageProcessor prototype
+    */
+   private void preInitializePrototype(Object prototype) {
+      for (Method method: prototype.getClass().getMethods()) {
+         if (method.isAnnotationPresent(com.nokia.dempsy.annotations.Start.class)) {
+            // if the start method takes a ClusterId or ClusterDefinition then pass it.
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            boolean takesClusterId = false;
+            if (parameterTypes != null && parameterTypes.length == 1)
+            {
+               if (ClusterId.class.isAssignableFrom(parameterTypes[0]))
+                  takesClusterId = true;
+               else
+               {
+                  logger.error("The method \"" + method.getName() + "\" on " + SafeString.objectDescription(prototype) + 
+                        " is annotated with the @" + Start.class.getSimpleName() + " annotation but doesn't have the correct signature. " + 
+                        "It needs to either take no parameters or take a single " + ClusterId.class.getSimpleName() + " parameter."); 
+                  
+                  return; // return without invoking start.
+               }
+            }
+            else if (parameterTypes != null && parameterTypes.length > 1)
+            {
+               logger.error("The method \"" + method.getName() + "\" on " + SafeString.objectDescription(prototype) + 
+                     " is annotated with the @" + Start.class.getSimpleName() + " annotation but doesn't have the correct signature. " + 
+                     "It needs to either take no parameters or take a single " + ClusterId.class.getSimpleName() + " parameter."); 
+               return; // return without invoking start.
+            }
+            try {
+               if (takesClusterId)
+                  method.invoke(prototype, clusterId);
+               else
+                  method.invoke(prototype);
+               break;  // Only allow one such method, which is checked during validation
+            }catch(Exception e) {
+               logger.error(MarkerFactory.getMarker("FATAL"), "can't run MP initializer " + method.getName(), e);
+            }
+         }
+      }
+   }
+
 
    public Object getPrototype()
    {

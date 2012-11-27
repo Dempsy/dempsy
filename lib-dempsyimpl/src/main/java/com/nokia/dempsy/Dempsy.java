@@ -24,7 +24,6 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MarkerFactory;
 
 import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
@@ -107,10 +106,7 @@ public class Dempsy
                      container.setExecutor(executor);
                   Object messageProcessorPrototype = clusterDefinition.getMessageProcessorPrototype();
                   if (messageProcessorPrototype != null)
-                  {
-                    preInitializePrototype(messageProcessorPrototype);
-                     container.setPrototype(messageProcessorPrototype);
-                  }
+                    container.setPrototype(messageProcessorPrototype);
                   acceptedMessageClasses = getAcceptedMessages(clusterDefinition);
                   
                   Serializer<Object> serializer = (Serializer<Object>)clusterDefinition.getSerializer();
@@ -213,24 +209,6 @@ public class Dempsy
             // Only called from tests
             public Router retouRteg() { return router; }
 
-            /**
-             * Run any methods annotated PreInitilze on the MessageProcessor prototype
-             * @param prototype reference to MessageProcessor prototype
-             */
-            private void preInitializePrototype(Object prototype) {
-               // TODO, should this return a boolean and stop the cluster from starting?
-               
-               for (Method method: prototype.getClass().getMethods()) {
-                  if (method.isAnnotationPresent(com.nokia.dempsy.annotations.Start.class)) {
-                     try {
-                        method.invoke(prototype);
-                        break;  // Only allow one such method, which is checked during validation
-                     }catch(Exception e) {
-                        logger.error(MarkerFactory.getMarker("FATAL"), "can't run MP initializer " + method.getName(), e);
-                     }
-                  }
-               }
-            }
             
          } // end Node definition
          

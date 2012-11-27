@@ -49,6 +49,8 @@ import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Passivation;
+import com.nokia.dempsy.annotations.Start;
+import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.mocks.ContainerTestMessage;
 import com.nokia.dempsy.container.mocks.OutputMessage;
 import com.nokia.dempsy.messagetransport.Sender;
@@ -159,6 +161,12 @@ public class TestMpContainer
       public CountDownLatch blockPassivate = new CountDownLatch(0);
       public AtomicBoolean throwPassivateException = new AtomicBoolean(false);
       public AtomicLong passivateExceptionCount = new AtomicLong(0);
+      
+      public AtomicLong startCalled = new AtomicLong(0);
+      public ClusterId clusterId = null;
+      
+      @Start
+      public void startMe(ClusterId clusterId) { this.clusterId = clusterId; startCalled.incrementAndGet(); }
 
       @Override
       public TestProcessor clone()
@@ -225,11 +233,15 @@ public class TestMpContainer
 //----------------------------------------------------------------------------
 
    @Test
-   public void testConfiguration()
-   throws Exception
+   public void testConfiguration() throws Exception
    {
       // this assertion is superfluous, since we deref container in setUp()
       assertNotNull("did not create container", container);
+      
+      TestProcessor prototype = context.getBean(TestProcessor.class);
+      assertEquals(1,prototype.startCalled.get());
+      
+      assertNotNull(prototype.clusterId);
    }
 
 
