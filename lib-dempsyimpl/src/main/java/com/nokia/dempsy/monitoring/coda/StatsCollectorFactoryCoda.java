@@ -79,6 +79,8 @@ public class StatsCollectorFactoryCoda implements StatsCollectorFactory
    private List<MetricsReporterSpec> reporters = new ArrayList<MetricsReporterSpec>();
    private String envPrefix = "";
    
+   public static final String environmentPrefixSystemPropertyName = "environment.prefix";
+   
    private MetricNamingStrategy namer = new MetricNamingStrategy()
    {
       @Override
@@ -120,7 +122,14 @@ public class StatsCollectorFactoryCoda implements StatsCollectorFactory
          // metric namespace hierarchy, is what we'll use, falling back to
          // a constant "local" for non-tcp transports.
          
+         // if setEnvironmentPrefix was called then start with that.
          String prefix = envPrefix;
+
+         // if -DenvironmentPrefix is set then we want to use that.
+         String sysEnvPrefix = System.getProperty(environmentPrefixSystemPropertyName);
+         if (sysEnvPrefix != null)
+            prefix = sysEnvPrefix;
+         
          if (destination != null)
          {
             if (destination instanceof TcpDestination)
