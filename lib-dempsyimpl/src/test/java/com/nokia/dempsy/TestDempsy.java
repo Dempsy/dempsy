@@ -496,7 +496,7 @@ public class TestDempsy extends DempsyTestBase
             firstCreated.m_pause.countDown();
             
             // as the KeySource iterates, this will increase
-            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get() > 10000; } }));
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get() > 1000; } }));
 
             // prepare the next countdown latch
             KeySourceImpl.pause = new CountDownLatch(0); // just let the 2nd one go
