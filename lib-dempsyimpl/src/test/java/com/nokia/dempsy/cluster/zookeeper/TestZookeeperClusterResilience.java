@@ -31,8 +31,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
 import org.junit.Before;
 import org.junit.Test;
@@ -74,17 +72,16 @@ public class TestZookeeperClusterResilience
       logger.debug("Running zookeeper test server on port " + port);
    }
    
-   public static class TestWatcher implements ClusterInfoWatcher
+   public static abstract class TestWatcher implements ClusterInfoWatcher
    {
       AtomicBoolean called = new AtomicBoolean(false);
+      ZookeeperSession session;
       
-      @Override
-      public void process()
-      {
-         called.set(true);
-      }
+      public TestWatcher(ZookeeperSession session) { this.session = session; } 
       
    }
+   
+   volatile boolean connected = false;
    
    @Test
    public void testBouncingServer() throws Throwable
@@ -101,9 +98,8 @@ public class TestZookeeperClusterResilience
          session = (ZookeeperSession)factory.createSession();
          final ZookeeperSession cluster = session;
          createClusterLevel(clusterId, session);
-         TestWatcher callback = new TestWatcher()
+         TestWatcher callback = new TestWatcher(cluster)
          {
-            ZookeeperSession m_cluster = cluster;
             
             @Override
             public void process()
@@ -115,17 +111,15 @@ public class TestZookeeperClusterResilience
                   
                   try
                   {
-                     if (m_cluster.getSubdirs(clusterId.asPath(), this).size() == 0)
-                     {
-                        m_cluster.mkdir(clusterId.asPath() + "/slot1",DirMode.EPHEMERAL);
-                        called.set(true);
-                     }
+                     if (session.getSubdirs(clusterId.asPath(), this).size() == 0)
+                        session.mkdir(clusterId.asPath() + "/slot1",DirMode.EPHEMERAL);
+                     called.set(true);
                   }
                   catch(ClusterInfoException.NoNodeException e)
                   {
                      try
                      {
-                        createClusterLevel(clusterId,m_cluster);
+                        createClusterLevel(clusterId,session);
                         done = false;
                      }
                      catch (ClusterInfoException e1)
@@ -144,21 +138,21 @@ public class TestZookeeperClusterResilience
 
          cluster.exists(clusterId.asPath(), callback);
          callback.process();
-
+         
          // create another session and look
          ZookeeperSession session2 = (ZookeeperSession)factory.createSession();
          assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServer").asPath(), null).size());
          session2.stop();
 
          // kill the server.
-         server.shutdown();
+         server.shutdown(false);
 
          // reset the flags
          callback.called.set(false);
 
          // restart the server
-         server.start();
-
+         server.start(false);
+         
          // wait for the call
          assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new TestUtils.Condition<TestWatcher>()
          {
@@ -169,6 +163,98 @@ public class TestZookeeperClusterResilience
          // get the view from a new session.
          session2 = (ZookeeperSession)factory.createSession();
          assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServer").asPath(), null).size());
+         session2.stop();
+      }
+      finally
+      {
+         if (server != null)
+            server.shutdown();
+         
+         if (session != null)
+            session.stop();
+      }
+   }
+
+   @Test
+   public void testBouncingServerWithCleanDataDir() throws Throwable
+   {
+      ZookeeperTestServer server = new ZookeeperTestServer();
+      ZookeeperSession session = null;
+      final ClusterId clusterId = new ClusterId(appname,"testBouncingServerWithCleanDataDir");
+      
+      try
+      {
+         server.start();
+
+         ZookeeperSessionFactory factory = new ZookeeperSessionFactory("127.0.0.1:" + port,5000);
+         session = (ZookeeperSession)factory.createSession();
+         final ZookeeperSession cluster = session;
+         createClusterLevel(clusterId, session);
+         TestWatcher callback = new TestWatcher(cluster)
+         {
+            
+            @Override
+            public void process()
+            {
+               boolean done = false;
+               while (!done)
+               {
+                  done = true;
+                  
+                  try
+                  {
+                     if (session.getSubdirs(clusterId.asPath(), this).size() == 0)
+                        session.mkdir(clusterId.asPath() + "/slot1",DirMode.EPHEMERAL);
+                     called.set(true);
+                  }
+                  catch(ClusterInfoException.NoNodeException e)
+                  {
+                     try
+                     {
+                        createClusterLevel(clusterId,session);
+                        done = false;
+                     }
+                     catch (ClusterInfoException e1)
+                     {
+                        throw new RuntimeException(e1);
+                     }
+                  }
+                  catch(ClusterInfoException e)
+                  {
+                     // this will fail when the connection is severed... that's ok.
+                  }
+               }
+            }
+
+         };
+
+         cluster.exists(clusterId.asPath(), callback);
+         callback.process();
+         
+         // create another session and look
+         ZookeeperSession session2 = (ZookeeperSession)factory.createSession();
+         assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServerWithCleanDataDir").asPath(), null).size());
+         session2.stop();
+
+         // kill the server.
+         server.shutdown(true);
+
+         // reset the flags
+         callback.called.set(false);
+
+         // restart the server
+         server.start(true);
+         
+         // wait for the call
+         assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new TestUtils.Condition<TestWatcher>()
+         {
+            @Override
+            public boolean conditionMet(TestWatcher o) { return o.called.get(); }
+         }));
+
+         // get the view from a new session.
+         session2 = (ZookeeperSession)factory.createSession();
+         assertEquals(1,session2.getSubdirs(new ClusterId(appname,"testBouncingServerWithCleanDataDir").asPath(), null).size());
          session2.stop();
       }
       finally
@@ -193,7 +279,10 @@ public class TestZookeeperClusterResilience
       ClusterId clusterId = new ClusterId(appname,"testNoServerOnStartup");
       
       // hook a test watch to make sure that callbacks work correctly
-      TestWatcher callback = new TestWatcher();
+      TestWatcher callback = new TestWatcher(session)
+      {
+         @Override public void process() { called.set(true); }
+      };
       
       // now accessing the cluster should get us an error.
       boolean gotCorrectError = false;
@@ -224,13 +313,8 @@ public class TestZookeeperClusterResilience
 
          session.getSubdirs(clusterId.asPath(), callback);
          
-         // now we should be all happycakes ... but with the server running lets sever the connection
-         // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
-         // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
          ZooKeeper origZk = session.zkref.get();
-         long sessionid = origZk.getSessionId();
-         callback.called.set(false); // reset the callbacker ...
-         ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
+         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(origZk);
          killer.close(); // tricks the server into expiring the other session
          
          // wait for the callback
@@ -285,33 +369,44 @@ public class TestZookeeperClusterResilience
 
          session =  new ZookeeperSession("127.0.0.1:" + port,5000);
 
-         ClusterId clusterId = new ClusterId(appname,"testSessionExpired");
+         final ClusterId clusterId = new ClusterId(appname,"testSessionExpired");
          createClusterLevel(clusterId,session);
-         TestWatcher callback = new TestWatcher();
+         TestWatcher callback = new TestWatcher(session)
+         {
+            @Override
+            public void process()
+            {
+               try
+               {
+                  logger.trace("process called on TestWatcher.");
+                  session.exists(clusterId.asPath(), this);
+                  session.getSubdirs(clusterId.asPath(), this);
+                  called.set(true);
+               }
+               catch (ClusterInfoException cie)
+               {
+                  throw new RuntimeException(cie);
+               }
+            }
+ 
+         };
          
          // now see if the cluster works.
-         session.exists(clusterId.asPath(), callback);
-         session.getSubdirs(clusterId.asPath(), callback);
+         callback.process();
          
-         // cause a problem with the server running lets sever the connection
-         // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
-         // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
-         ZooKeeper origZk = session.zkref.get();
-         long sessionid = origZk.getSessionId();
-         ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
+         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(session.zkref.get());
          
-         // now the count should still be 1
-         Thread.sleep(10);
-         
-         // and the callback wasn't called.
-         assertFalse(callback.called.get());
+         // the above actually results in a SyncConnected event ... so we need to filter that out since it will result in a callback.
+         assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
+
+         // now reset the condition
+         callback.called.set(false);
          
          killer.close(); // tricks the server into expiring the other session
          
          // and eventually a callback
          assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
          
-         // now we should be able to recheck
          createClusterLevel(clusterId,session);
          assertTrue(session.exists(clusterId.asPath(), callback));
       }
@@ -409,17 +504,19 @@ public class TestZookeeperClusterResilience
             }
             
          }));
-         
-         // cause a problem with the server running lets sever the connection
-         // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
-         // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
-         ZooKeeper origZk = (ZooKeeper)session.zkref.get();
-         long sessionid = origZk.getSessionId();
-         ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
-         
+
+         logger.trace("Killing zookeeper");
+         ZooKeeper origZk = session.zkref.get();
+         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(origZk);
          killer.close(); // tricks the server into expiring the other session
+         logger.trace("Killed zookeeper");
          
-         Thread.sleep(300);
+         // wait for the current session to go invalid
+         assertTrue(poll(baseTimeoutMillis, origZk, new Condition<ZooKeeper>()
+         {
+            @Override
+            public boolean conditionMet(ZooKeeper o) { return !o.getState().isAlive(); }
+         }));
          
          // make sure the final count is STILL incrementing
          curCount = app.finalMessageCount.get();
@@ -476,35 +573,32 @@ public class TestZookeeperClusterResilience
          };
          sessiong = session;
          
-         ClusterId clusterId = new ClusterId(appname,"testRecoverWithIOException");
+         final ClusterId clusterId = new ClusterId(appname,"testRecoverWithIOException");
          TestUtils.createClusterLevel(clusterId, session);
-         TestWatcher callback = new TestWatcher();
-         session.getSubdirs(clusterId.asPath(),callback);
-
-         // cause a problem with the server running lets sever the connection
-         // according to the zookeeper faq we can force a session expired to occur by closing the session from another client.
-         // see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
-         ZooKeeper origZk = session.zkref.get();
-         long sessionid = origZk.getSessionId();
-         ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
+         TestWatcher callback = new TestWatcher(session)
+         {
+            @Override public void process()
+            {
+               try { 
+                  session.getSubdirs(clusterId.asPath(),this);
+                  called.set(true);
+               }
+               catch (ClusterInfoException cie) { throw new RuntimeException(cie); }
+            }
+         };
+         
+         callback.process();
+         
+         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(session.zkref.get());
          
          // force the ioexception to happen
          forceIOException.set(true);
          
          killer.close(); // tricks the server into expiring the other session
          
-         // just stop the damn server
-         server.shutdown();
-         
          // now in the background it should be retrying but hosed.
          assertTrue(forceIOExceptionLatch.await(baseTimeoutMillis * 3, TimeUnit.MILLISECONDS));
 
-// There is no longer a callback on a disconnect....only a callback when the reconnect is successful
-// // wait for the callback
-// for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && !callback.called.get();)
-// Thread.sleep(1);
-// assertTrue(callback.called.get());
-         
          // now the getActiveSlots call should fail since i'm preventing the recovery by throwing IOExceptions
          assertTrue(TestUtils.poll(baseTimeoutMillis, clusterId, new Condition<ClusterId>()
          {
@@ -519,10 +613,6 @@ public class TestZookeeperClusterResilience
          // now we should allow the code to proceed.
          forceIOException.set(false);
          
-         // we might want the server running.
-         server = new ZookeeperTestServer();
-         server.start();
-
          // wait for the callback
          assertTrue(poll(baseTimeoutMillis,callback,new Condition<TestWatcher>() { @Override public boolean conditionMet(TestWatcher o) { return o.called.get(); } }));
          

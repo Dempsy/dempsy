@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy.cluster.zookeeper;
 
+import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.fail;
 
 import java.io.File;
@@ -25,16 +26,21 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.util.Properties;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.slf4j.MarkerFactory;
-
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.server.ServerConfig;
 import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.quorum.QuorumPeerConfig;
 import org.junit.Ignore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MarkerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
+
+import com.nokia.dempsy.TestUtils;
 
 @Ignore
 public class ZookeeperTestServer
@@ -56,6 +62,38 @@ public class ZookeeperTestServer
       port = serverSocket.getLocalPort();
       serverSocket.close();
       return port;
+   }
+
+   /**
+    * cause a problem with the server running lets sever the connection
+    * according to the zookeeper faq we can force a session expired to 
+    * occur by closing the session from another client.
+    * see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
+    */
+   public static ZooKeeper createExpireSessionClient(ZooKeeper origZk) throws Throwable
+   {
+      TestUtils.Condition<ZooKeeper> condition = new TestUtils.Condition<ZooKeeper>() 
+      {
+         @Override public boolean conditionMet(ZooKeeper o) throws Throwable 
+         {
+            try
+            {
+               return (o.getState() == ZooKeeper.States.CONNECTED) && o.exists("/", true) != null;
+            }
+            catch (KeeperException ke)
+            {
+               return false;
+            }
+         }
+      };
+      
+      assertTrue(TestUtils.poll(5000, origZk, condition));
+      
+      long sessionid = origZk.getSessionId();
+      byte[] pw = origZk.getSessionPasswd();
+      ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, pw);
+      assertTrue(TestUtils.poll(5000, killer, condition));
+      return killer;
    }
    
    public static class InitZookeeperServerBean
@@ -89,13 +127,25 @@ public class ZookeeperTestServer
    
    public void start() throws IOException
    {
-      zkDir = genZookeeperDataDir();
+      start(true);
+   }
+   
+   public void start(boolean newDataDir) throws IOException
+   {
+      // if this is a restart we want to use the same directory
+      if (zkDir == null || newDataDir)
+         zkDir = genZookeeperDataDir();
       zkConfig = genZookeeperConfig(zkDir);
       port = Integer.valueOf(zkConfig.getProperty("clientPort"));
       zkServer = startZookeeper(zkConfig);
    }
    
    public void shutdown()
+   {
+      shutdown(true);
+   }
+   
+   public void shutdown(boolean deleteDataDir)
    {
       if (zkServer != null)
       {
@@ -105,9 +155,8 @@ public class ZookeeperTestServer
          }
       }
 
-      if (zkDir != null)
+      if (zkDir != null && deleteDataDir)
          deleteRecursivly(zkDir);
-         
    }
    
    public ApplicationContext getApplicationContext() { return applicationContext; }
@@ -174,6 +223,8 @@ public class ZookeeperTestServer
       if (path.isDirectory()) 
          for (File f: path.listFiles())
             deleteRecursivly(f);
+      
+      logger.debug("Deleting zookeeper data directory:" + path);
       path.delete();
    }
    
