@@ -38,7 +38,7 @@ public class TestUtils
    {
       for (long endTime = System.currentTimeMillis() + timeoutMillis;
             endTime > System.currentTimeMillis() && !condition.conditionMet(userObject);)
-         Thread.sleep(1);
+         Thread.sleep(10);
       return condition.conditionMet(userObject);
    }
    
