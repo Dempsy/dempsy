@@ -27,12 +27,24 @@ public class SocketTimeout implements Runnable
    private AtomicBoolean done = new AtomicBoolean(false);
    
    private static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+   static {
+      // set the single thread's name
+      scheduler.execute(new Runnable()
+      {
+         @Override
+         public void run()
+         {
+            Thread.currentThread().setName("Static SocketTimeout Schedule");
+         }
+      });
+   }
    
    public SocketTimeout(Socket socket, long timeoutMillis)
    {
       this.socket = socket;
       this.timeoutMillis = timeoutMillis;
       this.thread = Thread.currentThread();
+      
       scheduler.schedule(this,timeoutMillis,TimeUnit.MILLISECONDS);
    }
    
