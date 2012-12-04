@@ -16,15 +16,19 @@
 
 package com.nokia.dempsy.container;
 
-
 /**
  *  This is the base exception class for all container-related problems.
  */
 public class ContainerException extends Exception
 {
    private static final long serialVersionUID = 1L;
+   private boolean expected = false;
 
    public ContainerException(String message, Throwable cause) { super(message, cause);  }
 
    public ContainerException(String message) { super(message); }
+   
+   public boolean isExpected() { return expected; }
+   
+   public void setExpected(boolean expected) { this.expected = expected; }
 }

@@ -94,6 +94,12 @@ public class LifecycleHelper
    {
       activationMethod.invoke(instance, key, activationData);
    }
+   
+   /**
+    * Returns true if the activation method on this prototype exists and the provided
+    * exception can be assigned to one of it's declared checked exceptions.
+    */
+   public boolean activateCanThrowChecked(Throwable th) { return activationMethod.canThrowCheckedException(th); }
 
    /**
     * Invokes the passivation method of the passed instance. Will return the object's passivation data, <code>null</code> if there is none.
@@ -332,6 +338,17 @@ public class LifecycleHelper
       public Method getMethod()
       {
          return this.method;
+      }
+      
+      public boolean canThrowCheckedException(Throwable th)
+      {
+         if (method == null || th == null)
+            return false;
+         
+         for (Class<?> cur : method.getExceptionTypes())
+            if (cur.isInstance(th))
+               return true;
+         return false;
       }
    }
 }

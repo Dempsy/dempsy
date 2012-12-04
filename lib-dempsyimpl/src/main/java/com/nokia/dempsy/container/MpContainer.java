@@ -319,6 +319,18 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       {
          logger.warn("the container for " + clusterId + " failed to deserialize message received for " + clusterId, e2);
       }
+      catch (ContainerException ce)
+      {
+         if (ce.isExpected())
+         {
+            if (logger.isDebugEnabled())
+               logger.debug("the container for " + clusterId + " failed to dispatch message the following message " + 
+               SafeString.objectDescription(message) + " to the message processor " + SafeString.valueOf(prototype),ce);
+         }
+         else
+            logger.warn("the container for " + clusterId + " failed to dispatch message the following message " + 
+                  SafeString.objectDescription(message) + " to the message processor " + SafeString.valueOf(prototype), ce);
+      }
       catch (Throwable ex)
       {
          logger.warn("the container for " + clusterId + " failed to dispatch message the following message " + 
@@ -1104,8 +1116,14 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          }
          catch(InvocationTargetException e)
          {
-            throw new ContainerException("the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +  
-                  " because the method itself threw an exception.",e.getCause());
+            // If the activate can throw this exception explicitly then we want to note it on the
+            // ContainerException so that we can log appropriately at the outer level.
+            Throwable cause = e.getCause();
+            ContainerException toThrow = 
+                  new ContainerException("the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +  
+                        " because the method itself threw an exception.",cause);
+            toThrow.setExpected(prototype.activateCanThrowChecked(cause));
+            throw toThrow;
          }
          catch(RuntimeException e)
          {
