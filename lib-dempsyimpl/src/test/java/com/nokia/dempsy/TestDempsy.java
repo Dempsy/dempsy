@@ -125,6 +125,7 @@ public class TestDempsy
       KeySourceImpl.infinite = false;
       KeySourceImpl.pause = new CountDownLatch(0);
       TestMp.currentOutputCount = 10;
+      TestMp.activateCheckedException = false;
    }
    
    public static class TestMessage implements Serializable
@@ -166,6 +167,12 @@ public class TestDempsy
       
    }
    
+   public static class ActivateCheckedException extends Exception
+   {
+      private static final long serialVersionUID = 1L;
+      public ActivateCheckedException(String message) { super(message); }
+   }
+   
    @MessageProcessor
    public static class TestMp implements Cloneable
    {
@@ -180,6 +187,7 @@ public class TestDempsy
       public AtomicLong handleCalls = new AtomicLong(0);
       public AtomicReference<String> failActivation = new AtomicReference<String>();
       public AtomicBoolean haveWaitedOnce = new AtomicBoolean(false);
+      public static boolean activateCheckedException = false;
       
       @Start
       public void start()
@@ -195,7 +203,7 @@ public class TestDempsy
       }
       
       @Activation
-      public void setKey(String key)
+      public void setKey(String key) throws ActivateCheckedException
       {
          // we need to wait at least once because sometime pre-instantiation 
          // goes so fast the test fails becuase it fails to register on the statsCollector.
@@ -206,7 +214,13 @@ public class TestDempsy
          }
 
          if (key.equals(failActivation.get()))
-            throw new RuntimeException("Failed Activation For " + key);
+         {
+            String message = "Failed Activation For " + key;
+            if (activateCheckedException)
+               throw new ActivateCheckedException(message);
+            else
+               throw new RuntimeException(message);
+         }
       }
       
       @Override
@@ -1012,8 +1026,12 @@ public class TestDempsy
          
          public String toString() { return "testFailedMessageHandlingWithKeyStore"; }
       };
-      
+
+      // make sure both exceptions are handled since the logic in the container
+      // actually varies depending on whether or not the exception is checked or not.
+      TestMp.activateCheckedException = true;
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
+      TestMp.activateCheckedException = false;
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
    }   
 
