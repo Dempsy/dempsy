@@ -90,19 +90,22 @@ public class Router implements Dispatcher
    private AnnotatedMethodInvoker methodInvoker = new AnnotatedMethodInvoker(MessageKey.class);
    private ClusterDefinition currentClusterDefinition = null;
 
-   private RoutingStrategy.OutboundManager outboundManager = null;
+   protected RoutingStrategy.OutboundManager outboundManager = null;
    
    private ClusterInfoSession mpClusterSession = null;
    private SenderFactory senderFactory;
    private StatsCollector statsCollector = null;
+   private Serializer<Object> serializer;
    
    protected Set<Class<?>> stopTryingToSendTheseTypes = Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
    
+   @SuppressWarnings("unchecked")
    public Router(ClusterDefinition currentClusterDefinition)
    {
       if (currentClusterDefinition == null)
          throw new IllegalArgumentException("Can't pass a null currentClusterDefinition to a " + SafeString.valueOfClass(this));
       this.currentClusterDefinition = currentClusterDefinition;
+      this.serializer = (Serializer<Object>)currentClusterDefinition.getSerializer();
    }
 
    /**
@@ -199,17 +202,7 @@ public class Router implements Dispatcher
             if(routers != null && routers.size() > 0)
             {
                for(Outbound router: routers)
-               {
-                  ClusterRouter crouter = (ClusterRouter)router.getUserData();
-                  if (crouter == null)
-                  {
-                     @SuppressWarnings("unchecked")
-                     Serializer<Object> curSerializer = (Serializer<Object>)currentClusterDefinition.getSerializer();
-                     crouter = new ClusterRouter(curSerializer,router);
-                     router.setUserData(crouter);
-                  }
-                  crouter.route(msgKeysValue,msg);
-               }
+                  route(router, msgKeysValue,msg);
             }
             else
             {
@@ -247,97 +240,61 @@ public class Router implements Dispatcher
       }
    }
 
-   // Also called only from tests
-   Set<ClusterRouter> getRouter(Class<?> type)
-   {
-      Set<ClusterRouter> ret = null;
-      Collection<RoutingStrategy.Outbound> outbounds = outboundManager.retrieveOutbounds(type);
-      if (outbounds != null && outbounds.size() > 0)
-      {
-         ret = new HashSet<ClusterRouter>(outbounds.size());
-         for (RoutingStrategy.Outbound ob : outbounds)
-            ret.add((ClusterRouter)ob.getUserData());
-      }
-      return ret;
-   }
-   
-   // Also called only from tests
-   Collection<Class<?>> getMissingTypes()
-   {
-      return outboundManager.getTypesWithNoOutbounds();
-   }
-   
    /**
-    * This class routes messages within a particular cluster. It is protected for test 
-    * access only. Otherwise it would be private.
+    * Returns whether or not the message was actually sent. Doesn't touch the statsCollector
     */
-   protected class ClusterRouter
+   public boolean route(Outbound strategyOutbound, Object key, Object message)
    {
-      private Serializer<Object> serializer;
-      private RoutingStrategy.Outbound strategyOutbound;
-      
-      private ClusterRouter(Serializer<Object> serializer, Outbound strategyOutbound)
+      boolean messageFailed = true;
+      Sender sender = null;
+      try
       {
-         this.strategyOutbound = strategyOutbound;
-         this.serializer = serializer;
+         Destination destination = strategyOutbound.selectDestinationForMessage(key, message);
+
+         if (destination == null)
+         {
+            if (logger.isInfoEnabled())
+               logger.info("Couldn't find a destination for " + SafeString.objectDescription(message));
+            if (statsCollector != null) statsCollector.messageNotSent(message);
+            return false;
+         }
+
+         sender = senderFactory.getSender(destination);
+         if (sender == null)
+            logger.error("Couldn't figure out a means to send " + SafeString.objectDescription(message) +
+                  " to " + SafeString.valueOf(destination) + "");
+         else
+         {
+            byte[] data = serializer.serialize(message);
+            sender.send(data); // the sender is assumed to increment the stats collector.
+            messageFailed = false;
+         }
       }
-      
-      /**
-       * Returns whether or not the message was actually sent. Doesn't touch the statsCollector
-       */
-      public boolean route(Object key, Object message)
+      catch(DempsyException e)
       {
-         boolean messageFailed = true;
-         Sender sender = null;
-         try
-         {
-            Destination destination = strategyOutbound.selectDestinationForMessage(key, message);
-
-            if (destination == null)
-            {
-               if (logger.isInfoEnabled())
-                  logger.info("Couldn't find a destination for " + SafeString.objectDescription(message));
-               if (statsCollector != null) statsCollector.messageNotSent(message);
-               return false;
-            }
-
-            sender = senderFactory.getSender(destination);
-            if (sender == null)
-               logger.error("Couldn't figure out a means to send " + SafeString.objectDescription(message) +
-                     " to " + SafeString.valueOf(destination) + "");
-            else
-            {
-               byte[] data = serializer.serialize(message);
-               sender.send(data); // the sender is assumed to increment the stats collector.
-               messageFailed = false;
-            }
-         }
-         catch(DempsyException e)
-         {
-            logger.info("Failed to determine the destination for " + SafeString.objectDescription(message) + 
-                  " using the routing strategy " + SafeString.objectDescription(strategyOutbound),e);
-         }
-         catch (SerializationException e)
-         {
-            logger.error("Failed to serialize " + SafeString.objectDescription(message) + 
-                  " using the serializer " + SafeString.objectDescription(serializer),e);
-         }
-         catch (MessageTransportException e)
-         {
-            logger.warn("Failed to send " + SafeString.objectDescription(message) + 
-                  " using the sender " + SafeString.objectDescription(sender),e);
-         }
-         catch (Throwable e)
-         {
-            logger.error("Failed to send " + SafeString.objectDescription(message) + 
-                  " using the serializer " + SafeString.objectDescription(serializer) +
-                  "\" and using the sender " + SafeString.objectDescription(sender),e);
-         }
-         if (messageFailed)
-            statsCollector.messageNotSent(message);
-         return !messageFailed;
+         logger.info("Failed to determine the destination for " + SafeString.objectDescription(message) + 
+               " using the routing strategy " + SafeString.objectDescription(strategyOutbound),e);
       }
-   } // end ClusterRouter definition.
+      catch (SerializationException e)
+      {
+         logger.error("Failed to serialize " + SafeString.objectDescription(message) + 
+               " using the serializer " + SafeString.objectDescription(serializer),e);
+      }
+      catch (MessageTransportException e)
+      {
+         logger.warn("Failed to send " + SafeString.objectDescription(message) + 
+               " using the sender " + SafeString.objectDescription(sender),e);
+      }
+      catch (Throwable e)
+      {
+         logger.error("Failed to send " + SafeString.objectDescription(message) + 
+               " using the serializer " + SafeString.objectDescription(serializer) +
+               "\" and using the sender " + SafeString.objectDescription(sender),e);
+      }
+      if (messageFailed)
+         statsCollector.messageNotSent(message);
+      return !messageFailed;
+   }
    
    protected void getMessages(Object message, List<Object> messages)
    {

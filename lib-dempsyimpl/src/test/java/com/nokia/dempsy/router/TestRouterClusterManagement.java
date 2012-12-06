@@ -16,8 +16,8 @@
 
 package com.nokia.dempsy.router;
 
+import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 import junit.framework.Assert;
 
@@ -38,7 +38,6 @@ import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory;
-import com.nokia.dempsy.router.Router.ClusterRouter;
 import com.nokia.dempsy.router.RoutingStrategy.Inbound;
 import com.nokia.dempsy.router.microshard.MicroShardUtils;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
@@ -121,19 +120,20 @@ public class TestRouterClusterManagement
    {
       // lazy load requires the using of the router.
       routerFactory.dispatch(new Message());
-      Set<ClusterRouter> router = routerFactory.getRouter(Message.class);
-      Assert.assertNull(router);
-      Assert.assertTrue(routerFactory.getMissingTypes().contains(Message.class));
+      Collection<RoutingStrategy.Outbound> router = routerFactory.outboundManager.retrieveOutbounds(Message.class);
+      Assert.assertNotNull(router);
+      Assert.assertEquals(0,router.size());
+      Assert.assertTrue(routerFactory.outboundManager.getTypesWithNoOutbounds().contains(Message.class));
    }
    
    @Test
    public void testGetRouterFound()
    {
       routerFactory.dispatch(new GoodMessage());
-      Set<ClusterRouter> routers = routerFactory.getRouter(GoodMessage.class);
+      Collection<RoutingStrategy.Outbound> routers = routerFactory.outboundManager.retrieveOutbounds(GoodMessage.class);
       Assert.assertNotNull(routers);
-      Assert.assertEquals(false, routerFactory.getMissingTypes().contains(GoodMessage.class));
-      Set<ClusterRouter> routers1 = routerFactory.getRouter(GoodMessageChild.class);
+      Assert.assertEquals(false, routerFactory.outboundManager.getTypesWithNoOutbounds().contains(GoodMessage.class));
+      Collection<RoutingStrategy.Outbound> routers1 = routerFactory.outboundManager.retrieveOutbounds(GoodMessageChild.class);
       Assert.assertEquals(routers, routers1);
       Assert.assertEquals(new ClusterId("test", "test-slot"), routerFactory.getThisClusterId());
    }

@@ -357,14 +357,18 @@ public class DempsyTestBase
       }
    }
 
-   public static interface Checker
+   public static abstract class Checker
    {
-      public void check(ApplicationContext context) throws Throwable;
+      public abstract void check(ApplicationContext context) throws Throwable;
+      
+      public void setup() {}
    }
 
-   public static interface MultiCheck
+   public static abstract class MultiCheck
    {
-      public void check(ApplicationContext[] contexts) throws Throwable;
+      public abstract void check(ApplicationContext[] contexts) throws Throwable;
+      
+      public void setup() {}
    }
 
    private static class WaitForShutdown implements Runnable
@@ -454,6 +458,9 @@ public class DempsyTestBase
                               logger.debug("*****************************************************************");
                               logger.debug(pass);
                               logger.debug("*****************************************************************");
+                              
+                              if (checker != null)
+                                 checker.setup();
 
                               int count = 5;
                               String[] ctx = new String[count + applicationContexts.length];
@@ -483,7 +490,7 @@ public class DempsyTestBase
                            }
                            catch (AssertionError re)
                            {
-                              logger.error("***************** FAILED ON: " + pass);
+                              logger.error("***************** FAILED ON: iteration " + runCount + " pass:" + pass);
                               throw re;
                            }
                            finally
@@ -555,6 +562,9 @@ public class DempsyTestBase
                               logger.debug("*****************************************************************");
                               logger.debug(pass);
                               logger.debug("*****************************************************************");
+
+                              if (checker != null)
+                                 checker.setup();
 
                               // instantiate each Dempsy
                               for (String[] applicationContexts : applicationContextsArray)

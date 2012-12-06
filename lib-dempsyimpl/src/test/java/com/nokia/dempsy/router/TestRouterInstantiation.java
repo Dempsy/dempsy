@@ -40,6 +40,7 @@ public class TestRouterInstantiation
       ApplicationDefinition app = new ApplicationDefinition("test");
       ClusterDefinition cd = new ClusterDefinition("test-cluster");
       app.add(cd);
+      cd.setApplicationDefinition(app);
       
       Router router = new Router(cd);
 
@@ -64,6 +65,7 @@ public class TestRouterInstantiation
       ApplicationDefinition app = new ApplicationDefinition("test");
       ClusterDefinition cd = new ClusterDefinition("test-cluster");
       app.add(cd);
+      cd.setApplicationDefinition(app);
       Router router = new Router(cd);
 
       Object o;
@@ -94,6 +96,7 @@ public class TestRouterInstantiation
       ApplicationDefinition app = new ApplicationDefinition("test");
       ClusterDefinition cd = new ClusterDefinition("test-cluster");
       app.add(cd);
+      cd.setApplicationDefinition(app);
       Router router = new Router(cd);
       
       List<Object> messages = new ArrayList<Object>();

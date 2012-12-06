@@ -481,6 +481,14 @@ public class TestDempsy extends DempsyTestBase
       Checker checker = new Checker()   
       {
          @Override
+         public void setup()
+         {
+            KeySourceImpl.pause = new CountDownLatch(1);
+            KeySourceImpl.infinite = true;
+            KeySourceImpl.lastCreated = null;
+         }
+         
+         @Override
          public void check(ApplicationContext context) throws Throwable
          {
             // wait until the KeySourceImpl has been created
@@ -528,10 +536,6 @@ public class TestDempsy extends DempsyTestBase
             Thread.sleep(50);
             assertEquals(lastKeyOfFirstCreated,firstCreated.lastKey); // make sure the first one isn't still moving on
             assertEquals("test2",secondCreated.lastKey);
-            
-            // prepare for the next run
-            KeySourceImpl.pause = new CountDownLatch(1);
-            KeySourceImpl.infinite = true;
          }
          
          public String toString() { return "testOverlappingKeyStoreCalls"; }
@@ -544,10 +548,11 @@ public class TestDempsy extends DempsyTestBase
    @Test
    public void testFailedMessageHandlingWithKeyStore() throws Throwable
    {
-      KeySourceImpl.pause = new CountDownLatch(1);
-
       Checker checker = new Checker()   
       {
+         @Override
+         public void setup() { KeySourceImpl.pause = new CountDownLatch(1); }
+
          @Override
          public void check(ApplicationContext context) throws Throwable
          {
@@ -574,8 +579,8 @@ public class TestDempsy extends DempsyTestBase
             mp.failActivation.set(null);
             KeySourceImpl.pause.countDown();
 
-            // instead of the latch we are going to poll for the correct result
-            // wait for it to be received.
+            // Wait for the 3 clone calls expected because of 1 failure plus
+            // a preinstantiation of 2 MPs.
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
             
             assertTrue(poll(baseTimeoutMillis,statsCollector,new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters mg) {  return mg.getMessageProcessorsCreated()==2; } }));
@@ -591,16 +596,12 @@ public class TestDempsy extends DempsyTestBase
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==5; } }));
             adaptor.pushMessage(new TestMessage("test2"));
 
-            // instead of the latch we are going to poll for the correct result
-            // wait for it to be received.
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get()==6; } }));
             Thread.sleep(100);
             assertEquals(6,mp.handleCalls.get());
             assertEquals(3,mp.cloneCalls.get());
             assertEquals(2,statsCollector.getMessageProcessorsCreated());
             
-            // prepare for the next run
-            KeySourceImpl.pause = new CountDownLatch(1);
          }
          
          public String toString() { return "testFailedMessageHandlingWithKeyStore"; }
