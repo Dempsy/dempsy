@@ -63,7 +63,7 @@ public class MicroShardUtils
    /**
     * A subdirectory of the ClusterDir, the nodesDir contains an ephemeral and sequential 
     * entry (subdirectory) per currently running node. Each of these subdirectories contains
-    * an instance of a {@link DefaultSlotInfo} which the manager will use to copy into 
+    * an instance of a {@link DefaultShardInfo} which the manager will use to copy into 
     * the appropriate shardsDir subdirectory in order to accomplish an assignment.
     */
    public String getNodesDir() { return nodesDir; }
@@ -74,9 +74,14 @@ public class MicroShardUtils
    
    public String getRootDir() { return "/"; }
    
+   public String mkAppRootDir(ClusterInfoSession session) throws ClusterInfoException
+   {
+      return session.mkdir(getAppRootDir(), DirMode.PERSISTENT);
+   }
+   
    public String mkAppDir(ClusterInfoSession session) throws ClusterInfoException
    {
-      session.mkdir(getAppRootDir(), DirMode.PERSISTENT);
+      mkAppRootDir(session);
       return session.mkdir(getAppDir(), DirMode.PERSISTENT);
    }
    
@@ -93,7 +98,7 @@ public class MicroShardUtils
    {
       mkClusterDir(session,obj);
       session.mkdir(getShardsDir(), DirMode.PERSISTENT);
-//      session.mkdir(getNodesDir(), DirMode.PERSISTENT);
+      session.mkdir(getNodesDir(), DirMode.PERSISTENT);
    }
    
    public void mkManagerDir(ClusterInfoSession session) throws ClusterInfoException

@@ -16,6 +16,8 @@
 
 package com.nokia.dempsy;
 
+import static com.nokia.dempsy.TestUtils.getAdaptor;
+import static com.nokia.dempsy.TestUtils.getMp;
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -60,6 +62,7 @@ public class TestDempsy extends DempsyTestBase
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/Serializer-KryoActx.xml",
+            "testDempsy/RoutingStrategy-DecentralizedActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();
@@ -95,6 +98,7 @@ public class TestDempsy extends DempsyTestBase
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/Serializer-KryoActx.xml",
+            "testDempsy/RoutingStrategy-DecentralizedActx.xml",
             "testDempsy/SimpleMultistageApplicationActx.xml"
             );
    }
@@ -111,6 +115,7 @@ public class TestDempsy extends DempsyTestBase
                "testDempsy/Transport-TcpActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
                "testDempsy/Serializer-KryoActx.xml",
+               "testDempsy/RoutingStrategy-DecentralizedActx.xml",
                "testDempsy/SimpleMultistageApplicationWithExecutorActx.xml"
                );
          actx.registerShutdownHook();
@@ -149,6 +154,7 @@ public class TestDempsy extends DempsyTestBase
                "testDempsy/Transport-PassthroughActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
                "testDempsy/Serializer-KryoActx.xml",
+               "testDempsy/RoutingStrategy-DecentralizedActx.xml",
                "testDempsy/SimpleMultistageApplicationActx.xml"
                );
          actx.registerShutdownHook();
@@ -616,6 +622,7 @@ public class TestDempsy extends DempsyTestBase
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/Serializer-KryoActx.xml",
+            "testDempsy/RoutingStrategy-DecentralizedActx.xml",
             "testDempsy/DTSimpleMultistageApplicationActx.xml"
             );
       actx.registerShutdownHook();

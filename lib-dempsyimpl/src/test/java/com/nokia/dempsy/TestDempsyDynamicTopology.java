@@ -16,6 +16,8 @@
 
 package com.nokia.dempsy;
 
+import static com.nokia.dempsy.TestUtils.getAdaptor;
+import static com.nokia.dempsy.TestUtils.getMp;
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -46,6 +48,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/Serializer-KryoActx.xml",
+            "testDempsy/RoutingStrategy-DecentralizedActx.xml",
             "testDempsy/SimpleMultistageApplication/appdef.xml","testDempsy/SimpleMultistageApplication/cluster0.xml",
             "testDempsy/SimpleMultistageApplication/cluster1.xml","testDempsy/SimpleMultistageApplication/cluster2.xml",
             "testDempsy/SimpleMultistageApplication/cluster3.xml"
@@ -84,6 +87,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
             "testDempsy/Transport-PassthroughActx.xml",
             "testDempsy/ClusterInfo-LocalActx.xml",
             "testDempsy/Serializer-KryoActx.xml",
+            "testDempsy/RoutingStrategy-DecentralizedActx.xml",
             "testDempsy/SimpleMultistageApplication/appdef.xml","testDempsy/SimpleMultistageApplication/cluster2.xml"
             );
       actx.registerShutdownHook();
@@ -165,6 +169,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
                "testDempsy/Transport-PassthroughActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
                "testDempsy/Serializer-KryoActx.xml",
+               "testDempsy/RoutingStrategy-DecentralizedActx.xml",
                "testDempsy/SinglestageApplication/appdef.xml","testDempsy/SinglestageApplication/bad-cluster0.xml",
                "testDempsy/SinglestageApplication/cluster1.xml"
                );

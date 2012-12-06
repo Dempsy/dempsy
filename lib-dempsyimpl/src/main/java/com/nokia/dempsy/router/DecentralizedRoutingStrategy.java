@@ -16,7 +16,6 @@
 
 package com.nokia.dempsy.router;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -56,18 +55,18 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    
    private static Logger logger = LoggerFactory.getLogger(DecentralizedRoutingStrategy.class);
    
-   private int defaultTotalSlots;
-   private int defaultNumNodes;
+   protected int defaultTotalShards;
+   protected int defaultNumNodes;
    
    private ScheduledExecutorService scheduler_ = null;
    
-   public DecentralizedRoutingStrategy(int defaultTotalSlots, int defaultNumNodes)
+   public DecentralizedRoutingStrategy(int defaultTotalShards, int defaultNumNodes)
    {
-      this.defaultTotalSlots = defaultTotalSlots;
+      this.defaultTotalShards = defaultTotalShards;
       this.defaultNumNodes = defaultNumNodes;
    }
    
-   private class OutboundManager implements RoutingStrategy.OutboundManager, ClusterInfoWatcher
+   public class OutboundManager implements RoutingStrategy.OutboundManager, ClusterInfoWatcher
    {
       private ClusterInfoSession session;
       private ClusterId clusterId;
@@ -327,7 +326,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          clearRouterMap(); // this will cause a nice redo over everything
       }
 
-      private class Outbound implements RoutingStrategy.Outbound, ClusterInfoWatcher
+      public class Outbound implements RoutingStrategy.Outbound, ClusterInfoWatcher
       {
          private AtomicReference<Destination[]> destinations = new AtomicReference<Destination[]>();
          private ClusterInfoSession clusterSession;
@@ -413,14 +412,14 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   logger.trace("Resetting Outbound Strategy for cluster " + clusterId + 
                         " from " + OutboundManager.this.clusterId + " in " + this);
 
-               Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
-               Collection<String> emptySlots = new ArrayList<String>();
-               int newtotalAddressCounts = fillMapFromActiveSlots(slotNumbersToSlots,emptySlots,clusterSession,clusterId,null,this);
+               Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
+               Collection<String> emptyShards = new ArrayList<String>();
+               int newtotalAddressCounts = fillMapFromActiveShards(shardNumbersToShards,emptyShards,clusterSession,clusterId,null,this);
                
                // For now if we hit the race condition between when the target Inbound
-               // has created the slot and when it assigns the slot info, we simply claim
+               // has created the shard and when it assigns the shard info, we simply claim
                // we failed.
-               if (newtotalAddressCounts < 0 || emptySlots.size() > 0)
+               if (newtotalAddressCounts < 0 || emptyShards.size() > 0)
                   return false;
                
                if (newtotalAddressCounts == 0)
@@ -429,10 +428,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                if (newtotalAddressCounts > 0)
                {
                   Destination[] newDestinations = new Destination[newtotalAddressCounts];
-                  for (Map.Entry<Integer,DefaultRouterSlotInfo> entry : slotNumbersToSlots.entrySet())
+                  for (Map.Entry<Integer,DefaultRouterShardInfo> entry : shardNumbersToShards.entrySet())
                   {
-                     DefaultRouterSlotInfo slotInfo = entry.getValue();
-                     newDestinations[entry.getKey()] = slotInfo.getDestination();
+                     DefaultRouterShardInfo shardInfo = entry.getValue();
+                     newDestinations[entry.getKey()] = shardInfo.getDestination();
                   }
 
                   destinations.set(newDestinations);
@@ -506,21 +505,21 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          this.thisDestination = thisDestination;
          this.clusterId = clusterId;
          this.msutils = new MicroShardUtils(clusterId);
-         this.clusterInfo = new DefaultRouterClusterInfo(defaultTotalSlots, defaultNumNodes, messageTypes);
-         acquireSlots();
+         this.clusterInfo = new DefaultRouterClusterInfo(defaultTotalShards, defaultNumNodes, messageTypes);
+         acquireShards();
       }
 
       @Override
       public void process()
       {
-         acquireSlots();
+         acquireShards();
       }
       
       boolean alreadyHere = false;
       boolean recurseAttempt = false;
       ScheduledFuture<?> currentlyWaitingOn = null;
       
-      private synchronized void acquireSlots()
+      private synchronized void acquireShards()
       {
          if (!isRunning.get())
             return;
@@ -554,40 +553,40 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             boolean lessResponsitiblity = false;
 
             //==============================================================================
-            // need to verify that the existing slots in destinationsAcquired are still ours
-            Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
-            Collection<String> emptySlots = new HashSet<String>();
-            fillMapFromActiveSlots(slotNumbersToSlots,emptySlots, session, clusterId, clusterInfo, this);
-            Collection<Integer> slotsToReaquire = new ArrayList<Integer>();
-            for (Integer destinationSlot : destinationsAcquired)
+            // need to verify that the existing shards in destinationsAcquired are still ours
+            Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
+            Collection<String> emptyShards = new HashSet<String>();
+            fillMapFromActiveShards(shardNumbersToShards,emptyShards, session, clusterId, clusterInfo, this);
+            Collection<Integer> shardsToReaquire = new ArrayList<Integer>();
+            for (Integer destinationShard : destinationsAcquired)
             {
-               // select the coresponding slot information
-               DefaultRouterSlotInfo slotInfo = slotNumbersToSlots.get(destinationSlot);
-               if (slotInfo == null || !thisDestination.equals(slotInfo.getDestination()) || emptySlots.contains(Integer.toString(destinationSlot)))
-                  slotsToReaquire.add(destinationSlot);
+               // select the coresponding shard information
+               DefaultRouterShardInfo shardInfo = shardNumbersToShards.get(destinationShard);
+               if (shardInfo == null || !thisDestination.equals(shardInfo.getDestination()) || emptyShards.contains(Integer.toString(destinationShard)))
+                  shardsToReaquire.add(destinationShard);
             }
             //==============================================================================
 
             //==============================================================================
-            // Now re-acquire the potentially lost slots
-            for (Integer slotToReaquire : slotsToReaquire)
+            // Now re-acquire the potentially lost shards
+            for (Integer shardToReaquire : shardsToReaquire)
             {
-               if (!acquireSlot(slotToReaquire, defaultTotalSlots, session, clusterId, thisDestination))
+               if (!acquireShard(shardToReaquire, defaultTotalShards, session, clusterId, thisDestination))
                {
-                  logger.info("Cannot reaquire the slot " + slotToReaquire + " for the cluster " + clusterId);
-                  // I need to drop the slot from my list of destinations
-                  destinationsAcquired.remove(slotToReaquire);
+                  logger.info("Cannot reaquire the shard " + shardToReaquire + " for the cluster " + clusterId);
+                  // I need to drop the shard from my list of destinations
+                  destinationsAcquired.remove(shardToReaquire);
                   lessResponsitiblity = true;
                }
             }
             //==============================================================================
 
-            while(needToGrabMoreSlots(session,defaultNumNodes,defaultTotalSlots))
+            while(needToGrabMoreShards(session,defaultNumNodes,defaultTotalShards))
             {
-               int randomValue = random.nextInt(defaultTotalSlots);
+               int randomValue = random.nextInt(defaultTotalShards);
                if(destinationsAcquired.contains(randomValue))
                   continue;
-               if (acquireSlot(randomValue, defaultTotalSlots, session, clusterId, thisDestination))
+               if (acquireShard(randomValue, defaultTotalShards, session, clusterId, thisDestination))
                {
                   destinationsAcquired.add(randomValue);
                   moreResponsitiblity = true;
@@ -622,7 +621,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                if (sched != null)
                    currentlyWaitingOn = sched.schedule(new Runnable(){
                      @Override
-                     public void run() { acquireSlots(); }
+                     public void run() { acquireShards(); }
                   }, resetDelay, TimeUnit.MILLISECONDS);
             }
             else
@@ -642,18 +641,18 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          isRunning.set(false);
       }
       
-      private boolean needToGrabMoreSlots(ClusterInfoSession clusterHandle,
+      private boolean needToGrabMoreShards(ClusterInfoSession clusterHandle,
             int minNodeCount, int totalAddressNeeded) throws ClusterInfoException
       {
          int addressInUse = clusterHandle.getSubdirs(msutils.getShardsDir(), null).size();
-         int maxSlotsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)minNodeCount);
-         return addressInUse < totalAddressNeeded && destinationsAcquired.size() < maxSlotsForOneNode;
+         int maxShardsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)minNodeCount);
+         return addressInUse < totalAddressNeeded && destinationsAcquired.size() < maxShardsForOneNode;
       }
       
       @Override
       public boolean doesMessageKeyBelongToNode(Object messageKey)
       {
-         return destinationsAcquired.contains(Math.abs(messageKey.hashCode()%defaultTotalSlots));
+         return destinationsAcquired.contains(Math.abs(messageKey.hashCode()%defaultTotalShards));
       }
 
    } // end Inbound class definition
@@ -672,16 +671,14 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       return new OutboundManager(session,clusterId,explicitClusterDestinations);
    }
    
-   static class DefaultRouterSlotInfo implements Serializable
+   public static class DefaultRouterShardInfo
    {
-      private static final long serialVersionUID = 1L;
-
       private int totalAddress = -1;
-      private int slotIndex = -1;
+      private int shardIndex = -1;
       private Destination destination;
 
-      public int getSlotIndex() { return slotIndex; }
-      public void setSlotIndex(int modValue) { this.slotIndex = modValue; }
+      public int getShardIndex() { return shardIndex; }
+      public void setShardIndex(int modValue) { this.shardIndex = modValue; }
 
       public int getTotalAddress() { return totalAddress; }
       public void setTotalAddress(int totalAddress) { this.totalAddress = totalAddress; }
@@ -691,23 +688,21 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
 
       @Override
       public String toString() { 
-         return "{ slotIndex:" + slotIndex + ", totalAddress:" + totalAddress + ", destination:" + SafeString.objectDescription(destination) + "}";
+         return "{ shardIndex:" + shardIndex + ", totalAddress:" + totalAddress + ", destination:" + SafeString.objectDescription(destination) + "}";
       }
    }
    
-   static class DefaultRouterClusterInfo implements Serializable
+   public static class DefaultRouterClusterInfo
    {
-      private static final long serialVersionUID = 1L;
-
       private int minNodeCount = 5;
-      private int totalSlotCount = 300;
+      private int totalShardCount = 300;
       private Set<Class<?>> messageClasses = new HashSet<Class<?>>();
       
       public DefaultRouterClusterInfo() {} // required for deserialize
       
-      public DefaultRouterClusterInfo(int totalSlotCount, int nodeCount, Collection<Class<?>> messageClasses)
+      public DefaultRouterClusterInfo(int totalShardCount, int nodeCount, Collection<Class<?>> messageClasses)
       {
-         this.totalSlotCount = totalSlotCount;
+         this.totalShardCount = totalShardCount;
          this.minNodeCount = nodeCount;
          if (messageClasses != null)
             this.messageClasses.addAll(messageClasses);
@@ -716,96 +711,96 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       public int getMinNodeCount() { return minNodeCount;  }
       public void setMinNodeCount(int minNodeCount) { this.minNodeCount = minNodeCount; }
 
-      public int getTotalSlotCount() { return totalSlotCount; }
-      public void setTotalSlotCount(int totalSlotCount) {  this.totalSlotCount = totalSlotCount; }
+      public int getTotalShardCount() { return totalShardCount; }
+      public void setTotalShardCount(int totalShardCount) { this.totalShardCount = totalShardCount; }
 
       public Set<Class<?>> getMessageClasses() { return messageClasses;}
-      public void setMessageClasses(Set<Class<?>> messageClasses){ this.messageClasses = messageClasses; }
+      public void setMessageClasses(Set<Class<?>> messageClasses) { this.messageClasses = messageClasses; }
 
       @Override
-      public String toString() { return "{ minNodeCount:" + minNodeCount + ", totalSlotCount:" + totalSlotCount + ", messageClasses:" + messageClasses + "}"; }
+      public String toString() { return "{ minNodeCount:" + minNodeCount + ", totalShardCount:" + totalShardCount + ", messageClasses:" + messageClasses + "}"; }
 
    }
    
    /**
-    * Fill the map of slots to slotinfos for internal use. 
-    * @return the totalAddressCount from each slot. These are supposed to be repeated.
+    * Fill the map of shards to shardinfos for internal use. 
+    * @return the totalAddressCount from each shard. These are supposed to be repeated.
     */
-   private static int fillMapFromActiveSlots(Map<Integer,DefaultRouterSlotInfo> mapToFill, Collection<String> emptySlots, 
+   private static int fillMapFromActiveShards(Map<Integer,DefaultRouterShardInfo> mapToFill, Collection<String> emptyShards, 
          ClusterInfoSession session, ClusterId clusterId, DefaultRouterClusterInfo clusterInfo, 
          ClusterInfoWatcher watcher) throws ClusterInfoException
    {
       MicroShardUtils msutils = new MicroShardUtils(clusterId);
       int totalAddressCounts = -1;
-      Collection<String> slotsFromClusterManager;
+      Collection<String> shardsFromClusterManager;
       try
       {
-         slotsFromClusterManager = session.getSubdirs(msutils.getShardsDir(), watcher);
+         shardsFromClusterManager = session.getSubdirs(msutils.getShardsDir(), watcher);
       }
       catch (ClusterInfoException.NoNodeException e)
       {
-         // clusterInfo == null means that this is a passive call to fillMapFromActiveSlots
+         // clusterInfo == null means that this is a passive call to fillMapFromActiveShards
          // and shouldn't create extraneous directories. If they are not there, there's
          // nothing we can do.
          if (clusterInfo != null)
          {
             msutils.mkAllPersistentAppDirs(session, clusterInfo);
-            slotsFromClusterManager = session.getSubdirs(msutils.getShardsDir(), watcher);
+            shardsFromClusterManager = session.getSubdirs(msutils.getShardsDir(), watcher);
          }
          else
-            slotsFromClusterManager = null;
+            shardsFromClusterManager = null;
       }
 
-      if(slotsFromClusterManager != null)
+      if(shardsFromClusterManager != null)
       {
          // zero is valid but we only want to set it if we are not 
          // going to enter into the loop below.
-         if (slotsFromClusterManager.size() == 0)
+         if (shardsFromClusterManager.size() == 0)
             totalAddressCounts = 0;
          
-         for(String node: slotsFromClusterManager)
+         for(String node: shardsFromClusterManager)
          {
-            DefaultRouterSlotInfo slotInfo = (DefaultRouterSlotInfo)session.getData(msutils.getShardsDir() + "/" + node, null);
-            if(slotInfo != null)
+            DefaultRouterShardInfo shardInfo = (DefaultRouterShardInfo)session.getData(msutils.getShardsDir() + "/" + node, null);
+            if(shardInfo != null)
             {
-               mapToFill.put(slotInfo.getSlotIndex(), slotInfo);
+               mapToFill.put(shardInfo.getShardIndex(), shardInfo);
                if (totalAddressCounts == -1)
-                  totalAddressCounts = slotInfo.getTotalAddress();
-               else if (totalAddressCounts != slotInfo.getTotalAddress())
-                  logger.error("There is a problem with the slots taken by the cluster manager for the cluster " + 
-                        clusterId + ". Slot " + slotInfo.getSlotIndex() +
-                        " from " + SafeString.objectDescription(slotInfo.getDestination()) + 
-                        " thinks the total number of slots for this cluster it " + slotInfo.getTotalAddress() +
-                        " but a former slot said the total was " + totalAddressCounts);
+                  totalAddressCounts = shardInfo.getTotalAddress();
+               else if (totalAddressCounts != shardInfo.getTotalAddress())
+                  logger.error("There is a problem with the shards taken by the cluster manager for the cluster " + 
+                        clusterId + ". Shard " + shardInfo.getShardIndex() +
+                        " from " + SafeString.objectDescription(shardInfo.getDestination()) + 
+                        " thinks the total number of shards for this cluster it " + shardInfo.getTotalAddress() +
+                        " but a former shard said the total was " + totalAddressCounts);
             }
             else
             {
-               if (emptySlots != null)
-                  emptySlots.add(node);
+               if (emptyShards != null)
+                  emptyShards.add(node);
                if (logger.isDebugEnabled())
-                  logger.debug("Retrieved empty slot for cluster " + clusterId + ", slot number " + node);
+                  logger.debug("Retrieved empty shard for cluster " + clusterId + ", shard number " + node);
             }
          }
       }
       return totalAddressCounts;
    }
    
-   private static boolean acquireSlot(int slotNum, int totalAddressNeeded,
+   private static boolean acquireShard(int shardNum, int totalAddressNeeded,
          ClusterInfoSession clusterHandle, ClusterId clusterId, 
          Destination destination) throws ClusterInfoException
    {
       MicroShardUtils utils = new MicroShardUtils(clusterId);
-      String slotPath = utils.getShardsDir() + "/" + String.valueOf(slotNum);
-      if (clusterHandle.mkdir(slotPath,DirMode.EPHEMERAL) != null)
+      String shardPath = utils.getShardsDir() + "/" + String.valueOf(shardNum);
+      if (clusterHandle.mkdir(shardPath,DirMode.EPHEMERAL) != null)
       {
-         DefaultRouterSlotInfo dest = (DefaultRouterSlotInfo)clusterHandle.getData(slotPath, null);
+         DefaultRouterShardInfo dest = (DefaultRouterShardInfo)clusterHandle.getData(shardPath, null);
          if(dest == null)
          {
-            dest = new DefaultRouterSlotInfo();
+            dest = new DefaultRouterShardInfo();
             dest.setDestination(destination);
-            dest.setSlotIndex(slotNum);
+            dest.setShardIndex(shardNum);
             dest.setTotalAddress(totalAddressNeeded);
-            clusterHandle.setData(slotPath, dest);
+            clusterHandle.setData(shardPath, dest);
          }
          return true;
       }
@@ -813,14 +808,14 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          return false;
    }
    
-   private synchronized ScheduledExecutorService getScheduledExecutor()
+   protected synchronized ScheduledExecutorService getScheduledExecutor()
    {
       if (scheduler_ == null)
          scheduler_ = Executors.newScheduledThreadPool(1);
       return scheduler_;
    }
    
-   private synchronized void disposeOfScheduler()
+   protected synchronized void disposeOfScheduler()
    {
       if (scheduler_ != null)
          scheduler_.shutdown();

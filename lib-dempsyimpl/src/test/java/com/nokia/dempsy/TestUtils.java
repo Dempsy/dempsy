@@ -59,8 +59,6 @@ public class TestUtils
       Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
       return node.statsCollector;
    }
-   
-
 
    /**
     * This allows tests to wait until a Dempsy application is completely up before
@@ -106,4 +104,19 @@ public class TestUtils
       
       return node.router.getClusterSession();
    }
+   
+   public static Object getMp(Dempsy dempsy, String appName, String clusterName)
+   {
+      Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId(appName,clusterName));
+      Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
+      return node.clusterDefinition.getMessageProcessorPrototype();
+   }
+
+   public static Adaptor getAdaptor(Dempsy dempsy, String appName, String clusterName)
+   {
+      Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId(appName,clusterName));
+      Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
+      return node.clusterDefinition.getAdaptor();
+   }
+
 }
