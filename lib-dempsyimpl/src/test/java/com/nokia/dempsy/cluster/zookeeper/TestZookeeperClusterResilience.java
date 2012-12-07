@@ -607,8 +607,9 @@ public class TestZookeeperClusterResilience
          dempsy[1].stop();
 
          // there's a race condition here ... some messages may still
-         // trickle through from the above sending. This should aviod that
+         // trickle through from the above sending. This should avoid that
          // MOST of the time.
+         assertTrue(dempsy[1].waitToBeStopped(baseTimeoutMillis));
          Thread.sleep(100);
 
          // now reset the counter
