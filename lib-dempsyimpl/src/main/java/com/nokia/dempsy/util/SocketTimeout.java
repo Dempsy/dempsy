@@ -73,6 +73,8 @@ public class SocketTimeout implements Runnable
    
    public void disrupt()
    {
+      logger.warn("SocketTimeout has expired and will be interupting thread " + thread.getName());
+
       // we're going to kill the socket.
       try { thread.interrupt(); }
       catch (Throwable th) { logger.error("Interrupt failed.", th); }
