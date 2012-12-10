@@ -16,6 +16,7 @@
 
 package com.nokia.dempsy.messagetransport.blockingqueue;
 
+import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -50,6 +51,13 @@ public class BlockingQueueSender implements Sender
    public void shuttingDown()
    {
       shutdown.set(true);
+      ArrayList<byte[]> messages= new ArrayList<byte[]>(queue.size());
+      queue.drainTo(messages);
+      if (overflowHandler != null)
+      {
+         for (byte[] message : messages)
+            overflowHandler.overflow(message);
+      }
    }
 
    /**
@@ -68,6 +76,7 @@ public class BlockingQueueSender implements Sender
             try { queue.put(messageBytes); if (statsCollector != null) statsCollector.messageSent(messageBytes); break; }
             catch (InterruptedException ie)
             {
+               if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
                if (shutdown.get())
                   throw new MessageTransportException("Shutting down durring send.");
             }

@@ -20,14 +20,26 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 
 public interface Receiver
 {
+   /**
+    * Provide the Destination for this reciever.
+    */
    public Destination getDestination() throws MessageTransportException;
    
+   /**
+    * Provide the message consumer to this receiver.
+    */
    public void setListener(Listener listener) throws MessageTransportException;
    
+   /**
+    * Dempsy will call this on start. Throwing an exception will cause Dempsy
+    * to fail to start.
+    */
    public void start() throws MessageTransportException;
    
-   public void stop();
-   
+   /**
+    * Dempsy will call this method on shutdown.
+    */
+   public void shutdown();
    
    /**
     * This stats collector should be available to any Sender or Receiver that results

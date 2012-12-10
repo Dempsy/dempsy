@@ -109,6 +109,9 @@ public class Dempsy
             @SuppressWarnings("unchecked")
             private void start() throws DempsyException
             {
+               if (logger.isTraceEnabled())
+                   logger.trace("Starting node for " + clusterDefinition.getClusterId());
+
                try
                {
                   DempsyExecutor executor = (DempsyExecutor)clusterDefinition.getExecutor(); // this can be null
@@ -197,9 +200,12 @@ public class Dempsy
 
             public void stop()
             {
+               if (logger.isTraceEnabled())
+                   logger.trace("Stopping node for " + clusterDefinition.getClusterId());
+
                if (receiver != null) 
                {
-                  try { receiver.stop(); receiver = null; }
+                  try { receiver.shutdown(); receiver = null; }
                   catch (Throwable th)
                   {
                      logger.error("Error stoping the reciever " + SafeString.objectDescription(receiver) + 
@@ -287,6 +293,9 @@ public class Dempsy
        */
       public boolean start() throws DempsyException
       {
+         if (logger.isTraceEnabled())
+             logger.trace("Starting application for " + applicationDefinition.getApplicationName());
+            
          failedStart = null;
          boolean clusterStarted = false;
          
@@ -353,6 +362,9 @@ public class Dempsy
       
       public void stop()
       {
+         if (logger.isTraceEnabled())
+             logger.trace("Stopping application for " + applicationDefinition.getApplicationName());
+
          // first stop all of the adaptor threads
          for(AdaptorThread adaptorThread : adaptorThreads)
             adaptorThread.stop();
@@ -615,6 +627,10 @@ public class Dempsy
     */
    public boolean waitToBeStopped(long timeInMillis) throws InterruptedException
    {
+      boolean traceEnabled = logger.isTraceEnabled();
+      if (traceEnabled)
+         logger.trace("Waiting for Dempsy to stop.");
+
       synchronized(isRunningEvent)
       {
          while (isRunning)
@@ -624,8 +640,13 @@ public class Dempsy
             else
                isRunningEvent.wait(timeInMillis);
          }
+
+         if (traceEnabled)
+            logger.trace("Dempsy is stopped.");
+
          return !isRunning();
       }
+
    }
    
    protected static List<Class<?>> getAcceptedMessages(ClusterDefinition clusterDef)

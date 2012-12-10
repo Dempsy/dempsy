@@ -132,15 +132,15 @@ public class TcpTransportTest
                // verify everything came over ok.
                assertEquals(1,receiver.receivedStringMessages.size());
                assertEquals("Hello",receiver.receivedStringMessages.iterator().next());
-               adaptor.stop();
+               adaptor.shutdown();
             }
             finally
             {
                if (factory != null)
-                  factory.stop();
+                  factory.shutdown();
                
                if (adaptor != null)
-                  adaptor.stop();
+                  adaptor.shutdown();
             }
 
          }
@@ -237,10 +237,10 @@ public class TcpTransportTest
             finally
             {
                if (factory != null)
-                  factory.stop();
+                  factory.shutdown();
                
                if (adaptor != null)
-                  adaptor.stop();
+                  adaptor.shutdown();
             }
 
          }
@@ -317,10 +317,10 @@ public class TcpTransportTest
       finally
       {
          if (factory != null)
-            factory.stop();
+            factory.shutdown();
 
          if (adaptor != null)
-            adaptor.stop();
+            adaptor.shutdown();
 
          receivedByteArrayMessage = null;
       }
@@ -433,10 +433,10 @@ public class TcpTransportTest
             finally
             {
                if (factory != null)
-                  factory.stop();
+                  factory.shutdown();
                
                if (adaptor != null)
-                  adaptor.stop();
+                  adaptor.shutdown();
             }
          }
          
@@ -530,7 +530,7 @@ public class TcpTransportTest
                assertEquals(0L,statsCollector.getMessagesNotSentCount());
                
                // pull the rug out on the adaptor
-               adaptor.stop();
+               adaptor.shutdown();
                
                // wait until the total number of failed messages == 10 * numThreads
                assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, new TestUtils.Condition<BasicStatsCollector>()
@@ -566,10 +566,10 @@ public class TcpTransportTest
             finally
             {
                if (factory != null)
-                  factory.stop();
+                  factory.shutdown();
                
                if (adaptor != null)
-                  adaptor.stop();
+                  adaptor.shutdown();
             }
          }
          
@@ -643,7 +643,7 @@ public class TcpTransportTest
                
 //               Thread.sleep(100);
                
-               logger.info("there are " + backup + " message baked up, and " + 
+               logger.info("there are " + backup + " message backed up, and " + 
                      statsCollector.getMessagesNotSentCount() + " have been discarded.");
                
                // This cannot be determined reliably on Cloudbees which is usually too busy
@@ -664,10 +664,10 @@ public class TcpTransportTest
             finally
             {
                if (factory != null)
-                  factory.stop();
+                  factory.shutdown();
                
                if (adaptor != null)
-                  adaptor.stop();
+                  adaptor.shutdown();
             }
 
          }
@@ -935,17 +935,17 @@ public class TcpTransportTest
                receiver.latch = null;
                synchronized(latch) { latch.notifyAll(); }
                
-               adaptor.stop();
+               adaptor.shutdown();
                
                synchronized(latch) { latch.notifyAll(); }
             }
             finally
             {
                if (factory != null)
-                  factory.stop();
+                  factory.shutdown();
                
                if (adaptor != null)
-                  adaptor.stop();
+                  adaptor.shutdown();
             }
 
          }

@@ -71,7 +71,13 @@ public class PassthroughTransport implements Transport
          }
          
          @Override
-         public void stop() { isStopped = true; }
+         public void shutdown() { isStopped = true; }
+         
+         @Override
+         public void stopDestination(Destination destination)
+         {
+            ((PassthroughSender)(((PassthroughDestination)destination).sender)).isRunning = false;
+         }
       };
    }
    
@@ -79,12 +85,19 @@ public class PassthroughTransport implements Transport
    {
       StatsCollector statsCollector = null;
       List<Listener> listeners;
+      boolean isRunning = true;
       
       private PassthroughSender(List<Listener> listeners) { this.listeners = listeners; }
 
       @Override
       public void send(byte[] messageBytes) throws MessageTransportException
       {
+         if (!isRunning)
+         {
+            if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+            throw new MessageTransportException("send called on stopped PassthroughSender");
+         }
+         
          for (Listener listener : listeners)
          {
             if (statsCollector != null) statsCollector.messageSent(messageBytes);
@@ -115,7 +128,7 @@ public class PassthroughTransport implements Transport
          }
          
          @Override
-         public void stop() {}
+         public void shutdown() {}
          
          @Override
          public void start() {}

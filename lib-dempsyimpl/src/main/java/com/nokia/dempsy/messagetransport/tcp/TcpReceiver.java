@@ -125,7 +125,7 @@ public class TcpReceiver implements Receiver
     */
    public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; }
    
-   public synchronized void stop()
+   public synchronized void shutdown()
    {
       server.unregister(destination);
       

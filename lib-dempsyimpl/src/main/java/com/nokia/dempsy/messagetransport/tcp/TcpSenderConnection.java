@@ -94,7 +94,6 @@ public class TcpSenderConnection implements Runnable
       }
    }
 
-   
    public void setTimeoutMillis(long timeoutMillis) { this.timeoutMillis = timeoutMillis; }
 
    public void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
@@ -107,6 +106,9 @@ public class TcpSenderConnection implements Runnable
       {
          isSenderRunning.set(true);
          senderKeepRunning.set(true);
+
+         int ioeFailedCount = -1;
+         int queueSizeOnFirstFail = -1;
          
          while (senderKeepRunning.get())
          {
@@ -137,6 +139,8 @@ public class TcpSenderConnection implements Runnable
                   localDataOutputStream.write( message.messageBytes );
                   if (!batchOutgoingMessages)
                      localDataOutputStream.flush(); // flush individual message
+
+                  ioeFailedCount = -1;
                   socketTimeout.end();
 
                   message.messageSent();
@@ -149,7 +153,17 @@ public class TcpSenderConnection implements Runnable
                socketTimeout.end();
                message.messageNotSent();
                close();
-               logger.warn("It appears the client " + destination + " is no longer taking calls.",ioe);
+               // This can happen lots of times so let's track it
+               if (ioeFailedCount == -1)
+               {
+                   ioeFailedCount = 0; // this will be incremented to 0
+                   queueSizeOnFirstFail = sendingQueue.size();
+                   logger.warn("It appears the client " + destination + " is no longer taking calls. This message may be supressed for a while.",ioe);
+               }
+               else if (ioeFailedCount >= queueSizeOnFirstFail)
+                   ioeFailedCount = -1;
+               else
+                   ioeFailedCount++;
             }
             catch (InterruptedException ie)
             {
