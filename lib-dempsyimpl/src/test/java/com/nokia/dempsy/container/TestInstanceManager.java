@@ -209,6 +209,9 @@ public class TestInstanceManager
       {
          this.lastDispatched = message;
       }
+      
+      @Override
+      public ClusterId getThisClusterId() { return null; }
    }
 
 

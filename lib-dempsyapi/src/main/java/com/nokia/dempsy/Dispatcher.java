@@ -16,8 +16,7 @@
 
 package com.nokia.dempsy;
 
-import com.nokia.dempsy.annotations.MessageKey;
-
+import com.nokia.dempsy.config.ClusterId;
 
 /**
  *  <p>Implementations of this interface accept messages pushed from a source.
@@ -29,5 +28,17 @@ import com.nokia.dempsy.annotations.MessageKey;
  */
 public interface Dispatcher
 {
+   /**
+    * An {@link Adaptor} will use this method to send a "routable message" to
+    * a {@link MessageProcessor} somewhere in the Dempsy application that the
+    * {@link Adaptor} is part of.
+    */
    public void dispatch(Object message);
+   
+   /**
+    * If the Adaptor needs the ClusterId for logging, monitoring, or configuration
+    * it can then retrieve it from this call which will return the ClusterId for
+    * the cluster that the Adaptor is part of.
+    */
+   public ClusterId getThisClusterId();
 }

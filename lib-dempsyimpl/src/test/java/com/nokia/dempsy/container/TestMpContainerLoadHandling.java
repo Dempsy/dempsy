@@ -164,12 +164,14 @@ public class TestMpContainerLoadHandling
       @Override
       public void dispatch(Object message)
       {
-         // TODO remove this it's debugging
          assertNotNull(message);
          messages.add(message);
          if (latch != null)
             latch.countDown();
       }
+      
+      @Override
+      public ClusterId getThisClusterId() { return null; }
    }
    
    @MessageProcessor

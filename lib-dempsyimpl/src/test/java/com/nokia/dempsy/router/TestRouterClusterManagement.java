@@ -84,6 +84,7 @@ public class TestRouterClusterManagement
       
       routerFactory = new Router(app);
       routerFactory.setClusterSession(session);
+      routerFactory.setCurrentCluster(clusterId);
       routerFactory.initialize();
    }
    
@@ -110,6 +111,7 @@ public class TestRouterClusterManagement
       Assert.assertEquals(false, routerFactory.missingMsgTypes.containsKey(java.lang.Exception.class));
       Set<ClusterRouter> routers1 = routerFactory.getRouter(ClassNotFoundException.class);
       Assert.assertEquals(routers, routers1);
+      Assert.assertEquals(new ClusterId("test", "test-slot"), routerFactory.getThisClusterId());
    }
    
    @Test

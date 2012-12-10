@@ -103,6 +103,9 @@ public class TestMpContainer
          }
       }
       
+      @Override
+      public ClusterId getThisClusterId() { return null; }
+      
       public void setSender(Sender sender)
       {
          this.sender = sender;
