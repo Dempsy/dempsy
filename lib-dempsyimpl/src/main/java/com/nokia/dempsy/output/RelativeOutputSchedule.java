@@ -107,7 +107,7 @@ public class RelativeOutputSchedule implements OutputExecuter {
   public void stop() {
     try {
       // gracefully shutting down
-      scheduler.shutdown();
+      scheduler.shutdown(true);
     } catch (SchedulerException se) {
       logger.error("Error occurred while stopping the relative scheduler : " + se.getMessage(), se);
     }

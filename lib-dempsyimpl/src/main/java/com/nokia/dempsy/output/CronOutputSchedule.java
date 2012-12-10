@@ -88,7 +88,7 @@ public class CronOutputSchedule implements OutputExecuter {
   public void stop() {
     try {
       // gracefully shutting down
-      scheduler.shutdown();
+      scheduler.shutdown(true);
     } catch (SchedulerException se) {
       logger.error("Error occurred while stopping the cron scheduler : " + se.getMessage(), se);
     }
