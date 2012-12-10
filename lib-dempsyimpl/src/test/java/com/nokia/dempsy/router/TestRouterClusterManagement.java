@@ -103,7 +103,6 @@ public class TestRouterClusterManagement
       
       routerFactory = new Router(cd);
       routerFactory.setClusterSession(session);
-      routerFactory.setCurrentCluster(clusterId);
       routerFactory.setStatsCollector(new BasicStatsCollectorFactory().createStatsCollector(clusterId, new Destination() {} ));
       routerFactory.start();
    }

@@ -145,7 +145,7 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
    }
    
    @Override
-   public ClusterId getThisClusterId() { return currentCluster; }
+   public ClusterId getThisClusterId() { return currentClusterDefinition.getClusterId(); }
 
    /**
     * A {@link Router} is also a {@link Dispatcher} that is the instance that's typically
