@@ -83,7 +83,7 @@ import com.nokia.dempsy.serialization.Serializer;
  * 
  * <p>A router requires a non-null ApplicationDefinition during construction.</p>
  */
-public class Router implements Dispatcher
+public class Router implements Dispatcher, RoutingStrategy.OutboundManager.ClusterStateMonitor
 {
    private static Logger logger = LoggerFactory.getLogger(Router.class);
 
@@ -141,6 +141,7 @@ public class Router implements Dispatcher
       
       RoutingStrategy strategy = (RoutingStrategy)currentClusterDefinition.getRoutingStrategy();
       outboundManager = strategy.createOutboundManager(mpClusterSession, currentClusterDefinition.getClusterId(), explicitClusterDestinations);
+      outboundManager.setClusterStateMonitor(this);
    }
    
    @Override
@@ -217,6 +218,30 @@ public class Router implements Dispatcher
             logger.warn("Null message key for \""+ SafeString.valueOf(msg) + 
                   (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
          }
+      }
+   }
+   
+   @Override
+   public void clusterStateChanged(RoutingStrategy.Outbound outbound)
+   {
+      try
+      {
+         Collection<Destination> destinations = outbound.getKnownDestinations();
+         if (destinations == null)
+            return;
+         for (Destination d : destinations)
+         {
+            try { senderFactory.stopDestination(d); }
+            catch (Throwable th)
+            {
+               logger.error("Trouble shutting down the destination " + SafeString.objectDescription(d),th);
+            }
+         }
+      }
+      catch (Throwable th)
+      {
+         logger.error("Unknown exception trying to clean up after a cluster state change for "+ outbound.getClusterId() +  
+               " from  " + currentClusterDefinition.getClusterId(),th);
       }
    }
    

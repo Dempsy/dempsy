@@ -97,10 +97,7 @@ public interface RoutingStrategy
        */
       public boolean completeInitialization();
       
-      public void setUserData(Object userData);
-      
-      public Object getUserData();
-      
+      public Collection<Destination> getKnownDestinations();
    }
    
    /**
@@ -171,10 +168,23 @@ public interface RoutingStrategy
       
       public Collection<Outbound> retrieveOutbounds(Class<?> messageType);
       
-      public Collection<Outbound> getAllOutbounds();
+      /**
+       * This interface will be implemented by the Dempsy framework. The OutboundManager
+       * implementation needs to notify it when it detects that a cluster has been shut down.
+       */
+      public static interface ClusterStateMonitor
+      {
+         /**
+          * It is possible to call this with an empty collection. This will simply reset the internal 
+          * Dempsy state and force it to rediscover the available clusters. This should really
+          * only be the fallback (for example, when the ClusterInfoSession is throwing exceptions and
+          * so the current cluster information is unknown and should probably be rebuilt from scratch
+          * anyway).
+          */
+         public void clusterStateChanged(Outbound oldOutboundThatChanged);
+      }
       
-      // This is only called from tests
-      public Collection<Class<?>> getTypesWithNoOutbounds();
+      public void setClusterStateMonitor(ClusterStateMonitor monitor);
    }
    
    /**

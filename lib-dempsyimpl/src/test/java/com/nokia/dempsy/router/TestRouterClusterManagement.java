@@ -123,7 +123,7 @@ public class TestRouterClusterManagement
       Collection<RoutingStrategy.Outbound> router = routerFactory.outboundManager.retrieveOutbounds(Message.class);
       Assert.assertNotNull(router);
       Assert.assertEquals(0,router.size());
-      Assert.assertTrue(routerFactory.outboundManager.getTypesWithNoOutbounds().contains(Message.class));
+      Assert.assertTrue(((DecentralizedRoutingStrategy.OutboundManager)(routerFactory.outboundManager)).getTypesWithNoOutbounds().contains(Message.class));
    }
    
    @Test
@@ -132,7 +132,8 @@ public class TestRouterClusterManagement
       routerFactory.dispatch(new GoodMessage());
       Collection<RoutingStrategy.Outbound> routers = routerFactory.outboundManager.retrieveOutbounds(GoodMessage.class);
       Assert.assertNotNull(routers);
-      Assert.assertEquals(false, routerFactory.outboundManager.getTypesWithNoOutbounds().contains(GoodMessage.class));
+      Assert.assertEquals(false, 
+            ((DecentralizedRoutingStrategy.OutboundManager)(routerFactory.outboundManager)).getTypesWithNoOutbounds().contains(GoodMessage.class));
       Collection<RoutingStrategy.Outbound> routers1 = routerFactory.outboundManager.retrieveOutbounds(GoodMessageChild.class);
       Assert.assertEquals(routers, routers1);
       Assert.assertEquals(new ClusterId("test", "test-slot"), routerFactory.getThisClusterId());

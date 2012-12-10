@@ -10,6 +10,7 @@ import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.router.Router;
 
 @Ignore
 public class TestUtils
@@ -61,10 +62,16 @@ public class TestUtils
    }
 
    /**
-    * This allows tests to wait until a Dempsy application is completely up before
+    * <p>This allows tests to wait until a Dempsy application is completely up before
     * executing commands. Given the asynchronous nature of relationships between stages
     * of an application, often a test will need to wait until an entire application has
-    * been initialized.
+    * been initialized.</p>
+    * 
+    * <p>In the case of Dynamic Topology the Outbound's are not created until messages 
+    * are flowing through and therefore there is still a possibility that the Outbound's
+    * wont see this Dempsy instance immediately. Therefore, you cannot use this method
+    * and then expect this Dempsy to immediately be the destination for messages
+    * sent in some other part of the application.</p>
     */
    public static boolean waitForClustersToBeInitialized(long timeoutMillis, Dempsy dempsy) throws Throwable
    {
@@ -105,18 +112,25 @@ public class TestUtils
       return node.router.getClusterSession();
    }
    
-   public static Object getMp(Dempsy dempsy, String appName, String clusterName)
+   public static Dempsy.Application.Cluster.Node getNode(Dempsy dempsy, String appName, String clusterName)
    {
       Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId(appName,clusterName));
-      Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
-      return node.clusterDefinition.getMessageProcessorPrototype();
+      return cluster.getNodes().get(0); // currently there is one node per cluster.
+   }
+   
+   public static Object getMp(Dempsy dempsy, String appName, String clusterName)
+   {
+      return getNode(dempsy,appName,clusterName).clusterDefinition.getMessageProcessorPrototype();
    }
 
    public static Adaptor getAdaptor(Dempsy dempsy, String appName, String clusterName)
    {
-      Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId(appName,clusterName));
-      Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
-      return node.clusterDefinition.getAdaptor();
+      return getNode(dempsy,appName,clusterName).clusterDefinition.getAdaptor();
+   }
+   
+   public static Router getRouter(Dempsy dempsy, String appName, String clusterName)
+   {
+      return getNode(dempsy,appName,clusterName).router;
    }
 
 }

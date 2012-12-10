@@ -30,6 +30,7 @@ public class MicroShardUtils
    private String clusterDir;
    private String nodesDir;
    private String shardsDir;
+   private String transitionDir;
    
    public MicroShardUtils(ClusterId clusterId)
    {
@@ -37,6 +38,7 @@ public class MicroShardUtils
       this.clusterDir = getAppDir() + "/" + clusterId.getMpClusterName();
       this.nodesDir = getClusterDir()+"/nodes";
       this.shardsDir = getClusterDir()+"/shards";
+      this.transitionDir = getClusterDir() + "/transition";
    }
 
    /**
@@ -67,6 +69,8 @@ public class MicroShardUtils
     * the appropriate shardsDir subdirectory in order to accomplish an assignment.
     */
    public String getNodesDir() { return nodesDir; }
+   
+   public String getTransistionDir() { return transitionDir; }
 
    public String getShardsDir() { return shardsDir; }
 
@@ -99,6 +103,7 @@ public class MicroShardUtils
       mkClusterDir(session,obj);
       session.mkdir(getShardsDir(), DirMode.PERSISTENT);
       session.mkdir(getNodesDir(), DirMode.PERSISTENT);
+      session.mkdir(getTransistionDir(), DirMode.PERSISTENT);
    }
    
    public void mkManagerDir(ClusterInfoSession session) throws ClusterInfoException

@@ -57,6 +57,8 @@ import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
 import com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory;
 import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
 import com.nokia.dempsy.router.RegExClusterCheck;
+import com.nokia.dempsy.router.Router;
+import com.nokia.dempsy.router.TestUtilRouter;
 import com.nokia.dempsy.router.microshard.MicroShardUtils;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
@@ -474,8 +476,6 @@ public class TestZookeeperClusterResilience
          final FullApplication app = new FullApplication();
          ApplicationDefinition ad = app.getTopology();
 
-         assertEquals(0,processCount.intValue()); // no calls yet
-
          dempsy[0] = getDempsyFor(new ClusterId(FullApplication.class.getSimpleName(),FullApplication.MyAdaptor.class.getSimpleName()),ad);
          dempsy[0].setClusterSessionFactory(new ZookeeperSessionFactory("127.0.0.1:" + port,5000));
 
@@ -483,7 +483,6 @@ public class TestZookeeperClusterResilience
          dempsy[1].setClusterSessionFactory(new ZookeeperSessionFactory("127.0.0.1:" + port,5000));
 
          dempsy[2] = getDempsyFor(new ClusterId(FullApplication.class.getSimpleName(),FullApplication.MyRankMp.class.getSimpleName()),ad);
-//         dempsy[2].setClusterSessionFactory(new ZookeeperSessionFactory<ClusterInformation, SlotInformation>("127.0.0.1:" + port,5000));
          
          dempsy[2].setClusterSessionFactory(new ClusterInfoSessionFactory()
          {
@@ -498,6 +497,10 @@ public class TestZookeeperClusterResilience
          dempsy[2].start();
          dempsy[1].start();
          dempsy[0].start();
+
+         assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy[0]));
+         assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy[1]));
+         assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy[2]));
 
          // make sure the final count is incrementing
          long curCount = app.finalMessageCount.get();
@@ -531,7 +534,6 @@ public class TestZookeeperClusterResilience
             {
                return app.finalMessageCount.get() > (o + 100L);
             }
-            
          }));
          
          //====================================================================
@@ -549,6 +551,8 @@ public class TestZookeeperClusterResilience
          dempsy[3] = getDempsyFor(cid2,cd2);
          dempsy[3].setClusterSessionFactory(new ZookeeperSessionFactory("127.0.0.1:" + port,5000));
          dempsy[3].start();
+         
+         assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy[3]));
          
          // wait for the dispatcher to be set
          assertTrue(poll(baseTimeoutMillis,anotherAdaptor,new Condition<AnotherAdaptor>() {
@@ -594,6 +598,9 @@ public class TestZookeeperClusterResilience
          server = new ZookeeperTestServer();
          server.start();
          
+         // This wont initialize until the server is available.
+         assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy[4]));
+
          app.finalMessageCount.set(0);
          MyRankAgain.called.set(0);
          
@@ -603,26 +610,44 @@ public class TestZookeeperClusterResilience
             public boolean conditionMet(AnotherAdaptor o) { o.dispatcher.dispatch(new MyMessageCountChild(-1)); return (MyRankAgain.called.get() > 10) && app.finalMessageCount.get() > 10; }
          }));
          
-         // now stop the original adaptor
+         // now sever the original adaptor from the processing chain 
+         //  by shutting down the only cluster that it was sending data
+         //  to.
          dempsy[1].stop();
 
          // there's a race condition here ... some messages may still
          // trickle through from the above sending. This should avoid that
          // MOST of the time.
          assertTrue(dempsy[1].waitToBeStopped(baseTimeoutMillis));
-         Thread.sleep(100);
-
+         
          // now reset the counter
          MyMessageCountChild.hitCount.set(0);
+         Thread.sleep(100);
+
+         // This should remain at 0.
+         assertEquals(0,MyMessageCountChild.hitCount.get());
          
-         // send a couple messages
+         // This test periodically fails because there is a race condition where dempsy[4] isn't 
+         // yet seen by the OutboundManager for the anotherAdaptor (dempsy[3]). So let's wait for the Outbound to
+         // be set up before we try this.
+         Router router3 = TestUtils.getRouter(dempsy[3],FullApplication.class.getSimpleName(),AnotherAdaptor.class.getSimpleName());
+         assertTrue(TestUtils.poll(baseTimeoutMillis,router3,new Condition<Router>()
+         {
+            @Override
+            public boolean conditionMet(Router o) throws Throwable { return 2 == TestUtilRouter.numberOfKnownDestinationsForMessage(o, MyMessageCountChild.class); }
+         }));
+         
+         // send a messages. This should result in 2 Mps getting the message.
+         // one from dempsy[2] and dempsy[4]
          anotherAdaptor.dispatcher.dispatch(new MyMessageCountChild(-1));
          
          // now, because there are 2 ultimate destinations for this message, the hitCount should got to 2
          assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() {
             @Override
-            public boolean conditionMet(Object o) { return MyMessageCountChild.hitCount.get() > 1; }
+            public boolean conditionMet(Object o) { return MyMessageCountChild.hitCount.get() == 2; }
          }));
+         Thread.sleep(100);
+         assertEquals(2,MyMessageCountChild.hitCount.get());
       }
       finally
       {
@@ -635,6 +660,10 @@ public class TestZookeeperClusterResilience
          for (int i = 0; i < dempsy.length; i++)
             if (dempsy[i] != null)
                dempsy[i].stop();
+
+         for (int i = 0; i < dempsy.length; i++)
+            if (dempsy[i] != null)
+               assertTrue(dempsy[i].waitToBeStopped(baseTimeoutMillis));
       }
    }
 

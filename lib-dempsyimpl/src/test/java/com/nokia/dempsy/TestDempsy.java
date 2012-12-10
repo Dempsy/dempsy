@@ -315,8 +315,17 @@ public class TestDempsy extends DempsyTestBase
                         long count = 0;
                         while (!stopSending.get())
                         {
-                           adaptor.pushMessage(new TestMessage("Hello:" + count++));
-                           try { Thread.sleep(1); } catch (Throwable th) {}
+                           try
+                           {
+                              adaptor.pushMessage(new TestMessage("Hello:" + count++));
+                              try { Thread.sleep(10); } catch (Throwable th) {}
+                           }
+                           catch (RuntimeException th)
+                           {
+                              System.err.println("Failed in adaptor send. Test is likely to fail.");
+                              th.printStackTrace(System.err);
+                              throw th;
+                           }
                         }
                      }
                   });
@@ -324,17 +333,24 @@ public class TestDempsy extends DempsyTestBase
                   thread.setDaemon(true);
                   thread.start();
                   
-                  for (int i = 0; i < 10; i++)
+                  try
                   {
-                     logger.trace("=========================");
-                     dsess.disrupt();
-                     
-                     // now wait until more messages come through
-                     final long curCount = mp.handleCalls.get();
-                     assertTrue(poll(baseTimeoutMillis,mp, new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get() > curCount; } }));
+                     for (int i = 0; i < 10; i++)
+                     {
+                        logger.trace("=========================");
+                        dsess.disrupt();
+
+                        // now wait until more messages come through
+                        final long curCount = mp.handleCalls.get();
+                        assertTrue("Failed to increment calls on the " + i + "'th/nd/st try",
+                              poll(baseTimeoutMillis,mp, new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.handleCalls.get() > curCount; } }));
+                     }
                   }
-                  
-                  stopSending.set(true);
+                  finally
+                  {
+                     stopSending.set(true);
+                     thread.interrupt();
+                  }
                }
                
                public String toString() { return "testMessageThroughWithClusterFailure"; }
@@ -569,14 +585,14 @@ public class TestDempsy extends DempsyTestBase
             Thread.sleep(10);
             assertEquals(0,statsCollector.getMessageProcessorsCreated());
             
-            mp.failActivation.set("test1");
+            mp.failASingleActivationForThisKey.set("test1");
             TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
-            adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
+            adaptor.pushMessage(new TestMessage("test1")); // this causes the container to attempt clone the Mp
+                                                           //  but it fails in deference to the pre-instantiation
 
             Thread.sleep(100);
             assertEquals(0,statsCollector.getMessageProcessorsCreated());
             
-            mp.failActivation.set(null);
             KeySourceImpl.pause.countDown();
 
             // Wait for the 3 clone calls expected because of 1 failure plus

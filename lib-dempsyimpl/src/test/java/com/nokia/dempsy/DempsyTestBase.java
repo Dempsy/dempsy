@@ -198,7 +198,7 @@ public class DempsyTestBase
       public AtomicInteger cloneCalls = new AtomicInteger(0);
       public AtomicLong handleCalls = new AtomicLong(0);
       public static AtomicLong globalHandleCalls = new AtomicLong(0);
-      public AtomicReference<String> failActivation = new AtomicReference<String>();
+      public AtomicReference<String> failASingleActivationForThisKey = new AtomicReference<String>();
       public AtomicBoolean haveWaitedOnce = new AtomicBoolean(false);
       public static boolean activateCheckedException = false;
 
@@ -227,8 +227,9 @@ public class DempsyTestBase
             haveWaitedOnce.set(true);
          }
 
-         if (key.equals(failActivation.get()))
+         if (key.equals(failASingleActivationForThisKey.get()))
          {
+            failASingleActivationForThisKey.set(null); // reset the key
             String message = "Failed Activation For " + key;
             if (activateCheckedException)
                throw new ActivateCheckedException(message);

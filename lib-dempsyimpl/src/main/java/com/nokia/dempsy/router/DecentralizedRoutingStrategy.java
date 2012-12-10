@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -56,14 +57,14 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    private static Logger logger = LoggerFactory.getLogger(DecentralizedRoutingStrategy.class);
    
    protected int defaultTotalShards;
-   protected int defaultNumNodes;
+   protected int minNumberOfNodes;
    
    private ScheduledExecutorService scheduler_ = null;
    
-   public DecentralizedRoutingStrategy(int defaultTotalShards, int defaultNumNodes)
+   public DecentralizedRoutingStrategy(int defaultTotalShards, int minNumberOfNodes)
    {
       this.defaultTotalShards = defaultTotalShards;
-      this.defaultNumNodes = defaultNumNodes;
+      this.minNumberOfNodes = minNumberOfNodes;
    }
    
    public class OutboundManager implements RoutingStrategy.OutboundManager, ClusterInfoWatcher
@@ -75,6 +76,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       private Map<String,RoutingStrategy.Outbound> outboundsByCluster = new HashMap<String, RoutingStrategy.Outbound>();
       private Set<String> clustersToReconsult = new HashSet<String>();
       private MicroShardUtils msutils;
+      private ClusterStateMonitor monitor = null;
       
       private OutboundManager(ClusterInfoSession cluster, ClusterId clusterId, Collection<ClusterId> explicitClusterDestinations)
       {
@@ -86,6 +88,9 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       }
       
       @Override
+      public void setClusterStateMonitor(ClusterStateMonitor monitor) { this.monitor = monitor; }
+      
+      @Override
       public void process() { setup(); }
       
       /**
@@ -95,20 +100,16 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       public synchronized void stop()
       {
          // flatten out then stop all of the Outbounds
-         Collection<RoutingStrategy.Outbound> routers = getAllOutbounds();
+         Collection<RoutingStrategy.Outbound> routers = outboundsByCluster.values();
          routerMap = null;
          outboundsByCluster = null;
          for (RoutingStrategy.Outbound router : routers)
             ((Outbound)router).stop();
       }
       
-      @Override
-      public Collection<RoutingStrategy.Outbound> getAllOutbounds()
-      {
-         return outboundsByCluster.values();
-      }
-      
-      @Override
+      /**
+       * Called only from tests.
+       */
       public Collection<Class<?>> getTypesWithNoOutbounds()
       {
          Collection<Class<?>> ret = new HashSet<Class<?>>();
@@ -161,13 +162,22 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          return ret;
       }
       
+      // only called with the lock held.
       private void clearRouterMap()
       {
-         Collection<RoutingStrategy.Outbound> obs = getAllOutbounds();
-         for (RoutingStrategy.Outbound o : obs)
-            ((Outbound)o).stop();
+         Collection<RoutingStrategy.Outbound> obs = new HashSet<RoutingStrategy.Outbound>();
+         obs.addAll(outboundsByCluster.values());
          routerMap.clear();
          outboundsByCluster.clear();
+         for (RoutingStrategy.Outbound o : obs)
+         {
+            if (monitor != null)
+               // TODO: be more efficient here and attempt to see which clusters
+               // have actually changed
+               monitor.clusterStateChanged(o);
+
+            ((Outbound)o).stop();
+         }
       }
       
       @Override
@@ -331,7 +341,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          private AtomicReference<Destination[]> destinations = new AtomicReference<Destination[]>();
          private ClusterInfoSession clusterSession;
          private ClusterId clusterId;
-         private Object userData;
          private AtomicBoolean isRunning = new AtomicBoolean(true);
 
          private Outbound(ClusterInfoSession cluster, ClusterId clusterId)
@@ -363,6 +372,19 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          {
             execSetupDestinations();
          }
+         
+         @Override
+         public Collection<Destination> getKnownDestinations()
+         {
+            List<Destination> ret = new ArrayList<Destination>();
+            Destination[] destinationArr = destinations.get();
+            if (destinationArr == null)
+               return ret; // I guess we don't know about any
+            for (Destination d : destinationArr)
+               if (d != null)
+                  ret.add(d);
+            return ret;
+         }
 
          /**
           * Shut down and reclaim any resources associated with the {@link Outbound} instance.
@@ -388,12 +410,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             return ds.length != 0; // this method is only called in tests and this needs to be true there.
          }
 
-         @Override
-         public Object getUserData() { return userData; }
-
-         @Override
-         public void setUserData(Object userData) { this.userData = userData; }
-         
          @Override
          public boolean equals(Object other) {  return clusterId.equals(((Outbound)other).clusterId); }
          
@@ -481,10 +497,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             }
          }
       } // end Outbound class definition
-
-   }
+   } // end OutboundManager
    
-   private class Inbound implements RoutingStrategy.Inbound, ClusterInfoWatcher
+   
+   private class Inbound implements RoutingStrategy.Inbound
    {
       private Set<Integer> destinationsAcquired = new HashSet<Integer>();
       private ClusterInfoSession session;
@@ -505,49 +521,19 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          this.thisDestination = thisDestination;
          this.clusterId = clusterId;
          this.msutils = new MicroShardUtils(clusterId);
-         this.clusterInfo = new DefaultRouterClusterInfo(defaultTotalShards, defaultNumNodes, messageTypes);
-         acquireShards();
-      }
-
-      @Override
-      public void process()
-      {
-         acquireShards();
+         this.clusterInfo = new DefaultRouterClusterInfo(defaultTotalShards, minNumberOfNodes, messageTypes);
+         shardChangeWatcher.process(); // this invokes the acquireShards logic
       }
       
-      boolean alreadyHere = false;
-      boolean recurseAttempt = false;
-      ScheduledFuture<?> currentlyWaitingOn = null;
-      
-      private synchronized void acquireShards()
+      ClusterInfoWatcher shardChangeWatcher = new PersistentTask()
       {
-         if (!isRunning.get())
-            return;
-         
-         isInited.set(false);
-         boolean retry = true;
-         
-         try
+         public boolean execute() throws Throwable
          {
-            // we need to flatten out recursions
-            if (alreadyHere)
-            {
-               recurseAttempt = true;
-               return;
-            }
-            alreadyHere = true;
-            
-            // ok ... we're going to execute this now. So if we have an outstanding scheduled task we
-            // need to cancel it.
-            if (currentlyWaitingOn != null)
-            {
-               currentlyWaitingOn.cancel(false);
-               currentlyWaitingOn = null;
-            }
-            
             if (logger.isTraceEnabled())
                logger.trace("Resetting Inbound Strategy for cluster " + clusterId);
-            
+
+            isInited.set(false);
+
             Random random = new Random();
             boolean moreResponsitiblity = false;
             boolean lessResponsitiblity = false;
@@ -560,7 +546,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             Collection<Integer> shardsToReaquire = new ArrayList<Integer>();
             for (Integer destinationShard : destinationsAcquired)
             {
-               // select the coresponding shard information
+               // select the corresponding shard information
                DefaultRouterShardInfo shardInfo = shardNumbersToShards.get(destinationShard);
                if (shardInfo == null || !thisDestination.equals(shardInfo.getDestination()) || emptyShards.contains(Integer.toString(destinationShard)))
                   shardsToReaquire.add(destinationShard);
@@ -581,10 +567,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             }
             //==============================================================================
 
-            while(needToGrabMoreShards(session,defaultNumNodes,defaultTotalShards))
+            while(needToGrabMoreShards(minNumberOfNodes,defaultTotalShards))
             {
                int randomValue = random.nextInt(defaultTotalShards);
-               if(destinationsAcquired.contains(randomValue))
+               if(destinationsAcquired.contains(randomValue) || shardIsInTransition(randomValue))
                   continue;
                if (acquireShard(randomValue, defaultTotalShards, session, clusterId, thisDestination))
                {
@@ -592,45 +578,28 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   moreResponsitiblity = true;
                }
             }
-            
-            retry = false;
-            
+               
             if (logger.isTraceEnabled())
                logger.trace("Succesfully reset Inbound Strategy for cluster " + clusterId);
-            
+
             if (lessResponsitiblity || moreResponsitiblity)
-               listener.keyspaceResponsibilityChanged(this,lessResponsitiblity, moreResponsitiblity);
-         }
-         catch(ClusterInfoException e)
-         {
-            if (logger.isDebugEnabled())
-               logger.debug("Exception while acquiring micro-shards for " + clusterId, e);
-         }
-         finally
-         {
-            // if we never got the destinations set up then kick off a retry
-            if (recurseAttempt)
-               retry = true;
+               listener.keyspaceResponsibilityChanged(Inbound.this,lessResponsitiblity, moreResponsitiblity);
             
-            recurseAttempt = false;
-            alreadyHere = false;
-            
-            if (retry)
-            {
-               ScheduledExecutorService sched = getScheduledExecutor();
-               if (sched != null)
-                   currentlyWaitingOn = sched.schedule(new Runnable(){
-                     @Override
-                     public void run() { acquireShards(); }
-                  }, resetDelay, TimeUnit.MILLISECONDS);
-            }
-            else
-            {
-               disposeOfScheduler();
-               isInited.set(true);
-            }
+            return true;
          }
-      }
+      };
+      
+      PersistentTask nodeChangeWatcher = new PersistentTask()
+      {
+         public boolean execute() throws Throwable
+         {
+            if (logger.isTraceEnabled())
+               logger.trace("Nodes changed in cluster " + clusterId);
+            
+            return true;
+         }
+      };
+      
       
       @Override
       public boolean isInitialized() { return isInited.get(); }
@@ -641,12 +610,33 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          isRunning.set(false);
       }
       
-      private boolean needToGrabMoreShards(ClusterInfoSession clusterHandle,
-            int minNodeCount, int totalAddressNeeded) throws ClusterInfoException
+      private int getCurrentNodeCount() throws ClusterInfoException
       {
-         int addressInUse = clusterHandle.getSubdirs(msutils.getShardsDir(), null).size();
-         int maxShardsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)minNodeCount);
+         return session.getSubdirs(msutils.getNodesDir(), nodeChangeWatcher).size();
+      }
+      
+      private boolean needToGrabMoreShards(int minNumberOfNodes, int totalAddressNeeded) throws ClusterInfoException
+      {
+         int addressInUse = session.getSubdirs(msutils.getShardsDir(), null).size();
+         int currentNodeCount = getCurrentNodeCount();
+         int maxShardsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)(currentNodeCount < minNumberOfNodes ? minNumberOfNodes : currentNodeCount));
          return addressInUse < totalAddressNeeded && destinationsAcquired.size() < maxShardsForOneNode;
+      }
+      
+//      private boolean needToGiveUpMoreShards(int totalAddressNeeded) throws ClusterInfoException
+//      {
+//         int currentNodeCount = getCurrentNodeCount();
+//         if (currentNodeCount == 0)
+//            return false;
+//         int maxShardsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)currentNodeCount);
+//         return destinationsAcquired.size() > maxShardsForOneNode;
+//      }
+      
+      private boolean shardIsInTransition(int shardNum) throws ClusterInfoException
+      {
+         // the path would be the 
+         String shardDir = String.valueOf(shardNum);
+         return session.getSubdirs(msutils.getTransistionDir(), null).contains(shardDir);
       }
       
       @Override
@@ -654,7 +644,83 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       {
          return destinationsAcquired.contains(Math.abs(messageKey.hashCode()%defaultTotalShards));
       }
+      
+      private abstract class PersistentTask implements ClusterInfoWatcher
+      {
+         private boolean alreadyHere = false;
+         private boolean recurseAttempt = false;
+         private ScheduledFuture<?> currentlyWaitingOn = null;
+         
+         /**
+          * This should return <code>true</code> if the underlying execute was successful.
+          * It will be recalled until it does.
+          */
+         public abstract boolean execute() throws Throwable;
+         
+         @Override public void process() { executeUntilWorks(); }
 
+         private synchronized void executeUntilWorks()
+         {
+            if (!isRunning.get())
+               return;
+            
+            boolean retry = true;
+            
+            try
+            {
+               // we need to flatten out recursions
+               if (alreadyHere)
+               {
+                  recurseAttempt = true;
+                  return;
+               }
+               alreadyHere = true;
+               
+               // ok ... we're going to execute this now. So if we have an outstanding scheduled task we
+               // need to cancel it.
+               if (currentlyWaitingOn != null)
+               {
+                  currentlyWaitingOn.cancel(false);
+                  currentlyWaitingOn = null;
+               }
+               
+               retry = !execute();
+               
+               if (logger.isTraceEnabled())
+                  logger.trace("Nodes changed in cluster " + clusterId);
+               
+            }
+            catch (Throwable th)
+            {
+               if (logger.isDebugEnabled())
+                  logger.debug("Exception while " + this + " for " + clusterId, th);
+            }
+            finally
+            {
+               // if we never got the destinations set up then kick off a retry
+               if (recurseAttempt)
+                  retry = true;
+               
+               recurseAttempt = false;
+               alreadyHere = false;
+               
+               if (retry)
+               {
+                  ScheduledExecutorService sched = getScheduledExecutor();
+                  if (sched != null)
+                      currentlyWaitingOn = sched.schedule(new Runnable(){
+                        @Override
+                        public void run() { executeUntilWorks(); }
+                     }, resetDelay, TimeUnit.MILLISECONDS);
+               }
+               else
+               {
+                  disposeOfScheduler();
+                  isInited.set(true);
+               }
+            }
+         }
+      } // end PersistentTask abstract class definition
    } // end Inbound class definition
    
    @Override
@@ -700,10 +766,10 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       
       public DefaultRouterClusterInfo() {} // required for deserialize
       
-      public DefaultRouterClusterInfo(int totalShardCount, int nodeCount, Collection<Class<?>> messageClasses)
+      public DefaultRouterClusterInfo(int totalShardCount, int minNodeCount, Collection<Class<?>> messageClasses)
       {
          this.totalShardCount = totalShardCount;
-         this.minNodeCount = nodeCount;
+         this.minNodeCount = minNodeCount;
          if (messageClasses != null)
             this.messageClasses.addAll(messageClasses);
       }
@@ -719,12 +785,21 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
 
       @Override
       public String toString() { return "{ minNodeCount:" + minNodeCount + ", totalShardCount:" + totalShardCount + ", messageClasses:" + messageClasses + "}"; }
-
    }
    
    /**
     * Fill the map of shards to shardinfos for internal use. 
-    * @return the totalAddressCount from each shard. These are supposed to be repeated.
+    * 
+    * @param mapToFill is the map to fill from the ClusterInfo.
+    * @param emptyShards if not null, will have the shard path of any shards that exist but don't have 
+    * {@link DefaultRouterShardInfo} set yet. This can happen when there is a race between creating the
+    * EPHEMERAL directory for the shard but it's accessed from the fillMapFromActiveShards method
+    * prior to the owner having set the data on it.
+    * @param session is the ClusterInfoSession to get retrieve the data from.
+    * @param clusterInfo is the {@link DefaultRouterClusterInfo} for the cluster we're retrieving the shards for.
+    * @param watcher, if not null, will be set as the watcher on the shard directory for this cluster.
+    * @return the totalAddressCount from each shard. These are supposed to be repeated in each 
+    * {@link DefaultRouterShardInfo}.
     */
    private static int fillMapFromActiveShards(Map<Integer,DefaultRouterShardInfo> mapToFill, Collection<String> emptyShards, 
          ClusterInfoSession session, ClusterId clusterId, DefaultRouterClusterInfo clusterInfo, 
