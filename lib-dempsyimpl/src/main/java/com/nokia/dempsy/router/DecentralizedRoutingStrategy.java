@@ -563,8 +563,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                nodeDirs = session.getSubdirs(msutils.getClusterNodesDir(), this);
             }
             
-            logger.trace("CHECKING Nodedirs for " + msutils.getClusterNodesDir() + " is " + nodeDirs);
-
             Destination curDest = (Destination)session.getData(nodeDirectory, null);
             if (curDest == null)
                session.setData(nodeDirectory, thisDestination);
@@ -1031,7 +1029,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          if (dest != null)
             curRegisteredNodesCount++;
       }
-      logger.trace("ACQUIRE Nodedirs (" + curRegisteredNodesCount + ") for " + msutils.getClusterNodesDir() + " is " + nodeDirs);
       return curRegisteredNodesCount < minNodeCount ? minNodeCount : curRegisteredNodesCount;
    }
 

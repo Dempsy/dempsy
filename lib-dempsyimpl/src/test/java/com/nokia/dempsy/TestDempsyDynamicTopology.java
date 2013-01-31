@@ -190,7 +190,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
             { "SinglestageApplication/appdef.xml","SinglestageApplication/cluster1.xml" } 
       };
       
-      runAllCombinationsMultiDempsy(null, ctxs );
+      runAllCombinations(null, ctxs );
    }
 
    @Test
@@ -200,8 +200,8 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
             { "SinglestageApplication/appdef.xml","SinglestageApplication/cluster0.xml" },
             { "SinglestageApplication/appdef.xml","SinglestageApplication/cluster1.xml" } 
       };
-      runAllCombinationsMultiDempsy(
-            new MultiCheck()
+      runAllCombinations(
+            new Checker()
             {
                @Override
                public void check(ApplicationContext[] context) throws Throwable

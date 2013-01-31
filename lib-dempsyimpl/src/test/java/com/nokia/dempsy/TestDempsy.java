@@ -684,7 +684,7 @@ public class TestDempsy extends DempsyTestBase
       for (int i = 0; i < nodeCount; i++)
          acts[i] = new String[]{ "SimpleMultistageApplicationWithExecutorActx.xml" };
                
-      runAllCombinationsMultiDempsy(new MultiCheck()
+      runAllCombinations(new Checker()
       {
          @Override
          public void check(ApplicationContext[] actx) throws Throwable
