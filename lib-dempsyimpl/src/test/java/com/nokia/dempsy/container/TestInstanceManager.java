@@ -34,7 +34,7 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.container.MpContainer.InstanceWrapper;
+import com.nokia.dempsy.container.internal.InstanceWrapper;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
@@ -256,7 +256,7 @@ public class TestInstanceManager
       InstanceWrapper wrapper = manager.getInstanceForDispatch(message);
       assertEquals("instance was created", 1, manager.getProcessorCount());
 
-      CombinedMP instance = (CombinedMP)wrapper.getInstance();
+      CombinedMP instance = (CombinedMP)wrapper.ecnatsnIteg();
       // activation is now inline with insantiation so it's active immediately
 //      assertEquals("instance not already activated", 0, instance.activationCount);
       assertEquals("instance activated", 1, instance.activationCount);
@@ -294,7 +294,7 @@ public class TestInstanceManager
       MessageOne message1 = new MessageOne(123);
       InstanceWrapper wrapper1 = manager.getInstanceForDispatch(message1);
       manager.dispatch(message1, false);
-      CombinedMP instance = (CombinedMP)wrapper1.getInstance();
+      CombinedMP instance = (CombinedMP)wrapper1.ecnatsnIteg();
 
       assertEquals("instance was created", 1, manager.getProcessorCount());
 
@@ -338,7 +338,7 @@ public class TestInstanceManager
                  wrapper, manager.getInstanceForDispatch(message2));
       manager.dispatch(message2, false);
 
-      CombinedMP instance = (CombinedMP)wrapper.getInstance();
+      CombinedMP instance = (CombinedMP)wrapper.ecnatsnIteg();
       assertEquals("no other instance was created", 1, manager.getProcessorCount());
 
       assertEquals("instance activated", 1, instance.activationCount);
@@ -364,7 +364,7 @@ public class TestInstanceManager
       MessageOne message1 = new MessageOne(123);
       InstanceWrapper wrapper = manager.getInstanceForDispatch(message1);
       manager.dispatch(message1, true);
-      CombinedMP instance = (CombinedMP)wrapper.getInstance();
+      CombinedMP instance = (CombinedMP)wrapper.ecnatsnIteg();
 
       assertEquals("instance was created", 1, manager.getProcessorCount());
 
@@ -401,12 +401,12 @@ public class TestInstanceManager
       MessageOne message1 = new MessageOne(123);
       InstanceWrapper wrapper1 = manager.getInstanceForDispatch(message1);
       manager.dispatch(message1, true);
-      CombinedMP instance1 = (CombinedMP)wrapper1.getInstance();
+      CombinedMP instance1 = (CombinedMP)wrapper1.ecnatsnIteg();
 
       MessageOne message2 = new MessageOne(456);
       InstanceWrapper wrapper2 = manager.getInstanceForDispatch(message2);
       manager.dispatch(message2, false);
-      CombinedMP instance2 = (CombinedMP)wrapper2.getInstance();
+      CombinedMP instance2 = (CombinedMP)wrapper2.ecnatsnIteg();
 
       assertEquals("instances were created", 2, manager.getProcessorCount());
 
@@ -439,10 +439,10 @@ public class TestInstanceManager
 
       instanceManager.outputPass();
 
-      OutputTestMP mp1 = (OutputTestMP)wrapper1.getInstance();
+      OutputTestMP mp1 = (OutputTestMP)wrapper1.ecnatsnIteg();
       assertTrue("MP1 output did not occur after activation", mp1.activationTime < mp1.outputTime);
 
-      OutputTestMP mp2 = (OutputTestMP)wrapper2.getInstance();
+      OutputTestMP mp2 = (OutputTestMP)wrapper2.ecnatsnIteg();
       assertTrue("MP2 output did not occur after activation", mp2.activationTime < mp2.outputTime);
       assertTrue(mp1 != mp2);
 
@@ -501,7 +501,7 @@ public class TestInstanceManager
       manager.dispatch(message, false);
       assertEquals("instance was created", 1, manager.getProcessorCount());
 
-      CombinedMP instance = (CombinedMP)wrapper.getInstance();
+      CombinedMP instance = (CombinedMP)wrapper.ecnatsnIteg();
 
       assertEquals("instance activated", 1, instance.activationCount);
       assertTrue("real activation time", instance.activationTime > 0);
