@@ -183,22 +183,21 @@ public class TestDempsy extends DempsyTestBase
    @Test
    public void testStartupShutdown() throws Throwable
    {
-      runAllCombinations("SimpleMultistageApplicationActx.xml", new Checker()
+      runAllCombinations(new Checker()
       {
          @Override
          public void check(ApplicationContext context) throws Throwable { }
          
          public String toString() { return "testStartupShutdown"; }
 
-      });
+      },"SimpleMultistageApplicationActx.xml");
 
    }
    
    @Test
    public void testMpStartMethod() throws Throwable
    {
-      runAllCombinations("SinglestageApplicationActx.xml",
-          new Checker()   
+      runAllCombinations(new Checker()   
             {
                @Override
                public void check(ApplicationContext context) throws Throwable
@@ -227,14 +226,13 @@ public class TestDempsy extends DempsyTestBase
                }
                
                public String toString() { return "testMPStartMethod"; }
-            });
+            }, "SinglestageApplicationActx.xml");
    }
    
    @Test
    public void testMessageThrough() throws Throwable
    {
-      runAllCombinations("SinglestageApplicationActx.xml",
-            new Checker()
+      runAllCombinations(new Checker()
             {
                @Override
                public void check(ApplicationContext context) throws Throwable
@@ -269,14 +267,13 @@ public class TestDempsy extends DempsyTestBase
                }
                
                public String toString() { return "testMessageThrough"; }
-            });
+            }, "SinglestageApplicationActx.xml");
    }
    
    @Test
    public void testMessageThroughWithClusterFailure() throws Throwable
    {
-      runAllCombinations("SinglestageApplicationActx.xml",
-            new Checker()
+      runAllCombinations(new Checker()
             {
                @Override
                public void check(ApplicationContext context) throws Throwable
@@ -355,15 +352,14 @@ public class TestDempsy extends DempsyTestBase
                }
                
                public String toString() { return "testMessageThroughWithClusterFailure"; }
-            });
+            },"SinglestageApplicationActx.xml");
    }
 
    
    @Test
    public void testOutPutMessage() throws Throwable
    {
-      runAllCombinations("SinglestageOutputApplicationActx.xml",
-            new Checker()
+      runAllCombinations(new Checker()
             {
                @Override
                public void check(ApplicationContext context) throws Throwable
@@ -381,7 +377,7 @@ public class TestDempsy extends DempsyTestBase
                
                public String toString() { return "testOutPutMessage"; }
 
-            });
+            }, "SinglestageOutputApplicationActx.xml");
    }
 
 
@@ -392,8 +388,7 @@ public class TestDempsy extends DempsyTestBase
       //  we need to drop the number of attempt to 3. Otherwise this test
       //  takes way too long.
       TestMp.currentOutputCount = 3;
-      runAllCombinations("SinglestageOutputApplicationActx.xml",
-            new Checker()
+      runAllCombinations(new Checker()
             {
                @Override
                public void check(ApplicationContext context) throws Throwable
@@ -411,21 +406,20 @@ public class TestDempsy extends DempsyTestBase
                
                public String toString() { return "testCronOutPutMessage"; }
 
-            });
+            },"SinglestageOutputApplicationActx.xml");
    }
 
    @Test
    public void testExplicitDesintationsStartup() throws Throwable
    {
-      runAllCombinations("MultistageApplicationExplicitDestinationsActx.xml",
-            new Checker()
+      runAllCombinations(new Checker()
             {
                @Override
                public void check(ApplicationContext context) throws Throwable { }
                
                public String toString() { return "testExplicitDesintationsStartup"; }
 
-            });
+            },"MultistageApplicationExplicitDestinationsActx.xml");
    }
    
    @Test
@@ -489,8 +483,8 @@ public class TestDempsy extends DempsyTestBase
          public String toString() { return methodName; }
       };
 
-      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml", checker);
-      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml", checker);
+      runAllCombinations(checker, "SinglestageWithKeyStoreApplicationActx.xml");
+      runAllCombinations(checker, "SinglestageWithKeyStoreAndExecutorApplicationActx.xml");
    }
    
    @Test
@@ -562,8 +556,8 @@ public class TestDempsy extends DempsyTestBase
          public String toString() { return "testOverlappingKeyStoreCalls"; }
       };
       
-      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
-      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
+      runAllCombinations(checker, "SinglestageWithKeyStoreApplicationActx.xml");
+      runAllCombinations(checker, "SinglestageWithKeyStoreAndExecutorApplicationActx.xml");
    }
    
    @Test
@@ -631,9 +625,9 @@ public class TestDempsy extends DempsyTestBase
       // make sure both exceptions are handled since the logic in the container
       // actually varies depending on whether or not the exception is checked or not.
       TestMp.activateCheckedException = true;
-      runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
+      runAllCombinations(checker,"SinglestageWithKeyStoreApplicationActx.xml");
       TestMp.activateCheckedException = false;
-      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
+      runAllCombinations(checker,"SinglestageWithKeyStoreAndExecutorApplicationActx.xml");
    }
 
    @Test

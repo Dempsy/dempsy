@@ -434,11 +434,6 @@ public class DempsyTestBase
 
    }
 
-   public void runAllCombinations(String applicationContext, Checker checker) throws Throwable
-   {
-      runAllCombinations(checker,applicationContext);
-   }
-
    static int runCount = 0;
    public void runAllCombinations(Checker checker, String... applicationContexts) throws Throwable
    {
