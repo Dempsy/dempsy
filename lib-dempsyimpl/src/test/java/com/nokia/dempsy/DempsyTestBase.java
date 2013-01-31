@@ -90,6 +90,8 @@ public class DempsyTestBase
          // the blockingqueue Destination is not serializable but zookeeper requires it to be
          new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
    });
+   
+   public static String defaultClusterCheck;
 
    public static InitZookeeperServerBean zkServer = null;
 
@@ -138,6 +140,7 @@ public class DempsyTestBase
       TestMp.alwaysPauseOnActivation = false;
       System.setProperty("nodecount","1");
       TestZookeeperSessionFactory.useSingletonSession = false;
+      defaultClusterCheck = "testDempsy/ClusterCheck-AlwaysInCurrentCluster.xml";
    }
 
    public static class TestMessage implements Serializable
@@ -467,9 +470,9 @@ public class DempsyTestBase
                               if (checker != null)
                                  checker.setup();
 
-                              int count = 5;
+                              int count = 6;
                               String[] ctx = new String[count + applicationContexts.length];
-                              ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer; ctx[4] = routingStrategy;
+                              ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer; ctx[4] = routingStrategy; ctx[5] = defaultClusterCheck;
 
                               for (String appctx : applicationContexts)
                                  ctx[count++] = "testDempsy/" + appctx;
@@ -574,9 +577,9 @@ public class DempsyTestBase
                               // instantiate each Dempsy
                               for (String[] applicationContexts : applicationContextsArray)
                               {
-                                 int count = 5;
+                                 int count = 6;
                                  String[] ctx = new String[count + applicationContexts.length];
-                                 ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer; ctx[4] = routingStrategy;
+                                 ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer; ctx[4] = routingStrategy; ctx[5] = defaultClusterCheck;
 
                                  for (String appctx : applicationContexts)
                                     ctx[count++] = "testDempsy/" + appctx;

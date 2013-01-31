@@ -31,13 +31,15 @@ import com.nokia.dempsy.config.ClusterId;
  */
 public class RegExClusterCheck implements CurrentClusterCheck
 {
-   private ClusterId currentCluster = null;
-   private Pattern clusterNamePattern = null;
+   private final ClusterId currentCluster;
+   private final Pattern clusterNamePattern;
    
    public RegExClusterCheck(String applicationName, String regExpClusterName)
    {
       this(new ClusterId(applicationName,regExpClusterName));
    }
+   
+   public RegExClusterCheck(String regExpClusterName) { this(new ClusterId("",regExpClusterName)); }
    
    /**
     * Construct a {@link RegExClusterCheck} that matches the given clusterId. The 

@@ -155,6 +155,7 @@ public class TestDempsy extends DempsyTestBase
                "testDempsy/ClusterInfo-LocalActx.xml",
                "testDempsy/Serializer-KryoActx.xml",
                "testDempsy/RoutingStrategy-DecentralizedActx.xml",
+               defaultClusterCheck,
                "testDempsy/SimpleMultistageApplicationActx.xml"
                );
          actx.registerShutdownHook();

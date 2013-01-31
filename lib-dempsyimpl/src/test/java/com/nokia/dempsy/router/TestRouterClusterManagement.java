@@ -53,10 +53,7 @@ public class TestRouterClusterManagement
       public String key() { return "hello"; }
    }
    
-   public static class GoodMessageChild extends GoodMessage
-   {
-   }
-   
+   public static class GoodMessageChild extends GoodMessage {  }
    
    @MessageProcessor
    public static class GoodTestMp
@@ -147,7 +144,9 @@ public class TestRouterClusterManagement
       System.setProperty("nodecount", "1");
       ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
             "testDempsy/Dempsy.xml", "testDempsy/ClusterInfo-LocalActx.xml", "testDempsy/Serializer-KryoActx.xml",
-            "testDempsy/RoutingStrategy-DecentralizedActx.xml", "testDempsy/Transport-PassthroughActx.xml", "testDempsy/SimpleMultistageApplicationActx.xml" );
+            "testDempsy/RoutingStrategy-DecentralizedActx.xml", "testDempsy/Transport-PassthroughActx.xml",
+            "testDempsy/ClusterCheck-AlwaysInCurrentCluster.xml", 
+            "testDempsy/SimpleMultistageApplicationActx.xml" );
       Dempsy dempsy = (Dempsy)context.getBean("dempsy");
       ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
       ClusterInfoSession session = factory.createSession();

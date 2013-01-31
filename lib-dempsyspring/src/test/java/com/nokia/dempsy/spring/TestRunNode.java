@@ -53,6 +53,7 @@ public class TestRunNode
       System.setProperty(RunNode.appdefParam, "TestDempsyApplication.xml");
       System.setProperty(RunNode.applicationParam, "test-app:test-cluster");
       System.setProperty(RunNode.zk_connectParam, "127.0.0.1:2081");
+      System.setProperty(RunNode.min_num_nodes_per_clusterParam, "1");
 
       // reset the grabber
       SimpleAppForTesting.grabber.set(null);
@@ -156,7 +157,6 @@ public class TestRunNode
             assertFalse(dempsy.isRunning());
 
             assertFalse(failed);
-            
          }
          
          public String toString() { return "testNormalStartup"; }

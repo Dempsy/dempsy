@@ -11,6 +11,7 @@ import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.router.DecentralizedRoutingStrategy;
 import com.nokia.dempsy.router.Router;
 
 @Ignore
@@ -73,6 +74,13 @@ public class TestUtils
     * wont see this Dempsy instance immediately. Therefore, you cannot use this method
     * and then expect this Dempsy to immediately be the destination for messages
     * sent in some other part of the application.</p>
+    * 
+    * <p>This method defers to the strategyInbound to see if the cluster is initialized. In 
+    * the case of the {@link DecentralizedRoutingStrategy} that means none of the nodes in a 
+    * cluster will be considered initialized until they all are. The {@link DecentralizedRoutingStrategy}
+    * checks to make sure that all of the shards are claimed before any returns true to the
+    * isInitialized call. That means that you need to start at least min_num_nodes_per_clusterParam,
+    * which is defaulted to 3, before waitForClustersToBeInitialized will return for any.
     */
    public static boolean waitForClustersToBeInitialized(long timeoutMillis, Dempsy dempsy) throws Throwable
    {
