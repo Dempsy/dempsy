@@ -451,6 +451,8 @@ public class TestZookeeperClusterResilience
    @Test
    public void testSessionExpiredWithFullAppPlusDynamicAdditions() throws Throwable
    {
+      logger.trace("Running test testSessionExpiredWithFullAppPlusDynamicAdditions");
+      
       // now lets startup the server.
       ZookeeperTestServer server = null;
       final AtomicReference<ZookeeperSession> sessionRef = new AtomicReference<ZookeeperSession>();
@@ -623,7 +625,7 @@ public class TestZookeeperClusterResilience
          // now reset the counter
          MyMessageCountChild.hitCount.set(0);
          Thread.sleep(100);
-
+         
          // This should remain at 0.
          assertEquals(0,MyMessageCountChild.hitCount.get());
          
@@ -637,10 +639,22 @@ public class TestZookeeperClusterResilience
             public boolean conditionMet(Router o) throws Throwable { return 2 == TestUtilRouter.numberOfKnownDestinationsForMessage(o, MyMessageCountChild.class); }
          }));
          
+         // now that the destinations are known we need to wait until the outbounds are initialized.
+         assertTrue(TestUtils.poll(baseTimeoutMillis,router3,new Condition<Router>()
+         {
+            @Override
+            public boolean conditionMet(Router o) throws Throwable { return TestUtilRouter.allOutboundsInitialized(o, MyMessageCountChild.class); }
+         }));
+         
+         
+         logger.trace("********* Sending one message. Should result in two hits. ****************");
+
          // send a messages. This should result in 2 Mps getting the message.
          // one from dempsy[2] and dempsy[4]
          anotherAdaptor.dispatcher.dispatch(new MyMessageCountChild(-1));
          
+         logger.trace("********* Sent one message. Should result in two hits. ****************");
+
          // now, because there are 2 ultimate destinations for this message, the hitCount should got to 2
          assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() {
             @Override
@@ -651,6 +665,8 @@ public class TestZookeeperClusterResilience
       }
       finally
       {
+         logger.trace("Finishing test testSessionExpiredWithFullAppPlusDynamicAdditions");
+
          if (server != null)
             server.shutdown();
          
@@ -664,6 +680,8 @@ public class TestZookeeperClusterResilience
          for (int i = 0; i < dempsy.length; i++)
             if (dempsy[i] != null)
                assertTrue(dempsy[i].waitToBeStopped(baseTimeoutMillis));
+
+         logger.trace("Finished test testSessionExpiredWithFullAppPlusDynamicAdditions");
       }
    }
 

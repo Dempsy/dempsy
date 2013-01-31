@@ -1,5 +1,6 @@
 package com.nokia.dempsy;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.junit.Ignore;
@@ -84,10 +85,20 @@ public class TestUtils
          @Override
          public boolean conditionMet(Dempsy dempsy)
          {
+            Collection<Dempsy.Application> apps = dempsy.applications.values();
+            if (apps == null || apps.size() == 0)
+               return false;
+            
             for (Dempsy.Application app : dempsy.applications.values())
             {
+               if (app.appClusters == null || app.appClusters.size() == 0)
+                  return false;
+               
                for (Dempsy.Application.Cluster cl : app.appClusters)
                {
+                  if (cl.getNodes() == null || cl.getNodes().size() == 0)
+                     return false;
+                  
                   for (Dempsy.Application.Cluster.Node cd : cl.getNodes())
                   {
                      if (cd.strategyInbound != null && !cd.strategyInbound.isInitialized())

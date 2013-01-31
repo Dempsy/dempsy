@@ -54,6 +54,7 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.router.RoutingStrategy.Outbound;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
+import com.nokia.dempsy.util.Pair;
 
 /**
  * <p>This class implements the routing for all messages leaving a node. Please note:
@@ -274,8 +275,9 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
       Sender sender = null;
       try
       {
-         Destination destination = strategyOutbound.selectDestinationForMessage(key, message);
+         Pair<Destination,Object> destinationPair = strategyOutbound.selectDestinationForMessage(key, message);
 
+         Destination destination = destinationPair == null ? null : destinationPair.getFirst();
          if (destination == null)
          {
             if (logger.isInfoEnabled())

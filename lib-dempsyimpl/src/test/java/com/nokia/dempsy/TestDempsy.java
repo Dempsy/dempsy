@@ -458,6 +458,10 @@ public class TestDempsy extends DempsyTestBase
 
             // The KeySourceImpl ought to create 2 Mps (given infinite is 'false'). Wait for them
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
+
+            // now make sure the Inbound's have been reset ... in the case of a disruption the send will 
+            // fail until the session is back and the Inbound's are reset.
+            TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy);
             
             TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
             adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone a third Mp
@@ -535,7 +539,7 @@ public class TestDempsy extends DempsyTestBase
             KeySourceImpl.infinite = false;
 
             // Now force another call while the first is running
-            container.keyspaceResponsibilityChanged(node.strategyInbound, false, true);
+            container.keyspaceResponsibilityChanged(false, true);
             
             // wait until the second one is created
             assertTrue(poll(baseTimeoutMillis,null,new Condition<Object>() { @Override public boolean conditionMet(Object mp) {  return KeySourceImpl.lastCreated != null && firstCreated != KeySourceImpl.lastCreated; } }));
@@ -701,8 +705,6 @@ public class TestDempsy extends DempsyTestBase
          public String toString() { return "testMultiNodeDempsy"; }
          
       },acts);
-      
-
    }
 
 }

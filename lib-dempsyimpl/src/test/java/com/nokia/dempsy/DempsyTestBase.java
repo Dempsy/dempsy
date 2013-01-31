@@ -50,6 +50,7 @@ import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 
 public class DempsyTestBase
@@ -157,6 +158,8 @@ public class DempsyTestBase
          return o == null ? false :
             String.valueOf(val).equals(String.valueOf(((TestMessage)o).val)); 
       }
+      
+      public String toString() { return "{" + val + "}"; }
    }
 
    public static class TestKryoOptimizer implements KryoOptimizer
@@ -285,6 +288,7 @@ public class DempsyTestBase
 
       public void pushMessage(Object message)
       {
+         logger.trace(TestAdaptor.class.getSimpleName() + " is pushing " + SafeString.objectDescription(message));
          lastSent = message;
          dispatcher.dispatch(message);
       }
@@ -449,7 +453,7 @@ public class DempsyTestBase
                         {
                            String pass = Arrays.asList(applicationContexts).toString() + " test: " + (checker == null ? "none" : checker) + " using " + 
                                  dempsyConfig + "," + clusterManager + "," + serializer + "," + transport + "," + routingStrategy;
-
+                           
                            ClassPathXmlApplicationContext actx = null;
                            Thread waitingForShutdownThread = null;
                            WaitForShutdown waitingForShutdown = null;

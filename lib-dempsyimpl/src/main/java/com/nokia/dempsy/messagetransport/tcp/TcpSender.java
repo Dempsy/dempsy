@@ -70,7 +70,7 @@ public class TcpSender implements Sender
    
    protected void stop()
    {
-      
+      connection.stop(this);
    }
    
 }

@@ -102,6 +102,8 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    private volatile boolean isRunning = true;
    
    private DempsyExecutor executor = null;
+   
+   private RoutingStrategy.Inbound strategyInbound = null;
 
    public MpContainer(ClusterId clusterId) { this.clusterId = clusterId; }
 
@@ -199,6 +201,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       if (outputConcurrency > 0)
          setupOutputConcurrency();
    }
+   
+   @Override
+   public void setInboundStrategy(RoutingStrategy.Inbound strategyInbound) { this.strategyInbound = strategyInbound; }
    
    /**
     * Run any methods annotated PreInitilze on the MessageProcessor prototype
@@ -469,7 +474,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    final RunningEventSwitch contract = new RunningEventSwitch();
    final Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
    
-   private void runExpandKeyspace(final RoutingStrategy.Inbound strategyInbound)
+   private void runExpandKeyspace()
    {
       List<Future<Object>> futures = new ArrayList<Future<Object>>();
       expand.workerInitiateRun();
@@ -483,6 +488,8 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             if (expand.wasPreempted() || !isRunning)
                break;
             
+            // strategyInbound can't be null if we're in runExpandKeyspace since it was invoked 
+            //  indirectly from it. So here we don't need to check for null.
             if(strategyInbound.doesMessageKeyBelongToNode(key))
             {
                Callable<Object> callable = new Callable<Object>()
@@ -527,7 +534,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    }
    
    @Override
-   public void keyspaceResponsibilityChanged(final RoutingStrategy.Inbound strategyInbound, boolean less, boolean more)
+   public void keyspaceResponsibilityChanged(boolean less, boolean more)
    {
       synchronized(keyspaceResponsibilityChangedLock)
       {
@@ -548,6 +555,8 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                      {
                         // we shouldEvict if the message key no longer belongs as 
                         //  part of this container.
+                        // strategyInbound can't be null if we're here since this was invoked 
+                        //  indirectly from it. So here we don't need to check for null.
                         @Override
                         public boolean shouldEvict(Object key, InstanceWrapper wrapper) { return !strategyInbound.doesMessageKeyBelongToNode(key); }
                         // In this case, it's evictable.
@@ -575,7 +584,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             Thread t = new Thread(new Runnable()
             {
                @Override
-               public void run() { runExpandKeyspace(strategyInbound);  }
+               public void run() { runExpandKeyspace();  }
             }, "Pre-Instantation Thread");
             t.setDaemon(true);
             t.start();

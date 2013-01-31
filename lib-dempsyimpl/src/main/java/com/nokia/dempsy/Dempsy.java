@@ -123,6 +123,9 @@ public class Dempsy
                   router.setClusterSession(clusterSession);
                   // get the executor if one is set
                   
+                  //=============================================================================
+                  // Initialize the container
+                  //=============================================================================
                   container = new MpContainer(currentClusterId);
                   container.setDispatcher(router);
                   if (executor != null)
@@ -130,11 +133,15 @@ public class Dempsy
                   Object messageProcessorPrototype = clusterDefinition.getMessageProcessorPrototype();
                   if (messageProcessorPrototype != null)
                     container.setPrototype(messageProcessorPrototype);
-                  acceptedMessageClasses = getAcceptedMessages(clusterDefinition);
-                  
                   Serializer<Object> serializer = (Serializer<Object>)clusterDefinition.getSerializer();
                   if (serializer != null)
                      container.setSerializer(serializer);
+                  KeySource<?> keySource = clusterDefinition.getKeySource();
+                  if (keySource != null)
+                     container.setKeySource(keySource);
+                  //=============================================================================
+                  
+                  acceptedMessageClasses = getAcceptedMessages(clusterDefinition);
                   
                   // there is only a reciever if we have an Mp (that is, we aren't an adaptor) and start accepting messages 
                   Destination thisDestination = null;
@@ -161,10 +168,6 @@ public class Dempsy
 
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
                   
-                  KeySource<?> keySource = clusterDefinition.getKeySource();
-                  if (keySource != null)
-                     container.setKeySource(keySource);
-
                   // there is only an inbound strategy if we have an Mp (that is, we aren't an adaptor) and
                   // we actually accept messages
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
@@ -261,17 +264,6 @@ public class Dempsy
          }
          
          public List<Node> getNodes() { return nodes; }
-         
-         /**
-          * This is only public for testing - DO NOT CALL!
-          * @throws DempsyException
-          */
-         public void instantiateAndStartAnotherNodeForTesting() throws DempsyException
-         {
-            Node node = new Node(clusterDefinition);
-            nodes.add(node);
-            node.start();
-         }
          
       } // end Cluster Definition
       
@@ -638,7 +630,10 @@ public class Dempsy
             if (timeInMillis < 0)
                isRunningEvent.wait();
             else
+            {
                isRunningEvent.wait(timeInMillis);
+               break;
+            }
          }
 
          if (traceEnabled)

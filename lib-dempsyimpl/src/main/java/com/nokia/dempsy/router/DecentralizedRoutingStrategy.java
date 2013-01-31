@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -45,6 +46,7 @@ import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.router.microshard.MicroShardUtils;
+import com.nokia.dempsy.util.Pair;
 
 /**
  * This Routing Strategy uses the {@link MpCluster} to negotiate with other instances in the 
@@ -60,6 +62,15 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    protected int minNumberOfNodes;
    
    private ScheduledExecutorService scheduler_ = null;
+   
+   public static final class ShardInfo
+   {
+      final int shard;
+      
+      public ShardInfo(int shard) { this.shard = shard; }
+      
+      public final int getShard() { return shard; }
+   }
    
    public DecentralizedRoutingStrategy(int defaultTotalShards, int minNumberOfNodes)
    {
@@ -110,7 +121,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       /**
        * Called only from tests.
        */
-      public Collection<Class<?>> getTypesWithNoOutbounds()
+      protected Collection<Class<?>> getTypesWithNoOutbounds()
       {
          Collection<Class<?>> ret = new HashSet<Class<?>>();
          for (Map.Entry<Class<?>, Set<RoutingStrategy.Outbound>> entry : routerMap.entrySet())
@@ -328,7 +339,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             for (String cur : successful)
                clustersToReconsult.remove(cur);
          }
-
       }
 
       private synchronized void setup()
@@ -354,7 +364,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          public ClusterId getClusterId() { return clusterId; }
 
          @Override
-         public Destination selectDestinationForMessage(Object messageKey, Object message) throws DempsyException
+         public Pair<Destination,Object> selectDestinationForMessage(Object messageKey, Object message) throws DempsyException
          {
             Destination[] destinationArr = destinations.get();
             if (destinationArr == null)
@@ -364,7 +374,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             if (length == 0)
                return null;
             int calculatedModValue = Math.abs(messageKey.hashCode()%length);
-            return destinationArr[calculatedModValue];
+            return new Pair<Destination,Object>(destinationArr[calculatedModValue],new ShardInfo(calculatedModValue));
          }
 
          @Override
@@ -502,15 +512,22 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    
    private class Inbound implements RoutingStrategy.Inbound
    {
-      private Set<Integer> destinationsAcquired = new HashSet<Integer>();
+      // destinationsAcquired should only be modified through the modifyDestinationsAcquired method.
+      private Set<Integer> destinationsAcquired = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+      
       private ClusterInfoSession session;
       private Destination thisDestination;
       private ClusterId clusterId;
       private KeyspaceResponsibilityChangeListener listener;
       private MicroShardUtils msutils;
       private DefaultRouterClusterInfo clusterInfo;
-      private AtomicBoolean isInited = new AtomicBoolean(false);
       private AtomicBoolean isRunning = new AtomicBoolean(true);
+      
+      private void modifyDestinationsAcquired(Collection<Integer> toRemove, Collection<Integer> toAdd)
+      {
+         if (toRemove != null) destinationsAcquired.removeAll(toRemove);
+         if (toAdd != null) destinationsAcquired.addAll(toAdd);
+      }
       
       private Inbound(ClusterInfoSession cluster, ClusterId clusterId,
             Collection<Class<?>> messageTypes, Destination thisDestination,
@@ -522,27 +539,92 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          this.clusterId = clusterId;
          this.msutils = new MicroShardUtils(clusterId);
          this.clusterInfo = new DefaultRouterClusterInfo(defaultTotalShards, minNumberOfNodes, messageTypes);
+         this.listener.setInboundStrategy(this);
          shardChangeWatcher.process(); // this invokes the acquireShards logic
       }
       
+      //==============================================================================
+      // This PersistentTask watches the shards directory for chagnes and will make 
+      // make sure that the 
+      //==============================================================================
       ClusterInfoWatcher shardChangeWatcher = new PersistentTask()
       {
+         String nodeDirectory = null;
+         
+         @Override
+         public String toString() { return "determine the shard distribution and acquire new ones or relinquish some as necessary"; }
+         
+         private final void checkNodeDirectory() throws ClusterInfoException
+         {
+            Collection<String> nodeDirs = persistentGetMainDirSubdirs(session, msutils, msutils.getClusterNodesDir(), this, clusterInfo);
+            if (nodeDirectory == null || !session.exists(nodeDirectory, this))
+            {
+               nodeDirectory = session.mkdir(msutils.getClusterNodesDir() + "/node_", DirMode.EPHEMERAL_SEQUENTIAL);
+               nodeDirs = session.getSubdirs(msutils.getClusterNodesDir(), this);
+            }
+            
+            logger.trace("CHECKING Nodedirs for " + msutils.getClusterNodesDir() + " is " + nodeDirs);
+
+            Destination curDest = (Destination)session.getData(nodeDirectory, null);
+            if (curDest == null)
+               session.setData(nodeDirectory, thisDestination);
+            else if (!thisDestination.equals(curDest)) // wth?
+            {
+               String tmp = nodeDirectory;
+               nodeDirectory = null;
+               throw new ClusterInfoException("Impossible! The Node directory " + tmp + " contains the destination for " + curDest + " but should have " + thisDestination);
+            }
+
+            for (String subdir : nodeDirs)
+            {
+               String fullPathToSubdir = msutils.getClusterNodesDir() + "/" + subdir;
+               curDest = (Destination)session.getData(fullPathToSubdir, null);
+               if (thisDestination.equals(curDest) && !fullPathToSubdir.equals(nodeDirectory)) // this is bad .. clean up
+                  session.rmdir(fullPathToSubdir);
+            }
+         }
+         
+         @Override
          public boolean execute() throws Throwable
          {
             if (logger.isTraceEnabled())
                logger.trace("Resetting Inbound Strategy for cluster " + clusterId);
 
-            isInited.set(false);
-
             Random random = new Random();
-            boolean moreResponsitiblity = false;
-            boolean lessResponsitiblity = false;
+            
+            // check node directory
+            checkNodeDirectory();
 
+            // we are rebalancing the shards so we will figure out what we are removing
+            // and adding.
+            Set<Integer> destinationsToRemove = new HashSet<Integer>();
+            Set<Integer> destinationsToAdd = new HashSet<Integer>();
+            
             //==============================================================================
-            // need to verify that the existing shards in destinationsAcquired are still ours
+            // need to verify that the existing shards in destinationsAcquired are still ours. 
             Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
             Collection<String> emptyShards = new HashSet<String>();
-            fillMapFromActiveShards(shardNumbersToShards,emptyShards, session, clusterId, clusterInfo, this);
+            fillMapFromActiveShards(shardNumbersToShards,emptyShards,session, clusterId, clusterInfo, this);
+            
+            // First, are there any I don't know about that are in shardNumbersToShards.
+            // This could be because I was assigned a shard (or in a previous execute, I acquired one
+            // but failed prior to accounting for it). In this case there will be shards in 
+            //  shardNumbersToShards that are assigned to me but aren't in destinationsAcquired.
+            //
+            // We are also piggy-backing off this loop to count the numberOfShardsWeActuallyHave
+            int numberOfShardsWeActuallyHave = 0;
+            for (Map.Entry<Integer,DefaultRouterShardInfo> entry : shardNumbersToShards.entrySet())
+            {
+               if (thisDestination.equals(entry.getValue().getDestination()))
+               {
+                  numberOfShardsWeActuallyHave++; // this entry is a shard that's assigned to us
+                  final Integer shardNumber = entry.getKey();
+                  if (!destinationsAcquired.contains(shardNumber)) // if we never saw it then we need to take it.
+                     destinationsToAdd.add(shardNumber); 
+               }
+            }
+            
+            // Now we are going to go through what we think we have and see if any are missing.
             Collection<Integer> shardsToReaquire = new ArrayList<Integer>();
             for (Integer destinationShard : destinationsAcquired)
             {
@@ -552,91 +634,98 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   shardsToReaquire.add(destinationShard);
             }
             //==============================================================================
-
+            
             //==============================================================================
-            // Now re-acquire the potentially lost shards
+            // Now re-acquire the potentially lost shards.
             for (Integer shardToReaquire : shardsToReaquire)
             {
-               if (!acquireShard(shardToReaquire, defaultTotalShards, session, clusterId, thisDestination))
+               // TODO: verify that the process call doesn't result in an unregistering of the Watcher
+               if (numberOfShardsWeActuallyHave >= acquireUpToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this))
+                  destinationsToRemove.add(shardToReaquire); // we're going to skip it ... and drop it.
+               
+               // otherwise we will try to reacquire it.
+               else if (!acquireShard(shardToReaquire, defaultTotalShards, session, clusterId, thisDestination))
                {
                   logger.info("Cannot reaquire the shard " + shardToReaquire + " for the cluster " + clusterId);
                   // I need to drop the shard from my list of destinations
-                  destinationsAcquired.remove(shardToReaquire);
-                  lessResponsitiblity = true;
+                  destinationsToRemove.add(shardToReaquire);
+               }
+               else // otherwise, we successfully reacquired it.
+                  numberOfShardsWeActuallyHave++; // we have one more.
+            }
+            //==============================================================================
+            
+            while (numberOfShardsWeActuallyHave > releaseDownToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this) && destinationsToAdd.size() > 0)
+            {
+               Iterator<Integer> curPos = destinationsToAdd.iterator();
+               Integer cur = curPos.next();
+               curPos.remove();
+               session.rmdir(msutils.getShardsDir() + "/" + cur);
+               numberOfShardsWeActuallyHave--;
+            }
+            
+            // above we bled off the destinationsToAdd. Now we remove actually known destinationsAcquired
+            Iterator<Integer> destinationsAcquiredIter = destinationsAcquired.iterator();
+            while (numberOfShardsWeActuallyHave > releaseDownToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this) && destinationsAcquiredIter.hasNext())
+            {
+               Integer cur = destinationsAcquiredIter.next();
+               // if we're already set to remove it because it didn't appear in the initial fillMapFromActiveShards
+               // then there's no need to remove it from the session as it's already gone.
+               if (!destinationsToRemove.contains(cur))
+               {
+                  session.rmdir(msutils.getShardsDir() + "/" + cur);
+                  numberOfShardsWeActuallyHave--;
+                  destinationsToRemove.add(cur);
+               }
+            }
+            
+            //==============================================================================
+            // Now see if we need to grab more shards. Maybe we just came off backup or, in
+            // the case of elasticity, maybe another node went down.
+            while((session.getSubdirs(msutils.getShardsDir(), this).size() < defaultTotalShards) &&
+                  (numberOfShardsWeActuallyHave < releaseDownToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this)))
+            {
+               int randomValue = random.nextInt(defaultTotalShards);
+               // if we're already considering this shard ...
+               if (acquireShard(randomValue, defaultTotalShards, session, clusterId, thisDestination))
+               {
+                  destinationsToAdd.add(randomValue);
+                  numberOfShardsWeActuallyHave++;
                }
             }
             //==============================================================================
-
-            while(needToGrabMoreShards(minNumberOfNodes,defaultTotalShards))
+            
+            if (destinationsToRemove.size() > 0 || destinationsToAdd.size() > 0)
             {
-               int randomValue = random.nextInt(defaultTotalShards);
-               if(destinationsAcquired.contains(randomValue) || shardIsInTransition(randomValue))
-                  continue;
-               if (acquireShard(randomValue, defaultTotalShards, session, clusterId, thisDestination))
-               {
-                  destinationsAcquired.add(randomValue);
-                  moreResponsitiblity = true;
-               }
+               modifyDestinationsAcquired(destinationsToRemove,destinationsToAdd);
+               listener.keyspaceResponsibilityChanged(destinationsToRemove.size() > 0, destinationsToAdd.size() > 0);
             }
-               
+            
             if (logger.isTraceEnabled())
                logger.trace("Succesfully reset Inbound Strategy for cluster " + clusterId);
 
-            if (lessResponsitiblity || moreResponsitiblity)
-               listener.keyspaceResponsibilityChanged(Inbound.this,lessResponsitiblity, moreResponsitiblity);
-            
             return true;
          }
+         
       };
-      
-      PersistentTask nodeChangeWatcher = new PersistentTask()
-      {
-         public boolean execute() throws Throwable
-         {
-            if (logger.isTraceEnabled())
-               logger.trace("Nodes changed in cluster " + clusterId);
-            
-            return true;
-         }
-      };
-      
+      //==============================================================================
       
       @Override
-      public boolean isInitialized() { return isInited.get(); }
+      public boolean isInitialized()
+      {
+         // we are going to assume we're initialized when all of the shards are accounted for.
+         // We want to go straight at the cluster info since destinationsAcquired may be out
+         // of date in the case where the cluster manager is down.
+         try {
+            return session.getSubdirs(msutils.getShardsDir(), shardChangeWatcher).size() == defaultTotalShards;
+         }
+         catch (ClusterInfoException e) { return false; }
+      }
       
       @Override
       public void stop()
       {
          isRunning.set(false);
-      }
-      
-      private int getCurrentNodeCount() throws ClusterInfoException
-      {
-         return session.getSubdirs(msutils.getNodesDir(), nodeChangeWatcher).size();
-      }
-      
-      private boolean needToGrabMoreShards(int minNumberOfNodes, int totalAddressNeeded) throws ClusterInfoException
-      {
-         int addressInUse = session.getSubdirs(msutils.getShardsDir(), null).size();
-         int currentNodeCount = getCurrentNodeCount();
-         int maxShardsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)(currentNodeCount < minNumberOfNodes ? minNumberOfNodes : currentNodeCount));
-         return addressInUse < totalAddressNeeded && destinationsAcquired.size() < maxShardsForOneNode;
-      }
-      
-//      private boolean needToGiveUpMoreShards(int totalAddressNeeded) throws ClusterInfoException
-//      {
-//         int currentNodeCount = getCurrentNodeCount();
-//         if (currentNodeCount == 0)
-//            return false;
-//         int maxShardsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)currentNodeCount);
-//         return destinationsAcquired.size() > maxShardsForOneNode;
-//      }
-      
-      private boolean shardIsInTransition(int shardNum) throws ClusterInfoException
-      {
-         // the path would be the 
-         String shardDir = String.valueOf(shardNum);
-         return session.getSubdirs(msutils.getTransistionDir(), null).contains(shardDir);
       }
       
       @Override
@@ -664,16 +753,22 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             if (!isRunning.get())
                return;
             
+            // we need to flatten out recursions. This may be called from 
+            // the same thread but deeper in the call tree. Therefore, if
+            // we're already here we want to exit without hitting the 
+            // finally clause at the bottom. But we want to make sure
+            // when we eventually hit the finally clause (with the other
+            // thread or stack frame) we will attempt another time.
+            if (alreadyHere)
+            {
+               recurseAttempt = true;
+               return;
+            }
+
             boolean retry = true;
             
             try
             {
-               // we need to flatten out recursions
-               if (alreadyHere)
-               {
-                  recurseAttempt = true;
-                  return;
-               }
                alreadyHere = true;
                
                // ok ... we're going to execute this now. So if we have an outstanding scheduled task we
@@ -687,7 +782,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                retry = !execute();
                
                if (logger.isTraceEnabled())
-                  logger.trace("Nodes changed in cluster " + clusterId);
+                  logger.trace("Managed to " + this + " for " + clusterId + " with the results:" + !retry);
                
             }
             catch (Throwable th)
@@ -714,10 +809,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                      }, resetDelay, TimeUnit.MILLISECONDS);
                }
                else
-               {
                   disposeOfScheduler();
-                  isInited.set(true);
-               }
             }
          }
       } // end PersistentTask abstract class definition
@@ -742,6 +834,15 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       private int totalAddress = -1;
       private int shardIndex = -1;
       private Destination destination;
+      
+      public DefaultRouterShardInfo(Destination destination, int shardNum, int totalAddress)
+      {
+         setDestination(destination);
+         setShardIndex(shardNum);
+         setTotalAddress(totalAddress);
+      }
+      
+      public DefaultRouterShardInfo() {} // needed for JSON serialization
 
       public int getShardIndex() { return shardIndex; }
       public void setShardIndex(int modValue) { this.shardIndex = modValue; }
@@ -788,6 +889,35 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    }
    
    /**
+    * This will get the children of one of the main persistent directories (provided in the path parameter). If
+    * the directory doesn't exist it will create all of the persistent directories using the passed msutils, but
+    * only if the clusterInfo isn't null.
+    */
+   private static Collection<String> persistentGetMainDirSubdirs(ClusterInfoSession session, MicroShardUtils msutils, 
+         String path, ClusterInfoWatcher watcher, DefaultRouterClusterInfo clusterInfo) throws ClusterInfoException
+   {
+      Collection<String> shardsFromClusterManager;
+      try
+      {
+         shardsFromClusterManager = session.getSubdirs(path, watcher);
+      }
+      catch (ClusterInfoException.NoNodeException e)
+      {
+         // clusterInfo == null means that this is a passive call to fillMapFromActiveShards
+         // and shouldn't create extraneous directories. If they are not there, there's
+         // nothing we can do.
+         if (clusterInfo != null)
+         {
+            msutils.mkAllPersistentAppDirs(session, clusterInfo);
+            shardsFromClusterManager = session.getSubdirs(path, watcher);
+         }
+         else
+            shardsFromClusterManager = null;
+      }
+      return shardsFromClusterManager;
+   }
+   
+   /**
     * Fill the map of shards to shardinfos for internal use. 
     * 
     * @param mapToFill is the map to fill from the ClusterInfo.
@@ -807,24 +937,9 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    {
       MicroShardUtils msutils = new MicroShardUtils(clusterId);
       int totalAddressCounts = -1;
-      Collection<String> shardsFromClusterManager;
-      try
-      {
-         shardsFromClusterManager = session.getSubdirs(msutils.getShardsDir(), watcher);
-      }
-      catch (ClusterInfoException.NoNodeException e)
-      {
-         // clusterInfo == null means that this is a passive call to fillMapFromActiveShards
-         // and shouldn't create extraneous directories. If they are not there, there's
-         // nothing we can do.
-         if (clusterInfo != null)
-         {
-            msutils.mkAllPersistentAppDirs(session, clusterInfo);
-            shardsFromClusterManager = session.getSubdirs(msutils.getShardsDir(), watcher);
-         }
-         else
-            shardsFromClusterManager = null;
-      }
+      
+      // First get the shards that are in transition.
+      Collection<String> shardsFromClusterManager = persistentGetMainDirSubdirs(session, msutils, msutils.getShardsDir(),watcher, clusterInfo);
 
       if(shardsFromClusterManager != null)
       {
@@ -871,10 +986,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          DefaultRouterShardInfo dest = (DefaultRouterShardInfo)clusterHandle.getData(shardPath, null);
          if(dest == null)
          {
-            dest = new DefaultRouterShardInfo();
-            dest.setDestination(destination);
-            dest.setShardIndex(shardNum);
-            dest.setTotalAddress(totalAddressNeeded);
+            dest = new DefaultRouterShardInfo(destination,shardNum,totalAddressNeeded);
             clusterHandle.setData(shardPath, dest);
          }
          return true;
@@ -895,6 +1007,32 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       if (scheduler_ != null)
          scheduler_.shutdown();
       scheduler_ = null;
+   }
+   
+   private static final int acquireUpToThisMany(ClusterInfoSession session, MicroShardUtils msutils, int minNodeCount, int totalShardCount, ClusterInfoWatcher nodeDirectoryWatcher) throws ClusterInfoException
+   {
+      double currentWorkingNodeCount = (double)findWorkingNodeCount(session,msutils,minNodeCount,nodeDirectoryWatcher);
+      return (int)Math.floor((double)totalShardCount/currentWorkingNodeCount);
+   }
+   
+   private static final int releaseDownToThisMany(ClusterInfoSession session, MicroShardUtils msutils, int minNodeCount, int totalShardCount, ClusterInfoWatcher nodeDirectoryWatcher) throws ClusterInfoException
+   {
+      double currentWorkingNodeCount = (double)findWorkingNodeCount(session,msutils,minNodeCount,nodeDirectoryWatcher);
+      return (int)Math.ceil((double)totalShardCount/currentWorkingNodeCount);
+   }
+   
+   private static final int findWorkingNodeCount(ClusterInfoSession session, MicroShardUtils msutils, int minNodeCount, ClusterInfoWatcher nodeDirectoryWatcher) throws ClusterInfoException
+   {
+      Collection<String> nodeDirs = session.getSubdirs(msutils.getClusterNodesDir(), nodeDirectoryWatcher);
+      int curRegisteredNodesCount = 0;
+      for (String subdir : nodeDirs)
+      {
+         Destination dest = (Destination)session.getData(msutils.getClusterNodesDir() + "/" + subdir,null);
+         if (dest != null)
+            curRegisteredNodesCount++;
+      }
+      logger.trace("ACQUIRE Nodedirs (" + curRegisteredNodesCount + ") for " + msutils.getClusterNodesDir() + " is " + nodeDirs);
+      return curRegisteredNodesCount < minNodeCount ? minNodeCount : curRegisteredNodesCount;
    }
 
 }

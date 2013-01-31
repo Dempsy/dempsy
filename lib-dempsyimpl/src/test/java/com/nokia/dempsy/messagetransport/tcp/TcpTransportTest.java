@@ -73,14 +73,21 @@ public class TcpTransportTest
    
    private void runAllCombinations(Checker check) throws Throwable
    {
-      logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
-      check.check(-1, false);
-      logger.debug("checking " + check + " with port 8765 and not using \"localhost.\"");
-      check.check(8765, false);
-      logger.debug("checking " + check + " with ephemeral port using \"localhost.\"");
-      check.check(-1, true);
-      logger.debug("checking " + check + " with port 8765 using \"localhost.\"");
-      check.check(8765, true);
+      try
+      {
+         logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
+         check.check(-1, false);
+         logger.debug("checking " + check + " with port 8765 and not using \"localhost.\"");
+         check.check(8765, false);
+         logger.debug("checking " + check + " with ephemeral port using \"localhost.\"");
+         check.check(-1, true);
+         logger.debug("checking " + check + " with port 8765 using \"localhost.\"");
+         check.check(8765, true);
+      }
+      finally
+      {
+         logger.debug("ending combinations for " + check);
+      }
    }
    
 
@@ -101,11 +108,12 @@ public class TcpTransportTest
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
             StatsCollector statsCollector = new BasicStatsCollector();
+            TcpServer server = null;
             try
             {
                //===========================================
                // setup the sender and receiver
-               TcpServer server = new TcpServer();
+               server = new TcpServer();
                adaptor = new TcpReceiver(server,null,getFailFast());
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
@@ -136,6 +144,9 @@ public class TcpTransportTest
             }
             finally
             {
+               if (server != null)
+                  server.stop();
+               
                if (factory != null)
                   factory.shutdown();
                
@@ -265,6 +276,7 @@ public class TcpTransportTest
       boolean localhost = false;
       SenderFactory factory = null;
       TcpReceiver adaptor = null;
+      SenderFactory senderFactory = null;
       try
       {
          //===========================================
@@ -299,7 +311,7 @@ public class TcpTransportTest
          if (port > 0) adaptor.server.setPort(port);
          if (localhost) adaptor.server.setUseLocalhost(localhost);
 
-         TcpSenderFactory senderFactory = makeSenderFactory(false,null);
+         senderFactory = makeSenderFactory(false,null);
 
          int size = 1024*1024*10;
          byte[] tosend = new byte[size];
@@ -321,6 +333,9 @@ public class TcpTransportTest
 
          if (adaptor != null)
             adaptor.shutdown();
+         
+         if (senderFactory != null)
+            senderFactory.shutdown();
 
          receivedByteArrayMessage = null;
       }
@@ -951,7 +966,8 @@ public class TcpTransportTest
          }
          
          @Override
-         public String toString() { return "testTransportSimpleMessage"; }
+         public String toString() { return "transportMTWorkerMessage"; }
       });
+      
    }
 }

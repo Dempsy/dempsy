@@ -15,7 +15,7 @@
       </property>
       <property name="defaultRoutingStrategy">
          <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
-            <constructor-arg name="defaultTotalShards" type="int" value="20" />
+            <constructor-arg name="defaultTotalShards" type="int" value="${testFullApp.totalShards}" />
             <constructor-arg name="minNumberOfNodes" type="int" value="1" />
          </bean>
       </property>

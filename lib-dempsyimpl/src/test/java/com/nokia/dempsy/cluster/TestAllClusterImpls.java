@@ -234,6 +234,51 @@ public class TestAllClusterImpls
       });
    }
    
+   @Test
+   public void testDataOnEpheralNodeFromDifferentSession() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(String pass, ClusterInfoSessionFactory factory) throws Throwable
+         {
+            ClusterId cid = new ClusterId("testDataOnEpheralNodeFromDifferentSession","test-cluster");
+            final ClusterInfoSession session = factory.createSession();
+            assertNotNull(pass,session);
+            sessionsToClose.add(session);
+            final ClusterInfoSession session2 = factory.createSession();
+            sessionsToClose.add(session2);
+            
+            MicroShardUtils msutil = new MicroShardUtils(cid);
+            msutil.mkAllPersistentAppDirs(session, null);
+            String dir = session.mkdir(msutil.getShardsDir() + "/node1_", DirMode.EPHEMERAL_SEQUENTIAL);
+            
+            // wait for no more than ten seconds
+            assertTrue(pass, poll(10000, dir, new Condition<String>()
+            {
+               @Override
+               public boolean conditionMet(String dir) throws Throwable
+               {
+                  return session2.exists(dir, null);
+               }
+            }));
+            
+            session2.setData(dir, "Hello");
+            
+            // now make sure we can read the data from the first node.
+            assertTrue(pass, poll(10000, dir, new Condition<String>()
+            {
+               @Override
+               public boolean conditionMet(String dir) throws Throwable
+               {
+                  return "Hello".equals((String)session.getData(dir, null));
+               }
+            }));
+
+         }
+      });
+   }
+   
    private class TestWatcher implements ClusterInfoWatcher
    {
       public boolean recdUpdate = false;

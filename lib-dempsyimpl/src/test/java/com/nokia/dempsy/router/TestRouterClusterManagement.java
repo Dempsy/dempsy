@@ -96,9 +96,11 @@ public class TestRouterClusterManagement
             new Dempsy(){ public List<Class<?>> gm(ClusterDefinition clusterDef) { return super.getAcceptedMessages(clusterDef); }}.gm(cd), 
          destination,new RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener()
          {
-            
             @Override
-            public void keyspaceResponsibilityChanged(Inbound inbound, boolean less, boolean more) { }
+            public void keyspaceResponsibilityChanged(boolean less, boolean more) { }
+
+            @Override
+            public void setInboundStrategy(Inbound inbound) { }
          });
       
       routerFactory = new Router(cd);
