@@ -12,7 +12,6 @@
 	     <list>
           <bean class="com.nokia.dempsy.serialization.kryo.Registration" >
             <constructor-arg value="com.nokia.dempsy.DempsyTestBase$TestMessage" />
-            <constructor-arg value="10" />
           </bean>
 	     </list>
 	   </constructor-arg>
