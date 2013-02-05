@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
@@ -289,10 +290,14 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
    public class LocalSession implements ClusterInfoSession, DisruptibleSession
    {
       private List<String> localEphemeralDirs = new ArrayList<String>();
+      private AtomicBoolean stopping = new AtomicBoolean(false);
       
       @Override
       public String mkdir(String path, DirMode mode) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("mkdir called on stopped session.");
+         
          String ret = omkdir(path,mode);
          if (ret != null && mode.isEphemeral())
          {
@@ -307,6 +312,9 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       @Override
       public void rmdir(String path) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("rmdir called on stopped session.");
+
          ormdir(path);
          synchronized(localEphemeralDirs)
          {
@@ -317,24 +325,32 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       @Override
       public boolean exists(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("exists called on stopped session.");
          return oexists(path,watcher);
       }
 
       @Override
       public Object getData(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("getData called on stopped session.");
          return ogetData(path,watcher);
       }
 
       @Override
       public void setData(String path, Object data) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("setData called on stopped session.");
          osetData(path,data);
       }
 
       @Override
       public Collection<String> getSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("getSubdirs called on stopped session.");
          return ogetSubdirs(path,watcher);
       }
 
@@ -346,12 +362,16 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       
       private void stop(boolean notifyWatchers)
       {
+         stopping.set(true);
+         currentSessions.remove(this);
          synchronized(localEphemeralDirs)
          {
             for (int i = localEphemeralDirs.size() - 1; i >= 0; i--)
             {
                try
                {
+                  if (logger.isTraceEnabled())
+                     logger.trace("Removing ephemeral directory due to stopped session " + localEphemeralDirs.get(i));
                   ormdir(localEphemeralDirs.get(i),notifyWatchers);
                }
                catch (ClusterInfoException cie)
@@ -363,7 +383,6 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
             }
             localEphemeralDirs.clear();
          }
-         currentSessions.remove(this);
          
          synchronized(currentSessions)
          {
