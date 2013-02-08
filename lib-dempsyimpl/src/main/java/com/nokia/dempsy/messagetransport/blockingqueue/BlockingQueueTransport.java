@@ -53,7 +53,6 @@ public class BlockingQueueTransport implements Transport
       ret.setQueue(getNewQueue());
       if (overflowHandler != null)
          ret.setOverflowHandler(overflowHandler);
-      ret.start(); // @PostConstruct
       return ret;
    }
    
