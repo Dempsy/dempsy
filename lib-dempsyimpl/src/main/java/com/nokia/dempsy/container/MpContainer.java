@@ -105,7 +105,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    
    private DempsyExecutor executor = null;
    
-   private RoutingStrategy.Inbound strategyInbound = null;
+   public RoutingStrategy.Inbound strategyInbound = null;
 
    public MpContainer(ClusterId clusterId) { this.clusterId = clusterId; }
 
@@ -498,7 +498,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                }
             }
             finally { wrapper.releaseLock(); }
-         } 
+         }
          else  // ... we didn't get the lock
          {
             if (logger.isTraceEnabled())
@@ -526,6 +526,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                " that does not handle messages of class " + SafeString.valueOfClass(message));
 
       Object key = getKeyFromMessage(message);
+      if (!strategyInbound.doesMessageKeyBelongToNode(key))
+         throw new ContainerException("Key " + SafeString.objectDescription(key) + " doesn't belong to this node.");
+      
       InstanceWrapper wrapper = getInstanceForKey(key);
       return wrapper;
    }

@@ -39,6 +39,7 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda;
+import com.nokia.dempsy.router.RoutingStrategy;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 
@@ -230,6 +231,18 @@ public class TestInstanceManager
       manager.setStatCollector(stats);
       manager.setSerializer(serializer);
       manager.setPrototype(prototype);
+      manager.setInboundStrategy(
+            new RoutingStrategy.Inbound()
+            {
+               @Override
+               public boolean doesMessageKeyBelongToNode(Object messageKey) { return true; }
+
+               @Override
+               public void stop() { }
+
+               @Override
+               public boolean isInitialized() { return true; }
+            });
       return manager;
    }
    

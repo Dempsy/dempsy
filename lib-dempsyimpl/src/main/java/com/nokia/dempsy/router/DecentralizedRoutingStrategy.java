@@ -27,10 +27,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -46,7 +42,9 @@ import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.router.microshard.MicroShardUtils;
+import com.nokia.dempsy.util.AutoDisposeSingleThreadScheduler;
 import com.nokia.dempsy.util.Pair;
+import com.nokia.dempsy.util.PersistentTask;
 
 /**
  * This Routing Strategy uses the {@link MpCluster} to negotiate with other instances in the 
@@ -61,7 +59,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    protected int defaultTotalShards;
    protected int minNumberOfNodes;
    
-   private ScheduledExecutorService scheduler_ = null;
+   private final AutoDisposeSingleThreadScheduler dscheduler = 
+         new AutoDisposeSingleThreadScheduler(DecentralizedRoutingStrategy.class.getSimpleName() + " Disposable Scheduler");
    
    public static final class ShardInfo
    {
@@ -346,7 +345,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          clearRouterMap(); // this will cause a nice redo over everything
       }
 
-      public class Outbound implements RoutingStrategy.Outbound, ClusterInfoWatcher
+      public class Outbound implements RoutingStrategy.Outbound
       {
          private AtomicReference<Destination[]> destinations = new AtomicReference<Destination[]>();
          private ClusterInfoSession clusterSession;
@@ -357,7 +356,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          {
             this.clusterSession = cluster;
             this.clusterId = clusterId;
-            execSetupDestinations();
+            setupDestinations.process();
          }
 
          @Override
@@ -378,12 +377,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          }
 
          @Override
-         public void process()
-         {
-            execSetupDestinations();
-         }
-         
-         @Override
          public Collection<Destination> getKnownDestinations()
          {
             List<Destination> ret = new ArrayList<Destination>();
@@ -402,7 +395,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          public synchronized void stop()
          {
             isRunning.set(false);
-            disposeOfScheduler();
          }
 
          /**
@@ -426,91 +418,62 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          @Override
          public int hashCode() { return clusterId.hashCode(); }
 
-         /**
-          * This method is protected for testing purposes. Otherwise it would be private.
-          * @return whether or not the setup was successful.
-          */
-         protected synchronized boolean setupDestinations()
+         private PersistentTask setupDestinations = new PersistentTask(logger,isRunning,dscheduler,resetDelay)
          {
-            try
+            public synchronized boolean execute()
             {
-               if (logger.isTraceEnabled())
-                  logger.trace("Resetting Outbound Strategy for cluster " + clusterId + 
-                        " from " + OutboundManager.this.clusterId + " in " + this);
-
-               Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
-               Collection<String> emptyShards = new ArrayList<String>();
-               int newtotalAddressCounts = fillMapFromActiveShards(shardNumbersToShards,emptyShards,clusterSession,clusterId,null,this);
-               
-               // For now if we hit the race condition between when the target Inbound
-               // has created the shard and when it assigns the shard info, we simply claim
-               // we failed.
-               if (newtotalAddressCounts < 0 || emptyShards.size() > 0)
-                  return false;
-               
-               if (newtotalAddressCounts == 0)
-                  logger.info("The cluster " + SafeString.valueOf(clusterId) + " doesn't seem to have registered any details.");
-
-               if (newtotalAddressCounts > 0)
+               try
                {
-                  Destination[] newDestinations = new Destination[newtotalAddressCounts];
-                  for (Map.Entry<Integer,DefaultRouterShardInfo> entry : shardNumbersToShards.entrySet())
-                  {
-                     DefaultRouterShardInfo shardInfo = entry.getValue();
-                     newDestinations[entry.getKey()] = shardInfo.getDestination();
-                  }
+                  if (logger.isTraceEnabled())
+                     logger.trace("Resetting Outbound Strategy for cluster " + clusterId + 
+                           " from " + OutboundManager.this.clusterId + " in " + this);
 
-                  destinations.set(newDestinations);
-               }
-               else
-                  destinations.set(new Destination[0]);
-               
-               return destinations.get() != null;
-            }
-            catch(ClusterInfoException e)
-            {
-               destinations.set(null);
-               logger.warn("Failed to set up the Outbound for " + clusterId + " from " + OutboundManager.this.clusterId, e);
-            }
-            catch (RuntimeException rte)
-            {
-               logger.error("Failed to set up the Outbound for " + clusterId + " from " + OutboundManager.this.clusterId, rte);
-            }
-            return false;
-         }
-         
-         private void execSetupDestinations()
-         {
-            if (!setupDestinations() && isRunning.get())
-            {
-               synchronized(this)
-               {
-                  ScheduledExecutorService sched = getScheduledExecutor();
-                  if (sched != null)
+                  Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
+                  Collection<String> emptyShards = new ArrayList<String>();
+                  int newtotalAddressCounts = fillMapFromActiveShards(shardNumbersToShards,emptyShards,clusterSession,clusterId,null,this);
+
+                  // For now if we hit the race condition between when the target Inbound
+                  // has created the shard and when it assigns the shard info, we simply claim
+                  // we failed.
+                  if (newtotalAddressCounts < 0 || emptyShards.size() > 0)
+                     return false;
+
+                  if (newtotalAddressCounts == 0)
+                     logger.info("The cluster " + SafeString.valueOf(clusterId) + " doesn't seem to have registered any details.");
+
+                  if (newtotalAddressCounts > 0)
                   {
-                     sched.schedule(new Runnable(){
-                        @Override
-                        public void run()
-                        {
-                           if (isRunning.get() && !setupDestinations())
-                           {
-                              ScheduledExecutorService sched = getScheduledExecutor();
-                              if (sched != null)
-                                 sched.schedule(this, resetDelay, TimeUnit.MILLISECONDS);
-                           }
-                           else
-                              disposeOfScheduler();
-                        }
-                     }, resetDelay, TimeUnit.MILLISECONDS);
+                     Destination[] newDestinations = new Destination[newtotalAddressCounts];
+                     for (Map.Entry<Integer,DefaultRouterShardInfo> entry : shardNumbersToShards.entrySet())
+                     {
+                        DefaultRouterShardInfo shardInfo = entry.getValue();
+                        newDestinations[entry.getKey()] = shardInfo.getDestination();
+                     }
+
+                     destinations.set(newDestinations);
                   }
+                  else
+                     destinations.set(new Destination[0]);
+
+                  return destinations.get() != null;
                }
+               catch(ClusterInfoException e)
+               {
+                  destinations.set(null);
+                  logger.warn("Failed to set up the Outbound for " + clusterId + " from " + OutboundManager.this.clusterId, e);
+               }
+               catch (RuntimeException rte)
+               {
+                  logger.error("Failed to set up the Outbound for " + clusterId + " from " + OutboundManager.this.clusterId, rte);
+               }
+               return false;
             }
-         }
+         }; // end setupDestinations PersistentTask declaration
       } // end Outbound class definition
    } // end OutboundManager
    
-   
-   private class Inbound implements RoutingStrategy.Inbound
+   // public for testing
+   public class Inbound implements RoutingStrategy.Inbound
    {
       // destinationsAcquired should only be modified through the modifyDestinationsAcquired method.
       private Set<Integer> destinationsAcquired = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
@@ -525,8 +488,12 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       
       private void modifyDestinationsAcquired(Collection<Integer> toRemove, Collection<Integer> toAdd)
       {
+         if (logger.isTraceEnabled())
+            logger.trace(toString() + " reconfiguring with toAdd:" + toAdd + ", toRemove:" + toRemove);
          if (toRemove != null) destinationsAcquired.removeAll(toRemove);
          if (toAdd != null) destinationsAcquired.addAll(toAdd);
+         if (logger.isTraceEnabled())
+            logger.trace(toString() + "<- now looks like");
       }
       
       private Inbound(ClusterInfoSession cluster, ClusterId clusterId,
@@ -543,55 +510,92 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          shardChangeWatcher.process(); // this invokes the acquireShards logic
       }
       
+      @Override
+      public String toString() { return "Inbound " + thisDestination + clusterId + " owning " + destinationsAcquired ; }
+      
+      private String nodeDirectory = null;
+      
       //==============================================================================
       // This PersistentTask watches the shards directory for chagnes and will make 
       // make sure that the 
       //==============================================================================
-      ClusterInfoWatcher shardChangeWatcher = new PersistentTask()
+      ClusterInfoWatcher shardChangeWatcher = new PersistentTask(logger, isRunning, dscheduler, resetDelay)
       {
-         String nodeDirectory = null;
-         
          @Override
-         public String toString() { return "determine the shard distribution and acquire new ones or relinquish some as necessary"; }
+         public String toString() { return "determine the shard distribution and acquire new ones or relinquish some as necessary for " + clusterId; }
          
          private final void checkNodeDirectory() throws ClusterInfoException
          {
-            Collection<String> nodeDirs = persistentGetMainDirSubdirs(session, msutils, msutils.getClusterNodesDir(), this, clusterInfo);
-            if (nodeDirectory == null || !session.exists(nodeDirectory, this))
+            try
             {
-               nodeDirectory = session.mkdir(msutils.getClusterNodesDir() + "/node_", DirMode.EPHEMERAL_SEQUENTIAL);
-               nodeDirs = session.getSubdirs(msutils.getClusterNodesDir(), this);
-            }
-            
-            Destination curDest = (Destination)session.getData(nodeDirectory, null);
-            if (curDest == null)
-               session.setData(nodeDirectory, thisDestination);
-            else if (!thisDestination.equals(curDest)) // wth?
-            {
-               String tmp = nodeDirectory;
-               nodeDirectory = null;
-               throw new ClusterInfoException("Impossible! The Node directory " + tmp + " contains the destination for " + curDest + " but should have " + thisDestination);
-            }
+               Collection<String> nodeDirs = persistentGetMainDirSubdirs(session, msutils, msutils.getClusterNodesDir(), this, clusterInfo);
+               if (nodeDirectory == null || !session.exists(nodeDirectory, this))
+               {
+                  nodeDirectory = session.mkdir(msutils.getClusterNodesDir() + "/node_", DirMode.EPHEMERAL_SEQUENTIAL);
+                  nodeDirs = session.getSubdirs(msutils.getClusterNodesDir(), this);
+               }
 
-            for (String subdir : nodeDirs)
+               Destination curDest = (Destination)session.getData(nodeDirectory, null);
+               if (curDest == null)
+                  session.setData(nodeDirectory, thisDestination);
+               else if (!thisDestination.equals(curDest)) // wth?
+               {
+                  String tmp = nodeDirectory;
+                  nodeDirectory = null;
+                  throw new ClusterInfoException("Impossible! The Node directory " + tmp + " contains the destination for " + curDest + " but should have " + thisDestination);
+               }
+
+               for (String subdir : nodeDirs)
+               {
+                  String fullPathToSubdir = msutils.getClusterNodesDir() + "/" + subdir;
+                  curDest = (Destination)session.getData(fullPathToSubdir, null);
+                  if (thisDestination.equals(curDest) && !fullPathToSubdir.equals(nodeDirectory)) // this is bad .. clean up
+                     session.rmdir(fullPathToSubdir);
+               }
+            }
+            catch (ClusterInfoException cie)
             {
-               String fullPathToSubdir = msutils.getClusterNodesDir() + "/" + subdir;
-               curDest = (Destination)session.getData(fullPathToSubdir, null);
-               if (thisDestination.equals(curDest) && !fullPathToSubdir.equals(nodeDirectory)) // this is bad .. clean up
-                  session.rmdir(fullPathToSubdir);
+               cleanupAfterExceptionDuringNodeDirCheck();
+               throw cie;
+            }
+            catch (RuntimeException re)
+            {
+               cleanupAfterExceptionDuringNodeDirCheck();
+               throw re;
+            }
+         }
+         
+         // called from the catch clauses in checkNodeDirectory
+         private final void cleanupAfterExceptionDuringNodeDirCheck()
+         {
+            if (nodeDirectory != null)
+            {
+               // attempt to remove the node directory
+               try 
+               {
+                  if (session.exists(nodeDirectory,null))
+                     session.rmdir(nodeDirectory);
+                  nodeDirectory = null;
+               }
+               catch (ClusterInfoException cie2) {}
             }
          }
          
          @Override
          public boolean execute() throws Throwable
          {
-            if (logger.isTraceEnabled())
-               logger.trace("Resetting Inbound Strategy for cluster " + clusterId);
+            boolean traceOn = logger.isTraceEnabled();
+            if (traceOn)
+               logger.trace(Inbound.this.toString() + "Resetting Inbound Strategy.");
 
             Random random = new Random();
             
             // check node directory
             checkNodeDirectory();
+            
+            int currentWorkingNodeCount = findWorkingNodeCount(session, msutils, minNumberOfNodes, this);
+            int acquireUpToThisMany = (int)Math.floor((double)defaultTotalShards/(double)currentWorkingNodeCount);
+            int releaseDownToThisMany = (int)Math.ceil((double)defaultTotalShards/(double)currentWorkingNodeCount);
 
             // we are rebalancing the shards so we will figure out what we are removing
             // and adding.
@@ -603,7 +607,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
             Collection<String> emptyShards = new HashSet<String>();
             fillMapFromActiveShards(shardNumbersToShards,emptyShards,session, clusterId, clusterInfo, this);
-            
+
             // First, are there any I don't know about that are in shardNumbersToShards.
             // This could be because I was assigned a shard (or in a previous execute, I acquired one
             // but failed prior to accounting for it). In this case there will be shards in 
@@ -622,6 +626,9 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                }
             }
             
+            if (traceOn)
+               logger.trace("" + Inbound.this + " has these destinations that I didn't know about " + destinationsToAdd);
+            
             // Now we are going to go through what we think we have and see if any are missing.
             Collection<Integer> shardsToReaquire = new ArrayList<Integer>();
             for (Integer destinationShard : destinationsAcquired)
@@ -631,76 +638,165 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                if (shardInfo == null || !thisDestination.equals(shardInfo.getDestination()) || emptyShards.contains(Integer.toString(destinationShard)))
                   shardsToReaquire.add(destinationShard);
             }
+            
+            if (traceOn)
+               logger.trace(Inbound.this.toString() + " has these destiantions that it seemed to have lost " + shardsToReaquire);
             //==============================================================================
             
             //==============================================================================
             // Now re-acquire the potentially lost shards.
             for (Integer shardToReaquire : shardsToReaquire)
             {
-               // TODO: verify that the process call doesn't result in an unregistering of the Watcher
-               if (numberOfShardsWeActuallyHave >= acquireUpToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this))
-                  destinationsToRemove.add(shardToReaquire); // we're going to skip it ... and drop it.
-               
-               // otherwise we will try to reacquire it.
-               else if (!acquireShard(shardToReaquire, defaultTotalShards, session, clusterId, thisDestination))
+               // if we already have too many shards then there's no point in trying
+               // to reacquire the the shard.
+               if (numberOfShardsWeActuallyHave >= acquireUpToThisMany)
                {
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " removing " + shardToReaquire + 
+                           " from one's I care about because I already have " + numberOfShardsWeActuallyHave +
+                           " but only need " + acquireUpToThisMany);
+                  
+                  destinationsToRemove.add(shardToReaquire); // we're going to skip it ... and drop it.
+               }
+               // otherwise we will try to reacquire it.
+               else if (!acquireShard(shardToReaquire, defaultTotalShards, session, clusterId, thisDestination, shardNumbersToShards))
+               {
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " removing " + shardToReaquire + 
+                           " from one's I care about because I couldn't reaquire it.");
+
                   logger.info("Cannot reaquire the shard " + shardToReaquire + " for the cluster " + clusterId);
                   // I need to drop the shard from my list of destinations
                   destinationsToRemove.add(shardToReaquire);
                }
                else // otherwise, we successfully reacquired it.
+               {
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " reacquired " + shardToReaquire);
+                  
                   numberOfShardsWeActuallyHave++; // we have one more.
+               }
             }
             //==============================================================================
             
-            while (numberOfShardsWeActuallyHave > releaseDownToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this) && destinationsToAdd.size() > 0)
+            //==============================================================================
+            // Here, if we have too many shards, we will give up anything in the list destinationsToAdd
+            // until we are either at the level were we should be, or we have no more to give up
+            // from the list of those we were planning on adding.
+            Iterator<Integer> curPos = destinationsToAdd.iterator();
+            while (numberOfShardsWeActuallyHave > releaseDownToThisMany && 
+                  destinationsToAdd.size() > 0 && curPos.hasNext())
             {
-               Iterator<Integer> curPos = destinationsToAdd.iterator();
                Integer cur = curPos.next();
-               curPos.remove();
-               session.rmdir(msutils.getShardsDir() + "/" + cur);
-               numberOfShardsWeActuallyHave--;
+               if (doIOwnThisShard(cur,shardNumbersToShards))
+               {
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " removing shard " + cur + " because I already have " + 
+                           numberOfShardsWeActuallyHave + " but can give up to " + releaseDownToThisMany + " and was planning on adding it.");
+                  
+                  curPos.remove();
+                  session.rmdir(msutils.getShardsDir() + "/" + cur);
+                  numberOfShardsWeActuallyHave--;
+                  shardNumbersToShards.remove(cur);
+               }
             }
+            //==============================================================================
             
+            //==============================================================================
+            // Here, if we still have too many shards, we will begin deleting destinationsToRemove
+            // that we may own actually own.
+            curPos = destinationsToRemove.iterator();
+            while (numberOfShardsWeActuallyHave > releaseDownToThisMany && 
+                  destinationsToRemove.size() > 0 && curPos.hasNext())
+            {
+               Integer cur = curPos.next();
+               if (doIOwnThisShard(cur,shardNumbersToShards))
+               {
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " removing shard " + cur + " because I already have " + 
+                           numberOfShardsWeActuallyHave + " but can give up to " + releaseDownToThisMany + 
+                           " and was planning on removing it anyway.");
+
+                  session.rmdir(msutils.getShardsDir() + "/" + cur);
+                  numberOfShardsWeActuallyHave--;
+                  shardNumbersToShards.remove(cur);
+               }
+            }
+            //==============================================================================
+            
+            //==============================================================================
             // above we bled off the destinationsToAdd. Now we remove actually known destinationsAcquired
             Iterator<Integer> destinationsAcquiredIter = destinationsAcquired.iterator();
-            while (numberOfShardsWeActuallyHave > releaseDownToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this) && destinationsAcquiredIter.hasNext())
+            while (numberOfShardsWeActuallyHave > releaseDownToThisMany && destinationsAcquiredIter.hasNext())
             {
                Integer cur = destinationsAcquiredIter.next();
                // if we're already set to remove it because it didn't appear in the initial fillMapFromActiveShards
                // then there's no need to remove it from the session as it's already gone.
-               if (!destinationsToRemove.contains(cur))
+               if (doIOwnThisShard(cur,shardNumbersToShards))
                {
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " removing shard " + cur + " because I already have " + 
+                           numberOfShardsWeActuallyHave + " but can give up to " + releaseDownToThisMany + ".");
+
                   session.rmdir(msutils.getShardsDir() + "/" + cur);
                   numberOfShardsWeActuallyHave--;
                   destinationsToRemove.add(cur);
+                  shardNumbersToShards.remove(cur);
                }
             }
+            //==============================================================================
             
             //==============================================================================
             // Now see if we need to grab more shards. Maybe we just came off backup or, in
             // the case of elasticity, maybe another node went down.
-            while((session.getSubdirs(msutils.getShardsDir(), this).size() < defaultTotalShards) &&
-                  (numberOfShardsWeActuallyHave < releaseDownToThisMany(session,msutils,minNumberOfNodes,defaultTotalShards,this)))
+            if (traceOn)
+               logger.trace(Inbound.this.toString() + " considering grabbing more shards given that I have " + numberOfShardsWeActuallyHave + " but could have a max of " + releaseDownToThisMany);
+
+            List<Integer> shardsToTry = null;
+            Collection<String> subdirs;
+            while(((subdirs = session.getSubdirs(msutils.getShardsDir(), this)).size() < defaultTotalShards) &&
+                  (numberOfShardsWeActuallyHave < releaseDownToThisMany))
             {
-               int randomValue = random.nextInt(defaultTotalShards);
-               // if we're already considering this shard ...
-               if (acquireShard(randomValue, defaultTotalShards, session, clusterId, thisDestination))
+               if (traceOn)
+                  logger.trace(Inbound.this.toString() + " will try to grab more shards.");
+
+               if (shardsToTry == null || shardsToTry.size() == 0)
+                  shardsToTry = range(subdirs,defaultTotalShards);
+               if (shardsToTry.size() == 0)
                {
-                  destinationsToAdd.add(randomValue);
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " all other shards are taken.");
+                  break;
+               }
+               int randomIndex = random.nextInt(shardsToTry.size());
+               int shardToTry = shardsToTry.remove(randomIndex);
+               
+               // if we're already considering this shard ...
+               if (!doIOwnThisShard(shardToTry,shardNumbersToShards) && 
+                     acquireShard(shardToTry, defaultTotalShards, session, clusterId, thisDestination, shardNumbersToShards))
+               {
+                  if (!destinationsAcquired.contains(shardToTry))
+                     destinationsToAdd.add(shardToTry);
                   numberOfShardsWeActuallyHave++;
+                  if (traceOn)
+                     logger.trace(Inbound.this.toString() + " got a new shard " + shardToTry);
+
                }
             }
             //==============================================================================
             
             if (destinationsToRemove.size() > 0 || destinationsToAdd.size() > 0)
             {
+               String previous = Inbound.this.toString();
                modifyDestinationsAcquired(destinationsToRemove,destinationsToAdd);
+               
+               if (traceOn)
+                  logger.trace(previous + " keyspace notification (" + (destinationsToRemove.size() > 0) + "," + (destinationsToAdd.size() > 0) + ")");
                listener.keyspaceResponsibilityChanged(destinationsToRemove.size() > 0, destinationsToAdd.size() > 0);
             }
             
             if (logger.isTraceEnabled())
-               logger.trace("Succesfully reset Inbound Strategy for cluster " + clusterId);
+               logger.trace(Inbound.this.toString() + " Succesfully reset Inbound Strategy for cluster " + clusterId);
 
             return true;
          }
@@ -715,9 +811,23 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          // We want to go straight at the cluster info since destinationsAcquired may be out
          // of date in the case where the cluster manager is down.
          try {
-            return session.getSubdirs(msutils.getShardsDir(), shardChangeWatcher).size() == defaultTotalShards;
+            if (nodeDirectory == null)
+               return false;
+            
+            if (!thisDestination.equals(session.getData(nodeDirectory, null)))
+               return false;
+
+            if (session.getSubdirs(msutils.getShardsDir(), shardChangeWatcher).size() != defaultTotalShards)
+               return false;
+            
+            // make sure we have all of the nodes we should have
+            int numNodes = session.getSubdirs(msutils.getClusterNodesDir(), shardChangeWatcher).size();
+            
+            return (destinationsAcquired.size() >= (int)Math.floor((double)defaultTotalShards/(double)numNodes)) &&
+                  (destinationsAcquired.size() <= (int)Math.ceil((double)defaultTotalShards/(double)numNodes));
          }
          catch (ClusterInfoException e) { return false; }
+         catch (RuntimeException re) { logger.debug("",re); return false; }
       }
       
       @Override
@@ -732,85 +842,37 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          return destinationsAcquired.contains(Math.abs(messageKey.hashCode()%defaultTotalShards));
       }
       
-      private abstract class PersistentTask implements ClusterInfoWatcher
+      public int getNumShardsCovered() { return destinationsAcquired.size(); }
+      
+      private final boolean doIOwnThisShard(Integer shard, Map<Integer,DefaultRouterShardInfo> shardNumbersToShards)
       {
-         private boolean alreadyHere = false;
-         private boolean recurseAttempt = false;
-         private ScheduledFuture<?> currentlyWaitingOn = null;
+         DefaultRouterShardInfo si = shardNumbersToShards.get(shard);
+         if (si == null)
+            return false;
+         return thisDestination.equals(si.getDestination());
+      }
+      
+      private final int findWorkingNodeCount(ClusterInfoSession session, MicroShardUtils msutils, int minNodeCount, ClusterInfoWatcher nodeDirectoryWatcher) throws ClusterInfoException
+      {
+         Collection<String> nodeDirs = session.getSubdirs(msutils.getClusterNodesDir(), nodeDirectoryWatcher);
+         if (logger.isTraceEnabled())
+            logger.trace(toString() + ":Fetching all node's subdirectories:" + nodeDirs);
          
-         /**
-          * This should return <code>true</code> if the underlying execute was successful.
-          * It will be recalled until it does.
-          */
-         public abstract boolean execute() throws Throwable;
-         
-         @Override public void process() { executeUntilWorks(); }
-
-         private synchronized void executeUntilWorks()
-         {
-            if (!isRunning.get())
-               return;
-            
-            // we need to flatten out recursions. This may be called from 
-            // the same thread but deeper in the call tree. Therefore, if
-            // we're already here we want to exit without hitting the 
-            // finally clause at the bottom. But we want to make sure
-            // when we eventually hit the finally clause (with the other
-            // thread or stack frame) we will attempt another time.
-            if (alreadyHere)
-            {
-               recurseAttempt = true;
-               return;
-            }
-
-            boolean retry = true;
-            
-            try
-            {
-               alreadyHere = true;
-               
-               // ok ... we're going to execute this now. So if we have an outstanding scheduled task we
-               // need to cancel it.
-               if (currentlyWaitingOn != null)
-               {
-                  currentlyWaitingOn.cancel(false);
-                  currentlyWaitingOn = null;
-               }
-               
-               retry = !execute();
-               
-               if (logger.isTraceEnabled())
-                  logger.trace("Managed to " + this + " for " + clusterId + " with the results:" + !retry);
-               
-            }
-            catch (Throwable th)
-            {
-               if (logger.isDebugEnabled())
-                  logger.debug("Exception while " + this + " for " + clusterId, th);
-            }
-            finally
-            {
-               // if we never got the destinations set up then kick off a retry
-               if (recurseAttempt)
-                  retry = true;
-               
-               recurseAttempt = false;
-               alreadyHere = false;
-               
-               if (retry)
-               {
-                  ScheduledExecutorService sched = getScheduledExecutor();
-                  if (sched != null)
-                      currentlyWaitingOn = sched.schedule(new Runnable(){
-                        @Override
-                        public void run() { executeUntilWorks(); }
-                     }, resetDelay, TimeUnit.MILLISECONDS);
-               }
-               else
-                  disposeOfScheduler();
-            }
-         }
-      } // end PersistentTask abstract class definition
+         // We CANNOT only consider node directories that have a Destination because we are not listening for them.
+         // The only way to require the destination is to fail here if any destinations are null and retry later
+         // in an attempt to wait until whatever node just created this directory gets around to setting the 
+         // Destination. For now we will assume if the directory exists, then the node exists.
+         int curRegisteredNodesCount = nodeDirs.size();
+//         int curRegisteredNodesCount = 0;
+//         for (String subdir : nodeDirs)
+//         {
+//            Destination dest = (Destination)session.getData(msutils.getClusterNodesDir() + "/" + subdir,null);
+//            if (dest != null)
+//               curRegisteredNodesCount++;
+//         }
+         return curRegisteredNodesCount < minNodeCount ? minNodeCount : curRegisteredNodesCount;
+      }
+      
    } // end Inbound class definition
    
    @Override
@@ -975,7 +1037,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    
    private static boolean acquireShard(int shardNum, int totalAddressNeeded,
          ClusterInfoSession clusterHandle, ClusterId clusterId, 
-         Destination destination) throws ClusterInfoException
+         Destination destination, Map<Integer,DefaultRouterShardInfo> shardNumbersToShards) throws ClusterInfoException
    {
       MicroShardUtils utils = new MicroShardUtils(clusterId);
       String shardPath = utils.getShardsDir() + "/" + String.valueOf(shardNum);
@@ -987,49 +1049,23 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             dest = new DefaultRouterShardInfo(destination,shardNum,totalAddressNeeded);
             clusterHandle.setData(shardPath, dest);
          }
+         if (shardNumbersToShards != null)
+            shardNumbersToShards.put(shardNum, dest);
          return true;
       }
       else
          return false;
    }
    
-   protected synchronized ScheduledExecutorService getScheduledExecutor()
+   private final static List<Integer> range(Collection<String> curSubdirs, int max)
    {
-      if (scheduler_ == null)
-         scheduler_ = Executors.newScheduledThreadPool(1);
-      return scheduler_;
-   }
-   
-   protected synchronized void disposeOfScheduler()
-   {
-      if (scheduler_ != null)
-         scheduler_.shutdown();
-      scheduler_ = null;
-   }
-   
-   private static final int acquireUpToThisMany(ClusterInfoSession session, MicroShardUtils msutils, int minNodeCount, int totalShardCount, ClusterInfoWatcher nodeDirectoryWatcher) throws ClusterInfoException
-   {
-      double currentWorkingNodeCount = (double)findWorkingNodeCount(session,msutils,minNodeCount,nodeDirectoryWatcher);
-      return (int)Math.floor((double)totalShardCount/currentWorkingNodeCount);
-   }
-   
-   private static final int releaseDownToThisMany(ClusterInfoSession session, MicroShardUtils msutils, int minNodeCount, int totalShardCount, ClusterInfoWatcher nodeDirectoryWatcher) throws ClusterInfoException
-   {
-      double currentWorkingNodeCount = (double)findWorkingNodeCount(session,msutils,minNodeCount,nodeDirectoryWatcher);
-      return (int)Math.ceil((double)totalShardCount/currentWorkingNodeCount);
-   }
-   
-   private static final int findWorkingNodeCount(ClusterInfoSession session, MicroShardUtils msutils, int minNodeCount, ClusterInfoWatcher nodeDirectoryWatcher) throws ClusterInfoException
-   {
-      Collection<String> nodeDirs = session.getSubdirs(msutils.getClusterNodesDir(), nodeDirectoryWatcher);
-      int curRegisteredNodesCount = 0;
-      for (String subdir : nodeDirs)
+      List<Integer> ret = new ArrayList<Integer>(max);
+      for (int i = 0; i < max; i++)
       {
-         Destination dest = (Destination)session.getData(msutils.getClusterNodesDir() + "/" + subdir,null);
-         if (dest != null)
-            curRegisteredNodesCount++;
+         if (!curSubdirs.contains(i))
+            ret.add(i);
       }
-      return curRegisteredNodesCount < minNodeCount ? minNodeCount : curRegisteredNodesCount;
+      return ret;
    }
-
+   
 }

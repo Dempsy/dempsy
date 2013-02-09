@@ -122,6 +122,12 @@ public class TestMpContainer
       System.setProperty("failFast", failFast);
       context = new ClassPathXmlApplicationContext("TestMPContainer.xml");
       container = (MpContainer)context.getBean("container");
+      container.setInboundStrategy(new RoutingStrategy.Inbound()
+      {
+         @Override public boolean doesMessageKeyBelongToNode(Object messageKey) { return true; }
+         @Override public void stop() { }
+         @Override public boolean isInitialized() { return true; }
+      });
       assertNotNull(container.getSerializer());
       inputQueue = (BlockingQueue<Object>)context.getBean("inputQueue");
       outputQueue = (BlockingQueue<Object>)context.getBean("outputQueue");

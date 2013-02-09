@@ -20,7 +20,7 @@
                   <bean class="com.nokia.dempsy.DempsyTestBase$TestMp" />
                </property>
                <property name="keySource">
-                  <bean class="com.nokia.dempsy.DempsyTestBase.KeySourceImpl">
+                  <bean class="com.nokia.dempsy.TestDempsyKeySource.KeySourceImpl">
                      <property name="dempsy" ref="dempsy" />
                      <property name="clusterId">
                        <bean class="com.nokia.dempsy.config.ClusterId">

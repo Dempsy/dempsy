@@ -77,7 +77,10 @@ public class TcpReceiver implements Receiver
       setPendingGague();
       
       isStarted.set(true);
-    }
+   }
+   
+   @Override
+   public boolean getFailFast() { return failFast; }
    
    public void handleMessage(byte[] messageBytes)
    {

@@ -46,4 +46,6 @@ public interface Receiver
     * from this Transport instance.
     */
    public void setStatsCollector(StatsCollector statsCollector);
+   
+   public boolean getFailFast();
 }

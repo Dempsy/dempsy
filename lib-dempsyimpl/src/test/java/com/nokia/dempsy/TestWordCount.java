@@ -203,30 +203,23 @@ public class TestWordCount extends DempsyTestBase
       runAllCombinations(new Checker()
       {
          @Override
-         public void check(Pair<String,ClassPathXmlApplicationContext[]>[] contexts) throws Throwable
+         public void check(ClassPathXmlApplicationContext[] contexts) throws Throwable
          {
-            // ok ... we need to let the work count go after we get the adaptor
-            // first context ... only one.
-            assertEquals(3, contexts.length); // this is the number of clusters in the app
-            assertEquals(1, contexts[0].getSecond().length); // this is the width of cluster 0
-            assertEquals("test-cluster0", contexts[0].getFirst());
-            
-            ClassPathXmlApplicationContext actx = contexts[0].getSecond()[0];
+            ClassPathXmlApplicationContext actx = contexts[0];
             Dempsy dempsy = actx.getBean(Dempsy.class);
             WordProducer adaptor = (WordProducer)TestUtils.getAdaptor(dempsy, "test-wordcount", "test-cluster0");
             adaptor.onePass = true;
             WordProducer.latch.countDown(); // let'er rip
             assertTrue(TestUtils.poll(baseTimeoutMillis * 10, adaptor, new Condition<WordProducer>()
             {
-               @Override
-               public boolean conditionMet(WordProducer o) throws Throwable { return o.done.get(); }
+               @Override public boolean conditionMet(WordProducer o) { return o.done.get(); }
             }));
             
             // wait for the messages to get through
             Thread.sleep(100);// but not too long
             
             // now get the WordRank Mp and sort the results.
-            actx = contexts[2].getSecond()[0];
+            actx = contexts[4];
             dempsy = actx.getBean(Dempsy.class);
             WordRank rank = (WordRank)TestUtils.getMp(dempsy, "test-wordcount", "test-cluster2");
             List<Pair<String,Long>> results = rank.getPairs();
@@ -243,8 +236,10 @@ public class TestWordCount extends DempsyTestBase
             DempsyTestBase.TestKryoOptimizer.proxy = WordCounterKryoOptimizer.instance;
          }
       },
-      new Pair<String[],Pair<Integer,String>>(new String[]{ actxPath }, new Pair<Integer,String>(1,"test-cluster0")),
-      new Pair<String[],Pair<Integer,String>>(new String[]{ actxPath }, new Pair<Integer,String>(3,"test-cluster1")),
-      new Pair<String[],Pair<Integer,String>>(new String[]{ actxPath }, new Pair<Integer,String>(1,"test-cluster2")));
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster0"),
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"),
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"),
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"),
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster2"));
    }
 }
