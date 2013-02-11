@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
@@ -52,6 +53,8 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    private OverflowHandler overflowHandler = null;
    private boolean failFast = false; // this has been the default - since it's equivalent to there being no overflowHandler
    private boolean explicitFailFast = false;
+   
+   protected BlockingQueueAdaptor(DempsyExecutor executor) { }
    
    /**
     * <p>This method starts a background thread that reads messages from the queue and sends

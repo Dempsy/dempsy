@@ -507,7 +507,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             statCollector.messageCollision(message);
          }
       } while (evictedAndBlocking);
-
+      
       return messageDispatchSuccessful;
    }
 

@@ -3,7 +3,7 @@
     "http://www.springframework.org/dtd/spring-beans-2.0.dtd">
 <beans>
    <bean class="com.nokia.dempsy.config.ApplicationDefinition">
-      <constructor-arg type="java.lang.String" value="test-wordcount" />
+      <constructor-arg type="java.lang.String" value="test-numbercount" />
       <property name="clusterDefinitions">
          <list>
             <bean class="com.nokia.dempsy.config.ClusterDefinition">

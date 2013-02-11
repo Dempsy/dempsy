@@ -24,7 +24,6 @@ import com.nokia.dempsy.router.Router;
 @Ignore
 public class TestUtils
 {
-//   private static Logger logger = LoggerFactory.getLogger(TestUtils.class);
    /**
     * This is the interface that serves as the root for anonymous classes passed to 
     * the poll call.
@@ -47,10 +46,6 @@ public class TestUtils
       for (long endTime = System.currentTimeMillis() + timeoutMillis;
             endTime > System.currentTimeMillis() && !(finalLoopCondition = condition.conditionMet(userObject));)
          Thread.sleep(10);
-//      boolean returnCondition = condition.conditionMet(userObject);
-//      if (finalLoopCondition == true && returnCondition == false)
-//         logger.error("Return Condition Reversal for " + SafeString.objectDescription(condition));
-//      return returnCondition;
       return finalLoopCondition;
    }
    
@@ -76,43 +71,6 @@ public class TestUtils
       return node.statsCollector;
    }
    
-//   public static boolean waitForAllClustersToBeBalanced(long timeoutMillis, ClassPathXmlApplicationContext[] contexts) throws Throwable
-//   {
-//      // first, separate out all nodes by cluster.
-//      Map<ClusterId,List<Dempsy.Application.Cluster.Node>> nodes = getNodes(contexts);
-//
-//      // flatten them into a big list
-//      List<Dempsy.Application.Cluster.Node> flattenedNodes = new ArrayList<Dempsy.Application.Cluster.Node>();
-//      for (List<Dempsy.Application.Cluster.Node> cnodes : nodes.values())
-//         for (Dempsy.Application.Cluster.Node node : cnodes)
-//            flattenedNodes.add(node);
-//
-//      // make sure they all start.
-//      if (!poll(timeoutMillis, flattenedNodes,
-//            new Condition<List<Dempsy.Application.Cluster.Node>>()
-//            {
-//               @Override
-//               public boolean conditionMet(List<Dempsy.Application.Cluster.Node> allnodes) 
-//               {
-//                  for (Dempsy.Application.Cluster.Node node : allnodes)
-//                     if (!node.yspmeDteg().isRunning())
-//                        return false;
-//                  return true;
-//               }
-//            }))
-//         return false;
-//
-//      // now make sure each cluster group is balanced.
-//      for (List<Dempsy.Application.Cluster.Node> cnodes : nodes.values())
-//      {
-//         // if the first node in the list doesn't contain a strategy then it's an adaptor and we can skip it
-//         if (cnodes.get(0).strategyInbound != null)
-//         {
-//            
-//         }
-//      }
-//   }
-
    /**
     * <p>This allows tests to wait until a Dempsy application is completely up before
     * executing commands. Given the asynchronous nature of relationships between stages
