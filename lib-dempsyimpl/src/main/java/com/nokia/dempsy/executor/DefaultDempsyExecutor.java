@@ -2,6 +2,7 @@ package com.nokia.dempsy.executor;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -11,19 +12,29 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DefaultDempsyExecutor implements DempsyExecutor
 {
+   private static Logger logger = LoggerFactory.getLogger(DefaultDempsyExecutor.class);
    private ScheduledExecutorService schedule = null;
    private ThreadPoolExecutor executor = null;
    private AtomicLong numLimited = null;
    private long maxNumWaitingLimitedTasks = -1;
    private int threadPoolSize = -1;
+   
+   private final long executorCount;
+   
    private static final int minNumThreads = 4;
+   private static AtomicLong executorCountSequence = new AtomicLong(0);
    
    private double m = 1.25;
    private int additionalThreads = 2;
+   private boolean unlimited = false;
+   private boolean blocking = false;
    
-   public DefaultDempsyExecutor() { }
+   public DefaultDempsyExecutor() { executorCount = executorCountSequence.getAndIncrement(); }
    
    /**
     * Create a DefaultDempsyExecutor with a fixed number of threads while setting the
@@ -33,7 +44,29 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    {
       this.threadPoolSize = threadPoolSize;
       this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+      this.executorCount = executorCountSequence.getAndIncrement();
    }
+   
+   /**
+    * <p>The DefaultDempsyExecutor can be set so that the maxNumWaitingLimitedTasks will be
+    * ignored so that all submitted tasks, even when submitLimited is used, will be 
+    * queued unbounded and will execute.</p>
+    * 
+    * <p>The default behavior is for the oldest limited tasks to be rejected when
+    * the maxNumWaitingLimitedTasks is reached. In other words, the default is 
+    * for unlimited = false.</p>
+    */
+   public void setUnlimited(boolean unlimited) { this.unlimited = unlimited; }
+   
+   /**
+    * <p>If blocking is set to true then submitting limited tasks, once the 
+    * maxNumWaitingLimitedTasks is reached, will block until room is available.</p>
+    * 
+    * <p>The default is {@code blocking = false}</p>
+    * 
+    * <p>If {@code unlimited} is {@code true} then this setting is effectively ignored.</p>
+    */
+   public void setBlocking(boolean blocking) { this.blocking = blocking; }
    
    /**
     * <p>Prior to calling start you can set the cores factor and additional
@@ -55,6 +88,9 @@ public class DefaultDempsyExecutor implements DempsyExecutor
     */
    public void setAdditionalThreads(int additionalThreads){ this.additionalThreads = additionalThreads; }
    
+   // milliseconds per thread
+   private static final long namingTimeoutLimitFactorMillis = 100;
+   
    @Override
    public void start()
    {
@@ -67,7 +103,10 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
       }
       executor = (ThreadPoolExecutor)Executors.newFixedThreadPool(threadPoolSize);
+      String baseName = "DempsyExc-" + executorCount;
+      new ThreadNamer(baseName, threadPoolSize, executor);
       schedule = Executors.newSingleThreadScheduledExecutor();
+      new ThreadNamer(baseName + "-sched", 1, schedule);
       numLimited = new AtomicLong(0);
       
       if (maxNumWaitingLimitedTasks < 0)
@@ -114,22 +153,36 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    @Override
    public <V> Future<V> submitLimited(final Rejectable<V> r)
    {
+      if (unlimited) return submit(r);
+      
       Callable<V> task = new Callable<V>()
       {
-         Rejectable<V> o = r;
+         private Rejectable<V> o = r;
 
          @Override
          public V call() throws Exception
          {
             long num = numLimited.decrementAndGet();
-            if (num <= maxNumWaitingLimitedTasks)
+            if (blocking) { synchronized(numLimited) { numLimited.notifyAll(); } }
+            
+            if (blocking || num <= maxNumWaitingLimitedTasks)
                return o.call();
             o.rejected();
             return null;
          }
       };
       
-      numLimited.incrementAndGet();
+      if (blocking && (numLimited.get() >= maxNumWaitingLimitedTasks))
+      {
+         synchronized(numLimited)
+         {
+            // check again.
+            while (numLimited.get() >= maxNumWaitingLimitedTasks && isRunning())
+            {
+               try { numLimited.wait(); } catch (InterruptedException ie) {}
+            }
+         }
+      }
 
       Future<V> ret = executor.submit(task);
       return ret;
@@ -199,5 +252,43 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          return ret.get(System.currentTimeMillis() - cur,TimeUnit.MILLISECONDS);
       }
    }
-   
+
+   /**
+    * Names threads in a thread pool. Only works for fixed size pools.
+    */
+   private class ThreadNamer implements Runnable
+   {
+      private final int threadCount;
+      private final String baseName;
+      private long sequence = 0;
+      
+      private ThreadNamer(String baseName, int threadCount, Executor executor)
+      {
+         this.threadCount = threadCount;
+         this.baseName = baseName;
+         for (int i = 0; i < threadCount; i++)
+            executor.execute(this);
+      }
+      
+      @Override
+      public synchronized void run()
+      {
+         String threadName = baseName + "-" + sequence++;
+         Thread.currentThread().setName(threadName);
+         
+         if (sequence >= threadCount)
+            notifyAll();
+         else
+            // block until sequence gets to threadCount
+            while (sequence < threadCount)
+            {
+               try { wait(namingTimeoutLimitFactorMillis * threadCount); } catch (InterruptedException ie) {}
+            }
+         
+         if (sequence < threadCount)
+            logger.error("Failed to set all of the name's for the " + 
+                  executorCount + "'th " + DefaultDempsyExecutor.class.getSimpleName() + 
+                  ". This is either a bug in the Dempsy code OR the JVM is under tremendous load.");
+      }
+   }
 }

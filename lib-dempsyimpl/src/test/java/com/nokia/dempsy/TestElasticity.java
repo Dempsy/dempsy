@@ -10,9 +10,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
@@ -25,12 +27,16 @@ import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.messagetransport.Receiver;
+import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 import com.nokia.dempsy.util.Pair;
 
 public class TestElasticity extends DempsyTestBase
 {
    static { logger = LoggerFactory.getLogger(TestElasticity.class);  }
+   
+   private static final int profilerTestNumberCount = 1000000;
    
    public static final String actxPath = "testElasticity/NumberCountActx.xml";
    
@@ -87,6 +93,7 @@ public class TestElasticity extends DempsyTestBase
    @MessageProcessor
    public static class NumberCounter implements Cloneable
    {
+      public static AtomicLong messageCount = new AtomicLong(0);
       long counter = 0;
       String wordText;
       
@@ -94,7 +101,7 @@ public class TestElasticity extends DempsyTestBase
       public void initMe(String key) { this.wordText = key; }
       
       @MessageHandler
-      public NumberCount handle(Number word) { return new NumberCount(word,counter++); }
+      public NumberCount handle(Number word) { messageCount.incrementAndGet(); return new NumberCount(word,counter++); }
       
       @Override
       public NumberCounter clone() throws CloneNotSupportedException { return (NumberCounter) super.clone(); }
@@ -103,6 +110,8 @@ public class TestElasticity extends DempsyTestBase
    @MessageProcessor
    public static class NumberRank implements Cloneable
    {
+      public final AtomicLong totalMessages = new AtomicLong(0);
+      
       @SuppressWarnings({"unchecked","rawtypes"})
       final public AtomicReference<Map<Integer,Long>[]> countMap = new AtomicReference(new Map[1000]);
       
@@ -114,7 +123,7 @@ public class TestElasticity extends DempsyTestBase
       @MessageHandler
       public void handle(NumberCount wordCount) 
       {
-         logger.trace("==== receiving " + wordCount);
+         totalMessages.incrementAndGet();
          countMap.get()[wordCount.rankIndex].put(wordCount.number, wordCount.count); 
       }
 
@@ -138,9 +147,9 @@ public class TestElasticity extends DempsyTestBase
       }
    }
    
-   public static class WordCounterKryoOptimizer implements KryoOptimizer
+   public static class NumberCounterKryoOptimizer implements KryoOptimizer
    {
-      public static WordCounterKryoOptimizer instance = new WordCounterKryoOptimizer();
+      public static NumberCounterKryoOptimizer instance = new NumberCounterKryoOptimizer();
       
       @Override
       public void preRegister(Kryo kryo)
@@ -154,6 +163,95 @@ public class TestElasticity extends DempsyTestBase
       public void postRegister(Kryo kryo) { }
    }
    //========================================================================
+   
+   @SuppressWarnings("unchecked")
+   @Test
+   public void testForProfiler() throws Throwable
+   {
+      // set up the test.
+      final Number[] numbers = new Number[profilerTestNumberCount];
+      Random random = new Random();
+      for (int i = 0; i < numbers.length; i++)
+       numbers[i] = new Number(random.nextInt(1000),0);
+      
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(ClassPathXmlApplicationContext[] contexts) throws Throwable
+         {
+            try
+            {
+               logger.trace("==== Starting ...");
+               
+               boolean exactCheck = !TestUtils.getReceiver(2, contexts).getFailFast();
+               
+               // set blocking on all tcp receivers if exactCheck is set
+               if (exactCheck)
+               {
+                  for (int i = 1; i < contexts.length; i++)
+                  {
+                     Receiver r = TestUtils.getReceiver(i, contexts);
+                     if (TcpReceiver.class.isAssignableFrom(r.getClass()))
+                        ((TcpReceiver)r).setBlocking(true);
+                  }
+               }
+               
+               // Grab the one NumberRank Mp from the single Node in the third (0 base 2nd) cluster.
+               NumberRank rank = (NumberRank)TestUtils.getMp(4,contexts);
+
+               assertTrue(TestUtils.waitForClusterBalance(baseTimeoutMillis, "test-cluster1", contexts, 20, 3));
+               logger.trace("==== Clusters balanced");
+
+               // grab the adaptor from the 0'th cluster + the 0'th (only) node.
+               NumberProducer adaptor = (NumberProducer)TestUtils.getAdaptor(0,contexts);
+
+               // grab access to the Dispatcher from the Adaptor
+               final Dispatcher dispatcher = adaptor.dispatcher;
+               
+               for (int i = 0; i < numbers.length; i++)
+                  dispatcher.dispatch(numbers[i]);
+               
+               if (exactCheck)
+               {
+                  logger.trace("====> Checking exact count.");
+                  
+                  // keep going as long as they are trickling in.
+                  long lastNumberOfMessages = -1;
+                  while (rank.totalMessages.get() > lastNumberOfMessages)
+                  {
+                     lastNumberOfMessages = rank.totalMessages.get();
+                     if (TestUtils.poll(baseTimeoutMillis, rank.totalMessages, new TestUtils.Condition<AtomicLong>()
+                     {
+                        @Override public boolean conditionMet(AtomicLong o) { return o.get() == profilerTestNumberCount; }
+                     }))
+                        break;
+                  }
+                  
+                  assertEquals(profilerTestNumberCount,rank.totalMessages.get());
+                  assertEquals(profilerTestNumberCount,NumberCounter.messageCount.get());
+               }
+
+            }
+            finally {}
+         }
+         
+         @Override
+         public String toString() { return "testForProfiler"; }
+         
+         @Override
+         public void setup() 
+         {
+            NumberCounter.messageCount.set(0);
+            DempsyTestBase.TestKryoOptimizer.proxy = NumberCounterKryoOptimizer.instance;
+         }
+      },
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster0"), // adaptor
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"), // 3 NumberCounter Mps
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"), //  .
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"), //  .
+      new Pair<String[],String>(new String[]{ actxPath }, "test-cluster2"));// NumberRank
+
+   }
    
    static private TestUtils.Condition<Thread> threadStoppedCondition = new TestUtils.Condition<Thread>()
    {
@@ -278,7 +376,7 @@ public class TestElasticity extends DempsyTestBase
          @Override
          public void setup() 
          {
-            DempsyTestBase.TestKryoOptimizer.proxy = WordCounterKryoOptimizer.instance;
+            DempsyTestBase.TestKryoOptimizer.proxy = NumberCounterKryoOptimizer.instance;
          }
       },
       new Pair<String[],String>(new String[]{ actxPath }, "test-cluster0"), // adaptor
@@ -363,7 +461,7 @@ public class TestElasticity extends DempsyTestBase
          @Override
          public void setup() 
          {
-            DempsyTestBase.TestKryoOptimizer.proxy = WordCounterKryoOptimizer.instance;
+            DempsyTestBase.TestKryoOptimizer.proxy = NumberCounterKryoOptimizer.instance;
          }
       },
       new Pair<String[],String>(new String[]{ actxPath }, "test-cluster0"), // adaptor

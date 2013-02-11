@@ -6,6 +6,6 @@
 
 	<bean name="transport"
 		class="com.nokia.dempsy.messagetransport.passthrough.PassthroughTransport" >
-		<property name="failFast" value="true" />
+		<property name="failFast" value="false" />
 	</bean>
 </beans>

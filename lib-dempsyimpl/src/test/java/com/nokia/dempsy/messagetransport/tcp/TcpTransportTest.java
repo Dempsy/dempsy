@@ -18,6 +18,7 @@ package com.nokia.dempsy.messagetransport.tcp;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -54,6 +55,7 @@ public class TcpTransportTest
    private static final int numThreads = 4;
    
    private static long baseTimeoutMillis = 20000;
+   private static long socketWriteTimeoutMillis = 10000;
    
 //-------------------------------------------------------------------------------------
 // Support code for multirun tests.
@@ -97,6 +99,131 @@ public class TcpTransportTest
    /**
     * Just send a simple message and make sure it gets through.
     */
+   final int numMessagesPerThread = 1000000;
+   
+   @Test
+   public void transportBlockingSimpleMessage() throws Throwable
+   {
+      boolean oldTrackProblems = BasicStatsCollector.trackProblems;
+      BasicStatsCollector.trackProblems = true;
+      long oldSocketWriteTimeoutMillis = socketWriteTimeoutMillis;
+      socketWriteTimeoutMillis = 100000;
+      
+      try
+      {
+         runAllCombinations(new Checker()
+         {
+            @Override
+            public void check(int port, boolean localhost) throws Throwable
+            {
+               logger.trace("========= Starting");
+               SenderFactory factory = null;
+               TcpReceiver adaptor = null;
+               StatsCollector statsCollector = new BasicStatsCollector();
+               TcpServer server = null;
+               final AtomicLong messageCount = new AtomicLong(0);
+               final AtomicBoolean keepGoing = new AtomicBoolean(true);
+
+               try
+               {
+                  //===========================================
+                  // setup the sender and receiver
+                  server = new TcpServer();
+                  adaptor = new TcpReceiver(server,null,getFailFast());
+                  adaptor.setBlocking(true);
+                  adaptor.setStatsCollector(statsCollector);
+                  adaptor.setListener(new Listener()
+                  {
+                     @Override public void shuttingDown() { }
+                     @Override public boolean onMessage(byte[] messageBytes, boolean failFast) { messageCount.incrementAndGet(); return true; }
+                  });
+                  factory = makeSenderFactory(false,statsCollector); // distruptible sender factory
+
+                  // always use an ephemeral port and not localhost.
+                  //               if (port > 0) server.setPort(port);
+                  //               if (localhost) server.setUseLocalhost(localhost);
+                  //===========================================
+
+                  adaptor.start(); // start the adaptor
+                  Destination destination = adaptor.getDestination(); // get the destination
+
+                  // send a message
+                  final Sender sender = factory.getSender(destination);
+                  final byte[] message = "Hello".getBytes();
+                  final AtomicBoolean failed = new AtomicBoolean(false);
+
+                  for (int i = 0; i < numThreads; i++)
+                  {
+                     Thread t = new Thread(new Runnable()
+                     {
+                        @Override  public void run()
+                        {
+                           try
+                           {
+                              for (int i = 0; i < numMessagesPerThread && keepGoing.get(); i++)
+                                 sender.send(message);
+                           }
+                           catch(Throwable e)
+                           {
+                              failed.set(true);
+                              throw new RuntimeException(e);
+                           }
+                        }
+                     });
+                     t.start();
+                  }
+
+                  assertFalse(failed.get());
+
+                  TestUtils.Condition<AtomicLong> correctNumMessagesReceived = new TestUtils.Condition<AtomicLong>()
+                        {
+                     @Override public boolean conditionMet(AtomicLong o) { return o.get() == (numMessagesPerThread * numThreads); } 
+                        };
+
+                        long lastNumberOfMessages = -1;
+                        while (messageCount.get() > lastNumberOfMessages)
+                        {
+                           lastNumberOfMessages = messageCount.get();
+                           if (TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived))
+                              break;
+                        }
+
+                        // wait for it to be received.
+                        TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived);
+
+                        assertEquals(numMessagesPerThread * numThreads, messageCount.get());
+               }
+               finally
+               {
+                  logger.trace("========= Stopping");
+
+                  keepGoing.set(false);
+
+                  if (server != null)
+                     server.stop();
+
+                  if (factory != null)
+                     factory.shutdown();
+
+                  if (adaptor != null)
+                     adaptor.shutdown();
+
+                  logger.trace("========= Finished");
+               }
+
+            }
+
+            @Override
+            public String toString() { return "transportBlockingSimpleMessage"; }
+         });
+      }
+      finally
+      {
+         BasicStatsCollector.trackProblems = oldTrackProblems;
+         socketWriteTimeoutMillis = oldSocketWriteTimeoutMillis;
+      }
+   }
+   
    @Test
    public void transportSimpleMessage() throws Throwable
    {

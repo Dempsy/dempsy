@@ -270,7 +270,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   ret = null; // no chance.
                }
             } // end synchronized(this)
-         } // end if the routerMap didn't have any Outbounds that corespond to the given messageType
+         } // end if the routerMap didn't have any Outbounds that correspond to the given messageType
          
          if (clustersToReconsult.size() > 0)
             reconsultClusters();

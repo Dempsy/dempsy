@@ -109,8 +109,6 @@ public class TcpSenderConnection implements Runnable
 
    public void setTimeoutMillis(long timeoutMillis) { this.timeoutMillis = timeoutMillis; }
 
-   public void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
-   
    @Override
    public void run()
    {
@@ -131,7 +129,7 @@ public class TcpSenderConnection implements Runnable
             try
             {
                message = batchOutgoingMessages ? sendingQueue.poll() : sendingQueue.take();
-               
+
                DataOutputStream localDataOutputStream = getDataOutputStream();
 
                if (message == null)
@@ -205,6 +203,8 @@ public class TcpSenderConnection implements Runnable
          isSenderRunning.set(false);
       }
    }
+   
+   protected void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
    
    // this should ONLY be called from the read thread
    private DataOutputStream getDataOutputStream() throws MessageTransportException, IOException

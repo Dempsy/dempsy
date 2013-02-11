@@ -45,6 +45,7 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
+import com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.internal.util.SafeString;
@@ -58,28 +59,29 @@ public class DempsyTestBase
     * every runAllCombinations call. This can make tests run for a loooooong time.
     */
    public static boolean hardcore = false;
+   public static boolean profile = false;
 
    protected static Logger logger;
    protected static long baseTimeoutMillis = 20000; // 20 seconds
 
-   public String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
+   public static String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
 
-   public String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
-   public String[][] transports = new String[][] {
-         { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
+   public static String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
+   public static String[][] transports = new String[][] {
+         { "testDempsy/Transport-PassthroughActx.xml","testDempsy/Transport-PassthroughBlockingActx.xml" }, 
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
          { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
 
-   public String[] serializers = new String[]
+   public static String[] serializers = new String[]
          { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml", "testDempsy/Serializer-KryoOptimizedActx.xml" };
 
-   public String[] routingStrategies = new String[]
+   public static String[] routingStrategies = new String[]
          { "testDempsy/RoutingStrategy-DecentralizedActx.xml" };
    
    // bad combinations.
    @SuppressWarnings("unchecked")
-   public List<Pair<String,String>> badCombos = Arrays.asList((Pair<String,String>[])new Pair[] {
+   public static List<Pair<String,String>> badCombos = Arrays.asList((Pair<String,String>[])new Pair[] {
          // the passthrough Destination is not serializable but zookeeper requires it to be
          new Pair<String,String>("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
          new Pair<String,String>("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml") , 
@@ -99,19 +101,34 @@ public class DempsyTestBase
       System.setProperty("cluster", "test-cluster2");
       zkServer = new InitZookeeperServerBean();
       
+      LocalClusterSessionFactory.completeReset();
+
       // check for the system property that will set the hardcore flag to true
       if (System.getProperties().containsKey("test.hardcore"))
          hardcore = true;
       
       if (hardcore)
          System.out.println("Hardcore testing in progress. This will take a while, you might as well go get a coffee.");
+      
+      if (System.getProperties().containsKey("test.profile"))
+         profile = true;
+      
+      if (profile)
+      {
+         baseTimeoutMillis *= 3;
+         System.out.println("Running only PassThrough transport and LocalClusterSessionFactory to optimize profiling.");
+         serializers = new String[] { "testDempsy/Serializer-KryoOptimizedActx.xml" };
+         transports = new String[][] { {"testDempsy/Transport-BlockingQueueActx.xml"} };
+         clusterManagers = new String[]{ "testDempsy/ClusterInfo-LocalActx.xml" };
+      }
    }
 
    @AfterClass
-   public static void shutdownZookeeper()
+   public static void shutdownClusterInfoSessions()
    {
       zkServer.stop();
       TestZookeeperSessionFactory.useSingletonSession = false;
+      LocalClusterSessionFactory.completeReset();
    }
    
    public static class TestZookeeperSessionFactory extends ZookeeperSessionFactory

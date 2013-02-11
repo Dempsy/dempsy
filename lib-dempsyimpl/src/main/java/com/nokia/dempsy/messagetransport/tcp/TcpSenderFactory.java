@@ -32,14 +32,13 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 public class TcpSenderFactory implements SenderFactory
 {
    // referenced only while the monitor is held on senders
-   private boolean isStopped = false;
    protected StatsCollector statsCollector = null;
-   private Map<Destination,TcpSender> senders = new HashMap<Destination, TcpSender>();
+   private boolean isStopped = false;
    private ConcurrentHashMap<Destination,TcpSenderConnection> connections = null;
-   
-   protected long socketWriteTimeoutMillis;
-   protected boolean batchOutgoingMessages;
-   protected long maxNumberOfQueuedOutbound;
+   private final Map<Destination,TcpSender> senders = new HashMap<Destination, TcpSender>();
+   protected final long socketWriteTimeoutMillis;
+   protected final boolean batchOutgoingMessages;
+   protected final long maxNumberOfQueuedOutbound;
    
    protected TcpSenderFactory(ConcurrentHashMap<Destination,TcpSenderConnection> connections, StatsCollector statsCollector,
          long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
