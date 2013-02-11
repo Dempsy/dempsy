@@ -63,6 +63,24 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
    /// initially add the root. 
    public static synchronized void reset() { entries.clear(); entries.put("/", new Entry()); }
    
+   public static synchronized void completeReset()
+   {
+      synchronized(currentSessions)
+      {
+         if (!isReset())
+            logger.error("LocalClusterSessionFactory beging reset with sessions or entries still open.");
+         
+         List<LocalSession> sessions = new ArrayList<LocalSession>(currentSessions.size());
+         sessions.addAll(currentSessions);
+         currentSessions.clear();
+         for (LocalSession session : sessions)
+            session.stop(false);
+         reset();
+      }
+   }
+   
+   public static boolean isReset() { return currentSessions.size() == 0 && entries.size() == 1; }
+   
    private static synchronized Set<LocalSession.WatcherProxy> ogatherWatchers(Entry ths, boolean node, boolean child)
    {
       Set<LocalSession.WatcherProxy> twatchers = new HashSet<LocalSession.WatcherProxy>();
