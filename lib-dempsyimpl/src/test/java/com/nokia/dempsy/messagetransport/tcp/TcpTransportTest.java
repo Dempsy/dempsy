@@ -92,7 +92,19 @@ public class TcpTransportTest
       }
    }
    
-
+   private void runMain(Checker check) throws Throwable
+   {
+      try
+      {
+         logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
+         check.check(-1, false);
+      }
+      finally
+      {
+         logger.debug("ending combinations for " + check);
+      }
+   }
+   
 //-------------------------------------------------------------------------------------
 // multirun tests.
 //-------------------------------------------------------------------------------------
@@ -111,7 +123,7 @@ public class TcpTransportTest
       
       try
       {
-         runAllCombinations(new Checker()
+         runMain(new Checker()
          {
             @Override
             public void check(int port, boolean localhost) throws Throwable
@@ -176,22 +188,22 @@ public class TcpTransportTest
                   assertFalse(failed.get());
 
                   TestUtils.Condition<AtomicLong> correctNumMessagesReceived = new TestUtils.Condition<AtomicLong>()
-                        {
+                  {
                      @Override public boolean conditionMet(AtomicLong o) { return o.get() == (numMessagesPerThread * numThreads); } 
-                        };
+                  };
 
-                        long lastNumberOfMessages = -1;
-                        while (messageCount.get() > lastNumberOfMessages)
-                        {
-                           lastNumberOfMessages = messageCount.get();
-                           if (TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived))
-                              break;
-                        }
+                  long lastNumberOfMessages = -1;
+                  while (messageCount.get() > lastNumberOfMessages)
+                  {
+                     lastNumberOfMessages = messageCount.get();
+                     if (TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived))
+                        break;
+                  }
 
-                        // wait for it to be received.
-                        TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived);
+                  // wait for it to be received.
+                  TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived);
 
-                        assertEquals(numMessagesPerThread * numThreads, messageCount.get());
+                  assertEquals(numMessagesPerThread * numThreads, messageCount.get());
                }
                finally
                {
@@ -280,7 +292,6 @@ public class TcpTransportTest
                if (adaptor != null)
                   adaptor.shutdown();
             }
-
          }
          
          @Override
@@ -479,7 +490,7 @@ public class TcpTransportTest
    @Test
    public void transportMultipleConnectionsFailedClient() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
@@ -598,7 +609,7 @@ public class TcpTransportTest
    @Test
    public void transportMultipleConnectionsFailedReceiver() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
@@ -723,7 +734,7 @@ public class TcpTransportTest
    @Test
    public void testBoundedOutputQueue() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
@@ -1006,7 +1017,7 @@ public class TcpTransportTest
    @Test
    public void transportMTWorkerMessage() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
