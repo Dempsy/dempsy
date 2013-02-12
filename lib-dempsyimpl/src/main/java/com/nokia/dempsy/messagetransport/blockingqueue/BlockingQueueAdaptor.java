@@ -56,6 +56,8 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    
    protected BlockingQueueAdaptor(DempsyExecutor executor) { }
    
+   public BlockingQueueAdaptor() {} // some tests explicitly instantiate this class without an executor.
+   
    /**
     * <p>This method starts a background thread that reads messages from the queue and sends
     * them to a registered MessageTransportListener.</p>
