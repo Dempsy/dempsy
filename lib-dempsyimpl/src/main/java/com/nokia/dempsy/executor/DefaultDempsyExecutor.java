@@ -5,6 +5,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -128,6 +129,8 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       
       if (schedule != null)
          schedule.shutdown();
+      
+      synchronized(numLimited) { numLimited.notifyAll(); }
    }
 
    @Override
@@ -136,6 +139,11 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       return executor.getQueue().size();
    }
    
+   /**
+    * How many {@link Rejectable}s passed to submitLimited are currently pending.
+    * This will always return zero when the {@link DefaultDempsyExecutor}
+    * is set to {@code unlimited}.
+    */
    @Override
    public int getNumberLimitedPending()
    {
@@ -172,7 +180,7 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          }
       };
       
-      if (blocking && (numLimited.get() >= maxNumWaitingLimitedTasks))
+      if (blocking && (numLimited.get() > maxNumWaitingLimitedTasks))
       {
          synchronized(numLimited)
          {
@@ -184,8 +192,19 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          }
       }
 
-      Future<V> ret = executor.submit(task);
-      return ret;
+      numLimited.incrementAndGet();
+      
+      try
+      {
+         Future<V> ret = executor.submit(task);
+         return ret;
+      }
+      catch (RejectedExecutionException re)
+      {
+         numLimited.decrementAndGet();
+         r.rejected();
+         throw re;
+      }
    }
    
    @Override
