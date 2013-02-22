@@ -35,7 +35,7 @@
     <metrics.version>2.0.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <mockito.version>1.9.0</mockito.version>
-    <quartz.version>2.0.1</quartz.version>
+    <quartz.version>2.1.6</quartz.version>
     <kryo.version>2.20</kryo.version>
     <jzmq.version>2.1.0</jzmq.version>
     <native.os>${os.name}</native.os>
