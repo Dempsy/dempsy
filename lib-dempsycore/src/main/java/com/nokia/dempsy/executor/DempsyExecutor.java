@@ -48,12 +48,14 @@ public interface DempsyExecutor
    public int getNumberLimitedPending();
    
    /**
-    * Start up the executor
+    * Start up the executor. This method must be implemented
+    * in an idempotent manner.
     */
    public void start();
    
    /**
-    * Perform a clean shutdown of the executor
+    * Perform a clean shutdown of the executor. This method must be implemented
+    * in an idempotent manner.
     */
    public void shutdown();
    

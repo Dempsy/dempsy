@@ -19,16 +19,17 @@ import org.slf4j.LoggerFactory;
 public class DefaultDempsyExecutor implements DempsyExecutor
 {
    private static Logger logger = LoggerFactory.getLogger(DefaultDempsyExecutor.class);
+   private static final int minNumThreads = 4;
+   private static AtomicLong executorCountSequence = new AtomicLong(0);
+   
+   private final long executorCount;
+   private boolean isRunning = false;
+   
    private ScheduledExecutorService schedule = null;
    private ThreadPoolExecutor executor = null;
    private AtomicLong numLimited = null;
    private long maxNumWaitingLimitedTasks = -1;
    private int threadPoolSize = -1;
-   
-   private final long executorCount;
-   
-   private static final int minNumThreads = 4;
-   private static AtomicLong executorCountSequence = new AtomicLong(0);
    
    private double m = 1.25;
    private int additionalThreads = 2;
@@ -93,8 +94,11 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    private static final long namingTimeoutLimitFactorMillis = 100;
    
    @Override
-   public void start()
+   public synchronized void start()
    {
+      if (isRunning)
+         return;
+      
       if (threadPoolSize == -1)
       {
          // figure out the number of cores.
@@ -112,6 +116,8 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       
       if (maxNumWaitingLimitedTasks < 0)
          maxNumWaitingLimitedTasks = 20 * threadPoolSize;
+      
+      isRunning = true;
    }
    
    public int getMaxNumberOfQueuedLimitedTasks() { return (int)maxNumWaitingLimitedTasks; }
@@ -122,15 +128,20 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    public int getNumThreads() { return threadPoolSize; }
    
    @Override
-   public void shutdown()
+   public synchronized void shutdown()
    {
-      if (executor != null)
-         executor.shutdown();
+      if (isRunning)
+      {
+         if (executor != null)
+            executor.shutdown();
+
+         if (schedule != null)
+            schedule.shutdown();
       
-      if (schedule != null)
-         schedule.shutdown();
-      
-      synchronized(numLimited) { numLimited.notifyAll(); }
+         synchronized(numLimited) { numLimited.notifyAll(); }
+         
+         isRunning = false;
+      }
    }
 
    @Override
