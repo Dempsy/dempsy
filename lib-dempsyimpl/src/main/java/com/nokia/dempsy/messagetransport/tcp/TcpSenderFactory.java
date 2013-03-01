@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
@@ -31,6 +34,8 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpSenderFactory implements SenderFactory
 {
+   private static final Logger logger = LoggerFactory.getLogger(TcpSenderFactory.class);
+
    // referenced only while the monitor is held on senders
    protected StatsCollector statsCollector = null;
    private boolean isStopped = false;
@@ -102,6 +107,7 @@ public class TcpSenderFactory implements SenderFactory
       TcpDestination baseDestination = destination.baseDestination();
       TcpSenderConnection tmpCon = new TcpSenderConnection(baseDestination,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
       TcpSenderConnection connection = this.connections.putIfAbsent(baseDestination, tmpCon);
+      logger.trace(toString() + ", making TcpSender for " + destination);
       if (connection == null) connection = tmpCon;
       return new TcpSender(connection, (TcpDestination)destination, statsCollector);
    }

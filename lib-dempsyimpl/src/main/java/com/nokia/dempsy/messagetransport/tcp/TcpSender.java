@@ -18,6 +18,7 @@ package com.nokia.dempsy.messagetransport.tcp;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
+import com.nokia.dempsy.messagetransport.util.SenderConnection;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpSender implements Sender
@@ -39,34 +40,35 @@ public class TcpSender implements Sender
             @Override
             public long value()
             {
-               return TcpSender.this.connection.sendingQueue.size();
+               return TcpSender.this.connection.getQ().size();
             }
          });
       }
       connection.start(this);
    }
    
-   public class Enqueued
+   public class Enqueued extends SenderConnection.Enqueued
    {
-      public byte[] messageBytes;
-      
       public Enqueued(byte[] messageBytes) { this.messageBytes = messageBytes; }
       
       public void messageNotSent() { if (statsCollector != null) statsCollector.messageNotSent(messageBytes); }
       public void messageSent() { if (statsCollector != null) statsCollector.messageSent(messageBytes); }
-      public int getSequence() { return destination.getSequence(); }
+      public int getReceiverIndex() { return destination.getReceiverIndex(); }
    }
    
    @Override
    public void send(byte[] messageBytes) throws MessageTransportException
    {
-      try { connection.sendingQueue.put(new Enqueued(messageBytes)); }
+      try { connection.getQ().put(new Enqueued(messageBytes)); }
       catch (InterruptedException e)
       {
          if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
          throw new MessageTransportException("Failed to enqueue message to " + destination + ".",e);
       }
    }
+   
+   @Override
+   public String toString() { return "TcpSender to " + destination; }
    
    protected void stop()
    {

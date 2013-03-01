@@ -305,7 +305,8 @@ public class TcpTransportTest
       {
          int count = 0;
          
-         protected ClientThread makeNewClientThread(Socket clientSocket) throws IOException
+         @Override
+         protected ClientThread makeNewClientThread(Object clientSocket) throws IOException
          {
             count++;
             return count == 1 ? new ClientThread(clientSocket)
@@ -774,13 +775,13 @@ public class TcpTransportTest
                   {
                      // this should eventually fail
                      sender.send(message); // this should work
-                     return sender.connection.sendingQueue.size() > (maxQueuedMessages * 2);
+                     return sender.connection.getQ().size() > (maxQueuedMessages * 2);
                   }
                }));
                
                Thread.sleep(100);
                
-               final int backup = sender.connection.sendingQueue.size();
+               final int backup = sender.connection.getQ().size();
                
                sender.connection.socketTimeout.disrupt(); // kick it.
                

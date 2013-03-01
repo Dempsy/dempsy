@@ -102,7 +102,7 @@ public class TcpReceiver implements Receiver
    
    public synchronized void shutdown()
    {
-      server.unregister(destination);
+      if (destination != null) server.unregister(destination);
       
       try { if ( messageTransportListener != null) messageTransportListener.transportShuttingDown(); }
       catch (Throwable th)
@@ -120,7 +120,7 @@ public class TcpReceiver implements Receiver
    public synchronized TcpDestination getDestination() throws MessageTransportException
    {
       if (destination == null)
-         destination = server.register(this);
+         destination = (TcpDestination)server.register(this);
       
       destinationString = destination.toString();
 

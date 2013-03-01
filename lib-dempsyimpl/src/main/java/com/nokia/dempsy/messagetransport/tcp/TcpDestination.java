@@ -23,14 +23,14 @@ import java.net.UnknownHostException;
 
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
+import com.nokia.dempsy.messagetransport.util.ReceiverIndexedDestination;
 
-public class TcpDestination implements Destination, Serializable
+public class TcpDestination extends ReceiverIndexedDestination implements Destination, Serializable
 {
    private static final long serialVersionUID = 1L;
    
    protected InetAddress inetAddress;
    protected int port;
-   protected int sequence = 0;
    
    public final static TcpDestination createNewDestinationForThisHost(int port, boolean useLocalhost) throws MessageTransportException
    {
@@ -52,15 +52,13 @@ public class TcpDestination implements Destination, Serializable
       }
    }
 
-
-   
    public TcpDestination() {   }
    
    public TcpDestination(TcpDestination destination, int sequence)
    {
+      super(sequence);
       this.inetAddress = destination.inetAddress;
       this.port = destination.port;
-      this.sequence = sequence;
    }
    
    protected TcpDestination(InetAddress inetAddress, int port)
@@ -74,7 +72,7 @@ public class TcpDestination implements Destination, Serializable
    @Override
    public String toString()
    {
-      return "(" + inetAddress.getHostAddress() + (port > 0 ? (":" + port + ")") : "");
+      return "(" + inetAddress.getHostAddress() + (port > 0 ? (":" + port) : "") + "[" + getReceiverIndex() + "])";
    }
    
    public TcpDestination baseDestination() {  return new TcpDestination(inetAddress,port); }
@@ -85,11 +83,11 @@ public class TcpDestination implements Destination, Serializable
       if (other == null)
          return false;
       TcpDestination otherTcpDestination = (TcpDestination)other;
-      return inetAddress.equals(otherTcpDestination.inetAddress ) && (port == otherTcpDestination.port) && (sequence == otherTcpDestination.sequence);
+      return inetAddress.equals(otherTcpDestination.inetAddress ) && (port == otherTcpDestination.port) && super.equals(other);
    }
    
    @Override
-   public int hashCode() { return inetAddress.hashCode() ^ port ^ (int)sequence; }
+   public int hashCode() { return inetAddress.hashCode() ^ port ^ super.hashCode(); }
    
    /**
     * Get the IP address we are listening to.
@@ -103,8 +101,4 @@ public class TcpDestination implements Destination, Serializable
    public void setPort(int port) { this.port = port; }
    
    public int getPort() { return this.port; }
-   
-   public int getSequence() { return this.sequence; }
-   
-   public void setSequence(int sequence) { this.sequence = sequence; }
 }
