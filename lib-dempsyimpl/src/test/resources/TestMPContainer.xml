@@ -46,6 +46,9 @@
       <property name="prototype" ref="testMP" />
       <property name="dispatcher" ref="distributor" />
       <property name="statCollector" ref="statsCollector" />
+      <property name="serializer">
+        <bean class="com.nokia.dempsy.serialization.java.JavaSerializer" />
+      </property>
    </bean>
 
    <!-- in a real app, these would be inner beans; for testing, we want to access them -->
