@@ -194,7 +194,7 @@ public class Dempsy
                     }
                  }
                   
-                  container.setEvictionCheckInterval(Cluster.this.clusterDefinition.getEvictionTimeUnit().toMillis(Cluster.this.clusterDefinition.getEvictionFrequency()));
+                  container.setEvictionCheckInterval(Cluster.this.clusterDefinition.getEvictionTimeUnit().toMillis(Cluster.this.clusterDefinition.getEvictionTimePeriod()));
                   
                }
                catch(RuntimeException e) { throw e; }
@@ -313,17 +313,10 @@ public class Dempsy
             }
          }
          
-         List<Thread> toJoin = new ArrayList<Thread>(appClusters.size());
-         
          for (Cluster cluster : appClusters)
          {
             cluster.start();
             clusterStarted = true;
-         }
-         
-         for (Thread t : toJoin)
-         {
-            try { t.join(); } catch(InterruptedException e) { /* just continue */ }
          }
          
          if (failedStart != null)
