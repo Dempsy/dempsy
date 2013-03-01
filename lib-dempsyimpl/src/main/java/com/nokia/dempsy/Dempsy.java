@@ -31,6 +31,7 @@ import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.container.Container;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
@@ -99,7 +100,7 @@ public class Dempsy
             protected ClusterDefinition clusterDefinition;
             
             Router router = null;
-            private MpContainer container = null;
+            private Container container = null;
             RoutingStrategy.Inbound strategyInbound = null;
             List<Class<?>> acceptedMessageClasses = null;
             Receiver receiver = null;
@@ -193,7 +194,7 @@ public class Dempsy
                     }
                  }
                   
-                  container.startEvictionThread(Cluster.this.clusterDefinition.getEvictionFrequency(), Cluster.this.clusterDefinition.getEvictionTimeUnit());
+                  container.setEvictionCheckInterval(Cluster.this.clusterDefinition.getEvictionTimeUnit().toMillis(Cluster.this.clusterDefinition.getEvictionFrequency()));
                   
                }
                catch(RuntimeException e) { throw e; }
@@ -202,7 +203,7 @@ public class Dempsy
             
             public StatsCollector getStatsCollector() { return statsCollector; }
             
-            public MpContainer getMpContainer() { return container; }
+            public Container getMpContainer() { return container; }
             
             public Receiver getReceiver() { return receiver; }
 

@@ -94,6 +94,6 @@ public class QueuingReceiver implements Listener
     * This implements the MessageTransportListener requirement. It does nothing.
     */
    @Override
-   public void shuttingDown() {  }
+   public void transportShuttingDown() {  }
    
 }

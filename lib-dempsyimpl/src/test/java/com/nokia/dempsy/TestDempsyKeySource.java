@@ -35,7 +35,7 @@ import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.container.Container;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
 public class TestDempsyKeySource extends DempsyTestBase
@@ -219,7 +219,7 @@ public class TestDempsyKeySource extends DempsyTestBase
             Dempsy.Application.Cluster.Node node = c.getNodes().get(0);
             assertNotNull(node);
             
-            MpContainer container = node.getMpContainer();
+            Container container = node.getMpContainer();
             
             // let it go and wait until there's a few keys.
             firstCreated.m_pause.countDown();

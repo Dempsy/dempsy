@@ -45,5 +45,5 @@ public interface Listener
     * The transport implementation is responsible for letting the MessageTransportListener
     * know that the transport is being shut down. 
     */
-   public void shuttingDown();
+   public void transportShuttingDown();
 }

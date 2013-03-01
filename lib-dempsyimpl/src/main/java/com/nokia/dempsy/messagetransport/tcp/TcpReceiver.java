@@ -104,7 +104,7 @@ public class TcpReceiver implements Receiver
    {
       server.unregister(destination);
       
-      try { if ( messageTransportListener != null) messageTransportListener.shuttingDown(); }
+      try { if ( messageTransportListener != null) messageTransportListener.transportShuttingDown(); }
       catch (Throwable th)
       { logger.error("Listener threw exception when being notified of shutdown on " + destination, th); }
       

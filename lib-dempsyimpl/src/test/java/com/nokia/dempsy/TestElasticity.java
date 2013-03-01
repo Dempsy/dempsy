@@ -26,7 +26,8 @@ import com.nokia.dempsy.annotations.Activation;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
-import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.container.Container;
+import com.nokia.dempsy.container.ContainerTestAccess;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
@@ -477,7 +478,7 @@ public class TestElasticity extends DempsyTestBase
    private void checkMpDistribution(String cluster, ClassPathXmlApplicationContext[] contexts, int totalNumberOfShards, int expectedNumberOfNodes) throws Throwable
    {
       List<Dempsy.Application.Cluster.Node> nodes = TestUtils.getNodes(contexts, cluster);
-      List<MpContainer> containers = new ArrayList<MpContainer>(nodes.size());
+      List<Container> containers = new ArrayList<Container>(nodes.size());
       
       for (Dempsy.Application.Cluster.Node node : nodes)
       {
@@ -492,11 +493,12 @@ public class TestElasticity extends DempsyTestBase
       final int maxNumberOfShards = (int)Math.ceil((double)totalNumberOfShards/(double)expectedNumberOfNodes);
       
       int totalNum = 0;
-      for (MpContainer container : containers)
+      for (Container cur : containers)
       {
-         int curNum = container.getInstances().size();
-         assertTrue(""+ curNum + " <= " + maxNumberOfShards + " " + container.strategyInbound,curNum <= maxNumberOfShards); 
-         assertTrue(""+ curNum + " >= " + maxNumberOfShards + " " + container.strategyInbound,curNum >= minNumberOfShards);
+         ContainerTestAccess container = (ContainerTestAccess)cur;
+         int curNum = container.getProcessorCount();
+         assertTrue(""+ curNum + " <= " + maxNumberOfShards,curNum <= maxNumberOfShards); 
+         assertTrue(""+ curNum + " >= " + maxNumberOfShards,curNum >= minNumberOfShards);
          totalNum += curNum;
       }
       

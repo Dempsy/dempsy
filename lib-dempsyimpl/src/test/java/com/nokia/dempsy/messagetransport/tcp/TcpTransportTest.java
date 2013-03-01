@@ -146,7 +146,7 @@ public class TcpTransportTest
                   adaptor.setStatsCollector(statsCollector);
                   adaptor.setListener(new Listener()
                   {
-                     @Override public void shuttingDown() { }
+                     @Override public void transportShuttingDown() { }
                      @Override public boolean onMessage(byte[] messageBytes, boolean failFast) { messageCount.incrementAndGet(); return true; }
                   });
                   factory = makeSenderFactory(false,statsCollector); // distruptible sender factory
@@ -434,7 +434,7 @@ public class TcpTransportTest
             }
 
             @Override
-            public void shuttingDown() { }
+            public void transportShuttingDown() { }
          } );
 
          if (port <= 0) adaptor.server.setUseEphemeralPort(true);
@@ -929,7 +929,7 @@ public class TcpTransportTest
       }
 
       @Override
-      public void shuttingDown()
+      public void transportShuttingDown()
       {
       }
    }
