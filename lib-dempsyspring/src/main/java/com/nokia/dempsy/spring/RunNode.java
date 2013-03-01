@@ -35,7 +35,7 @@ public class RunNode
    protected static final String total_slots_per_clusterParam = "total_slots_for_cluster";
    protected static final String total_slots_per_clusterDefault = "100";
    protected static final String min_num_nodes_per_clusterParam = "min_nodes_for_cluster";
-   protected static final String min_num_nodes_per_clusterDefault = "3";
+   protected static final String min_num_nodes_per_clusterDefault = "1";
 
    public static void main(String[] args)
    {
