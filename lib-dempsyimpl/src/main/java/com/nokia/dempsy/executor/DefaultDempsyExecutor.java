@@ -7,11 +7,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -210,56 +210,59 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    @Override
    public <V> Future<V> schedule(final Callable<V> r, long delay, TimeUnit unit)
    {
-      final ProxyFuture<V> ret = new ProxyFuture<V>();
-      
       // here we are going to wrap the Callable and the Future to change the 
       // submission to one of the other queues.
-      ret.schedFuture = schedule.schedule(new Runnable(){
-         Callable<V> callable = r;
-         ProxyFuture<V> rret = ret;
-         @Override
-         public void run()
-         {
-            // now resubmit the callable we're proxying
-            rret.set(submit(callable));
-         }
-      }, delay, unit);
-      
       // proxy the return future.
-      return ret;
+      return new ProxyFuture<V>(r, delay, unit);
    }
 
-   private static class ProxyFuture<V> implements Future<V>
+   @SuppressWarnings({"rawtypes","unchecked"})
+   private class ProxyFuture<V> implements Future<V>, Runnable
    {
-      private volatile Future<V> ret;
-      private volatile ScheduledFuture<?> schedFuture;
+      private final AtomicReference<Future> ret;
+      private boolean isScheduled = false;
+      private final Callable<V> callable;
       
-      private synchronized void set(Future<V> f)
+      private ProxyFuture(Callable<V> callable, long delay, TimeUnit unit)
       {
-         ret = f;
-         if (schedFuture.isCancelled())
-            ret.cancel(true);
-         this.notifyAll();
+         this.callable = callable;
+         this.ret = new AtomicReference<Future>(schedule.schedule(this,delay,unit));
       }
       
-      // called only from synchronized methods
-      private Future<?> getCurrent() { return ret == null ? schedFuture : ret; }
+      @Override
+      public void run()
+      {
+         // now resubmit the callable we're proxying
+         set(submit(callable));
+      }
+
+      private void set(Future<V> f)
+      {
+         Future cur = ret.getAndSet(f);
+         if (cur.isCancelled())
+            f.cancel(true);
+         synchronized(this)
+         {
+            isScheduled = true;
+            this.notifyAll();
+         }
+      }
       
       @Override
-      public synchronized boolean cancel(boolean mayInterruptIfRunning){ return getCurrent().cancel(mayInterruptIfRunning); }
+      public boolean cancel(boolean mayInterruptIfRunning){ return ret.get().cancel(mayInterruptIfRunning); }
 
       @Override
-      public synchronized boolean isCancelled() { return getCurrent().isCancelled(); }
+      public boolean isCancelled() { return ret.get().isCancelled(); }
 
       @Override
-      public synchronized boolean isDone() { return ret == null ? false : ret.isDone(); }
+      public boolean isDone() { return ret.get().isDone(); }
 
       @Override
       public synchronized V get() throws InterruptedException, ExecutionException 
       {
-         while (ret == null)
+         while (!isScheduled)
             this.wait();
-         return ret.get();
+         return (V)ret.get().get();
       }
 
       @Override
@@ -268,7 +271,7 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          long cur = System.currentTimeMillis();
          while (ret == null)
             this.wait(unit.toMillis(timeout));
-         return ret.get(System.currentTimeMillis() - cur,TimeUnit.MILLISECONDS);
+         return (V)ret.get().get(System.currentTimeMillis() - cur,TimeUnit.MILLISECONDS);
       }
    }
 
