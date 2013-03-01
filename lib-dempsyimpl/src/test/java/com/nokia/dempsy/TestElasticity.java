@@ -37,7 +37,7 @@ public class TestElasticity extends DempsyTestBase
 {
    static { logger = LoggerFactory.getLogger(TestElasticity.class);  }
    
-   private static final int profilerTestNumberCount = 1000000;
+   private static final int profilerTestNumberCount = 100000;
    
    public static final String actxPath = "testElasticity/NumberCountActx.xml";
    
