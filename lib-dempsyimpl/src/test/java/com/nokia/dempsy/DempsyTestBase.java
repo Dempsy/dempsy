@@ -68,9 +68,9 @@ public class DempsyTestBase
 
    public static String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
    public static String[][] transports = new String[][] {
-         { "testDempsy/Transport-PassthroughActx.xml","testDempsy/Transport-PassthroughBlockingActx.xml" }, 
-         { "testDempsy/Transport-BlockingQueueActx.xml" }, 
-         { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
+      { "testDempsy/Transport-PassthroughActx.xml","testDempsy/Transport-PassthroughBlockingActx.xml" }, 
+      { "testDempsy/Transport-BlockingQueueActx.xml" }, 
+      { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
 
    public static String[] serializers = new String[]
@@ -567,9 +567,9 @@ public class DempsyTestBase
                                  {
                                     logger.error("FAILED TO SHUT DOWN TEST. SUBSEQUENT TESTS MAY BE CORRUPTED!",th);
                                  }
-                              }
 
-                              runCount++;
+                                 runCount++;
+                              }
                            }
                         }
                      }
