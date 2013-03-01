@@ -10,8 +10,8 @@
       <constructor-arg type="java.lang.String" value="test-app" />
       <property name="executor">
         <bean class="com.nokia.dempsy.executor.DefaultDempsyExecutor" >
-           <property name="additionalThreads" value="2" />
-           <property name="coresFactor" value="2.0" />
+           <property name="additionalThreads" value="0" />
+           <property name="coresFactor" value="1.0" />
            <property name="maxNumberOfQueuedLimitedTasks" value="123456" />
         </bean>
       </property>
