@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
+import com.nokia.dempsy.messagetransport.util.ForwardingSender.Enqueued;
 import com.nokia.dempsy.messagetransport.util.SenderConnection;
 import com.nokia.dempsy.util.SocketTimeout;
 

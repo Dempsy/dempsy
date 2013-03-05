@@ -26,7 +26,6 @@ import org.slf4j.Logger;
 import org.slf4j.MarkerFactory;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.Receiver;
 
 /**
  * <p>This is a reusable helper class for developing transports. It provides for the
@@ -54,39 +53,46 @@ import com.nokia.dempsy.messagetransport.Receiver;
 public abstract class Server
 {
    private final Logger logger;
-   private ReceiverIndexedDestination destination = null;
+   private final ForwardedReceiver[] receivers = new ForwardedReceiver[maxReceivers];
+   private final AtomicBoolean stopMe = new AtomicBoolean(false);
+   private final Set<ClientThread> clientThreads = new HashSet<ClientThread>();
+   private final boolean manageIndividualClients;
+   private final Object eventLock = new Object();
    
-   private Thread serverThread;
-   private AtomicBoolean stopMe = new AtomicBoolean(false);
-   
-   private Set<ClientThread> clientThreads = new HashSet<ClientThread>();
-   
-   private Object eventLock = new Object();
    private volatile boolean eventSignaled = false;
    
-   public static final int maxReceivers = 256;
-   
-   private Receiver[] receivers = new Receiver[maxReceivers];
+   private ReceiverIndexedDestination destination = null;
+   private Thread serverThread;
    private int numReceivers = 0;
+   
+   public static final int maxReceivers = 256;
    
    public static final class ReceivedMessage
    {
       public int receiverIndex;
       public int messageSize;
-      public int bufferSize;
       public byte[] message;
    }
    
-   protected Server(Logger logger) { this.logger = logger; }
+   /**
+    * If manageIndividualClients is 'false' then accept will never be called and so all calls that take the clientSocket
+    * that's normally returned from 'accept' will receive null. In this case no client threads will be created
+    * "per client." Instead, the main server thread will be the ClientThread and will call all of the client
+    * processing methods (readNextMessage, closeClient, etc). getAndBindDestination will still be called.
+    */
+   protected Server(Logger logger, boolean manageIndividualClients) 
+   {
+      this.logger = logger;
+      this.manageIndividualClients = manageIndividualClients;
+   }
    
    protected abstract ReceiverIndexedDestination makeDestination(ReceiverIndexedDestination modelDestination, int receiverIndex);
    protected abstract Object accept() throws IOException;
    protected abstract void closeServer();
-   protected abstract void closeClient(Object acceptReturn);
+   protected abstract void closeClient(Object acceptReturn, boolean fromClientThread);
    protected abstract ReceiverIndexedDestination getAndBindDestination() throws MessageTransportException;
    protected abstract void readNextMessage(Object acceptReturn, ReceivedMessage messageToFill) throws EOFException, IOException;
    protected abstract String getClientDescription(Object acceptReturn);
-   protected abstract void handleMessage(Receiver receiver, byte[] message);
 
    protected synchronized void start() throws MessageTransportException
    {
@@ -99,59 +105,66 @@ public abstract class Server
       // in case this is a restart, we want to reset the stopMe value.
       stopMe.set(false);
       
-      serverThread = new Thread(new Runnable()
+      if (manageIndividualClients)
       {
-         @Override
-         public void run()
+         serverThread = new Thread(new Runnable()
          {
-            while (!stopMe.get())
+            @Override
+            public void run()
             {
-               try
+               while (!stopMe.get())
                {
-                  // Wait for an event one of the registered channels
-                  Object clientSocket = accept();
-
-                  // at the point we're committed to adding a new ClientThread to the set.
-                  //  So we need to lock it.
-                  synchronized(clientThreads)
+                  try
                   {
-                     // unless we're done.
-                     if (!stopMe.get())
+                     // Wait for an event one of the registered channels
+                     Object clientSocket = accept();
+
+                     // at the point we're committed to adding a new ClientThread to the set.
+                     //  So we need to lock it.
+                     synchronized(clientThreads)
                      {
-                        // This should come from a thread pool
-                        ClientThread clientThread = makeNewClientThread(clientSocket);
-                        Thread thread = new Thread(clientThread, "Client Handler for " + getClientDescription(clientSocket));
-                        thread.setDaemon(true);
-                        thread.start();
+                        // unless we're done.
+                        if (!stopMe.get())
+                        {
+                           // This should come from a thread pool
+                           ClientThread clientThread = makeNewClientThread(clientSocket);
+                           Thread thread = new Thread(clientThread, "Client Handler for " + getClientDescription(clientSocket));
+                           thread.setDaemon(true);
+                           thread.start();
 
-                        clientThreads.add(clientThread);
+                           clientThreads.add(clientThread);
+                        }
                      }
+
                   }
+                  // This can happen if I rip the socket out from underneath the accept call. 
+                  // Because accept doesn't exit with a Thread.interrupt call so closing the server
+                  // socket from another thread is the only way to make this happen.
+                  catch (IOException se)
+                  {
+                     // however, if we didn't explicitly stop the server, then there's another problem
+                     if (!stopMe.get()) 
+                        logger.error("Socket error on the server managing " + destination, se);
+                  }
+                  catch (Throwable th)
+                  {
+                     logger.error("Major error on the server managing " + destination, th);
+                  }
+               }
 
-               }
-               // This can happen if I rip the socket out from underneath the accept call. 
-               // Because accept doesn't exit with a Thread.interrupt call so closing the server
-               // socket from another thread is the only way to make this happen.
-               catch (IOException se)
+               // we're leaving so signal
+               synchronized(eventLock)
                {
-                  // however, if we didn't explicitly stop the server, then there's another problem
-                  if (!stopMe.get()) 
-                     logger.error("Socket error on the server managing " + destination, se);
-               }
-               catch (Throwable th)
-               {
-                  logger.error("Major error on the server managing " + destination, th);
+                  eventSignaled = true;
+                  eventLock.notifyAll();
                }
             }
-
-            // we're leaving so signal
-            synchronized(eventLock)
-            {
-               eventSignaled = true;
-               eventLock.notifyAll();
-            }
-         }
-      }, "Server for " + destination);
+         }, "Server for " + destination);
+      }
+      else
+      {
+         serverThread = new Thread(makeNewClientThread(null), "Server for " + destination);
+      }
       
       serverThread.start();
     }
@@ -166,29 +179,31 @@ public abstract class Server
 
       closeServer();
       
-      synchronized(clientThreads)
+      if (manageIndividualClients)
       {
-         for (ClientThread ct : clientThreads)
-            ct.stop();
-         
-         clientThreads.clear();
-      }
-      
-      // now wait until the event is signaled
-      synchronized(eventLock)
-      {
-         if (!eventSignaled)
+         synchronized(clientThreads)
          {
-            try { eventLock.wait(500); } catch(InterruptedException e) { }// wait for 1/2 second
+            for (ClientThread ct : clientThreads)
+               ct.stop();
+
+            clientThreads.clear();
          }
-         
-         if (!eventSignaled)
-            logger.warn("Couldn't release the socket accept for " + destination);
+
+         // now wait until the event is signaled
+         synchronized(eventLock)
+         {
+            if (!eventSignaled)
+            {
+               try { eventLock.wait(500); } catch(InterruptedException e) { }// wait for 1/2 second
+            }
+
+            if (!eventSignaled)
+               logger.warn("Couldn't release the socket accept for " + destination);
+         }
       }
-      
    }
    
-   public synchronized ReceiverIndexedDestination register(Receiver receiver) throws MessageTransportException
+   protected synchronized ReceiverIndexedDestination register(ForwardedReceiver receiver) throws MessageTransportException
    {
       start();
       ReceiverIndexedDestination nextDestination = makeNextDestination();
@@ -197,7 +212,7 @@ public abstract class Server
       return nextDestination;
    }
    
-   public synchronized void unregister(ReceiverIndexedDestination destination)
+   protected synchronized void unregister(ReceiverIndexedDestination destination)
    {
       numReceivers--;
       if (numReceivers == 0)
@@ -228,7 +243,7 @@ public abstract class Server
    }
    
    // protected to be overridden in tests
-   protected ClientThread makeNewClientThread(Object clientSocket) throws IOException
+   protected ClientThread makeNewClientThread(Object clientSocket)
    {
       return new ClientThread(clientSocket);
    }
@@ -241,10 +256,7 @@ public abstract class Server
       private Thread thisThread;
       protected AtomicBoolean stopClient = new AtomicBoolean(false);
       
-      public ClientThread(Object clientSocket) throws IOException
-      { 
-          this.clientSocket = clientSocket;
-      }
+      public ClientThread(Object clientSocket) { this.clientSocket = clientSocket; }
       
       @Override
       public void run()
@@ -255,68 +267,80 @@ public abstract class Server
          
          try
          {
-            while (!stopMe.get() && !stopClient.get())
+            // When we're not managing individual clients (manageIndividualClients = false) we need to
+            // make it impossible to leave this loop unless we're shutting down. The reason is, this
+            // "client" loop takes the place of the "server" loop when we're not managing individual 
+            // clients ... there's just one message reading loop.
+            do
             {
-               try
+               while (true)
                {
-                  int receiverToCall = -1;
                   try
                   {
-                     readNextMessage(clientSocket,receivedMessage);
-                     receiverToCall = receivedMessage.receiverIndex;
-                  }
-                  // either a problem with the socket OR a thread interruption (InterruptedIOException)
-                  catch (EOFException eof)
-                  {
-                      clientIsApparentlyGone = eof;
-                      receivedMessage.messageSize = 0; // no message if exception
-                  }
-                  catch (IOException ioe)
-                  {
-                      clientIsApparentlyGone = ioe;
-                      receivedMessage.messageSize = 0; // no message if exception
-                  }
-
-                  if (receivedMessage.messageSize != 0)
-                  {
-                     Receiver receiver = receivers[receiverToCall];
-                     if (receiver == null)  // it's possible we're shutting down
+                     int receiverToCall = -1;
+                     try
                      {
-                        logger.error("Message received for a mising receiver. Unless we're shutting down, this shouldn't happen.");
-                        stopClient.set(true);
+                        readNextMessage(clientSocket,receivedMessage);
+                        receiverToCall = receivedMessage.receiverIndex;
                      }
-                     else
-                        handleMessage(receiver, receivedMessage.message);
-                  }
-                  else if (clientIsApparentlyGone == null)
-                  {
-                     if (logger.isDebugEnabled())
-                        logger.debug("Received a null message on destination " + destination);
-                     
-                     // if we read no bytes we should just consider ourselves lucky that we
-                     // escaped a blocking read.
-                     stopClient.set(true); // leave the loop.
-                  }
+                     // either a problem with the socket OR a thread interruption (InterruptedIOException)
+                     catch (EOFException eof)
+                     {
+                        clientIsApparentlyGone = eof;
+                        receivedMessage.messageSize = 0; // no message if exception
+                     }
+                     catch (IOException ioe)
+                     {
+                        clientIsApparentlyGone = ioe;
+                        receivedMessage.messageSize = 0; // no message if exception
+                     }
 
-                  if (clientIsApparentlyGone != null)
-                  {
-                     String logmessage = "Client " + getClientDescription(clientSocket) + 
-                     " has apparently disconnected from sending messages to " + 
-                     destination ;
-                     if (logger.isDebugEnabled())
-                        logger.debug(logmessage, clientIsApparentlyGone);
-                     // assume the client socket is dead.
+                     if (receivedMessage.messageSize != 0)
+                     {
+                        ForwardedReceiver receiver = receivers[receiverToCall];
+                        if (receiver == null)  // it's possible we're shutting down
+                        {
+                           logger.error("Message received for a mising receiver. Unless we're shutting down, this shouldn't happen.");
+                           break;
+                        }
+                        else
+                           receiver.handleMessage(receivedMessage.message);
 
-                     stopClient.set(true); // leave the loop.
-                     clientIsApparentlyGone = null;
+                     }
+                     else if (clientIsApparentlyGone == null)
+                     {
+                        // There's no reason to print this message if the server is shutting down
+                        if (logger.isDebugEnabled() && !stopMe.get())
+                           logger.debug("Received a null message on destination " + destination);
+
+                        // if we read no bytes we should just consider ourselves lucky that we
+                        // escaped a blocking read.
+                        break; // leave the loop.
+                     }
+
+                     if (clientIsApparentlyGone != null)
+                     {
+                        // we failed ... but maybe we're just shutting down.
+                        // If not, log the message.
+                        if (!stopClient.get() && logger.isDebugEnabled())
+                           logger.debug("Client " + getClientDescription(clientSocket) + 
+                                 " has apparently disconnected from sending messages to " + 
+                                 destination, clientIsApparentlyGone);
+                        // assume the client socket is dead.
+                        clientIsApparentlyGone = null;
+                        break; // leave the loop.
+                     }
                   }
-               }
-               catch (Throwable th)
-               {
-                  logger.error(MarkerFactory.getMarker("FATAL"), "Completely unexpected error. This problem should be addressed because we should never make it here in the code.", th);
-                  stopClient.set(true); // leave the loop, close up.
-               }
-            } // end while loop
+                  catch (Throwable th)
+                  {
+                     logger.error(MarkerFactory.getMarker("FATAL"), "Completely unexpected error. This problem should be addressed because we should never make it here in the code.", th);
+                     break; // leave the loop, close up.
+                  }
+               } // end while loop
+             
+            // See the comment above the 'do' statement above for why this loop is here.
+            //   stopMe is an indication that the server itself is shutting down.
+            } while (manageIndividualClients && !stopMe.get());
          }
          catch (Throwable ue)
          {
@@ -324,7 +348,7 @@ public abstract class Server
          }
          finally
          {
-            closeClient(clientSocket);
+            closeClient(clientSocket,true);
             
             // remove me from the client list.
             synchronized(clientThreads)
@@ -337,11 +361,13 @@ public abstract class Server
       public void stop()
       {
          stopClient.set(true);
+         
+         // close this SOB to force a failure in the loop
+         closeClient(clientSocket,false);
+
+         // and just in case, interrupt the socket.
          if (thisThread != null)
             thisThread.interrupt();
-         
-         // close this SOB
-         closeClient(clientSocket);
       }
    }
    

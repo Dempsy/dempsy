@@ -14,22 +14,35 @@
  * limitations under the License.
  */
 
-package com.nokia.dempsy.messagetransport.tcp;
+package com.nokia.dempsy.messagetransport.util;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
-import com.nokia.dempsy.messagetransport.util.SenderConnection;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
-public class TcpSender implements Sender
+/**
+ * The is a concrete Sender implementation that forwards messages
+ * to a SenderConnection.
+ */
+public class ForwardingSender implements Sender
 {
-   protected TcpDestination destination;
+   private static Logger logger = LoggerFactory.getLogger(ForwardingSender.class);
+   private static final AtomicLong sequence = new AtomicLong(0);
+   
+   protected final ReceiverIndexedDestination destination;
+   protected final StatsCollector statsCollector;
+   protected final SenderConnection connection;
+   protected final String thisNodeDescription;
 
-   private StatsCollector statsCollector = null;
-   protected final TcpSenderConnection connection;
-
-   protected TcpSender(TcpSenderConnection connection,TcpDestination destination, StatsCollector statsCollector) throws MessageTransportException
+   public ForwardingSender(SenderConnection connection, ReceiverIndexedDestination destination, 
+         StatsCollector statsCollector, String desc) throws MessageTransportException
    {
+      this.thisNodeDescription = desc == null ? ("sender #" + sequence.getAndIncrement()) : desc;
       this.connection = connection;
       this.destination = destination;
       this.statsCollector = statsCollector;
@@ -40,20 +53,27 @@ public class TcpSender implements Sender
             @Override
             public long value()
             {
-               return TcpSender.this.connection.getQ().size();
+               return ForwardingSender.this.connection.getQ().size();
             }
          });
       }
       connection.start(this);
+      
+      if (logger.isTraceEnabled())
+         logger.trace("Created " + this);
    }
    
-   public class Enqueued extends SenderConnection.Enqueued
+   public SenderConnection getConnection() { return connection; }
+   
+   public final class Enqueued
    {
+      public byte[] messageBytes;
+      
       public Enqueued(byte[] messageBytes) { this.messageBytes = messageBytes; }
       
-      public void messageNotSent() { if (statsCollector != null) statsCollector.messageNotSent(messageBytes); }
-      public void messageSent() { if (statsCollector != null) statsCollector.messageSent(messageBytes); }
-      public int getReceiverIndex() { return destination.getReceiverIndex(); }
+      public final void messageNotSent() { if (statsCollector != null) statsCollector.messageNotSent(messageBytes); }
+      public final void messageSent() { if (statsCollector != null) statsCollector.messageSent(messageBytes); }
+      public final int getReceiverIndex() { return destination.getReceiverIndex(); }
    }
    
    @Override
@@ -68,11 +88,8 @@ public class TcpSender implements Sender
    }
    
    @Override
-   public String toString() { return "TcpSender to " + destination; }
+   public String toString() { return "Sending from " + thisNodeDescription + " to " + destination; }
    
-   protected void stop()
-   {
-      connection.stop(this);
-   }
+   public void stop() { connection.stop(this); }
    
 }

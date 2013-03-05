@@ -25,9 +25,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,6 +46,11 @@ import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
+import com.nokia.dempsy.messagetransport.util.ForwardedReceiver;
+import com.nokia.dempsy.messagetransport.util.ForwardingSender;
+import com.nokia.dempsy.messagetransport.util.ForwardingSenderFactory;
+import com.nokia.dempsy.messagetransport.util.ReceiverIndexedDestination;
+import com.nokia.dempsy.messagetransport.util.SenderConnection;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
 
@@ -105,6 +110,18 @@ public class TcpTransportTest
       }
    }
    
+   
+   private static DefaultDempsyExecutor makeExecutor(boolean blocking)
+   {
+      DefaultDempsyExecutor defexecutor = new DefaultDempsyExecutor();
+      defexecutor.setCoresFactor(1.0);
+      defexecutor.setAdditionalThreads(1);
+      defexecutor.setMaxNumberOfQueuedLimitedTasks(10000);
+      if (blocking)
+         defexecutor.setBlocking(blocking);
+      defexecutor.start();
+      return defexecutor;
+   }
 //-------------------------------------------------------------------------------------
 // multirun tests.
 //-------------------------------------------------------------------------------------
@@ -130,7 +147,7 @@ public class TcpTransportTest
             {
                logger.trace("========= Starting");
                SenderFactory factory = null;
-               TcpReceiver adaptor = null;
+               ForwardedReceiver adaptor = null;
                StatsCollector statsCollector = new BasicStatsCollector();
                TcpServer server = null;
                final AtomicLong messageCount = new AtomicLong(0);
@@ -141,8 +158,7 @@ public class TcpTransportTest
                   //===========================================
                   // setup the sender and receiver
                   server = new TcpServer();
-                  adaptor = new TcpReceiver(server,null,getFailFast());
-                  adaptor.setBlocking(true);
+                  adaptor = new ForwardedReceiver(server,makeExecutor(true),getFailFast(),true);
                   adaptor.setStatsCollector(statsCollector);
                   adaptor.setListener(new Listener()
                   {
@@ -245,7 +261,7 @@ public class TcpTransportTest
          public void check(int port, boolean localhost) throws Throwable
          {
             SenderFactory factory = null;
-            TcpReceiver adaptor = null;
+            ForwardedReceiver adaptor = null;
             StatsCollector statsCollector = new BasicStatsCollector();
             TcpServer server = null;
             try
@@ -253,7 +269,7 @@ public class TcpTransportTest
                //===========================================
                // setup the sender and receiver
                server = new TcpServer();
-               adaptor = new TcpReceiver(server,null,getFailFast());
+               adaptor = new ForwardedReceiver(server,makeExecutor(false),getFailFast(),true);
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
@@ -299,14 +315,14 @@ public class TcpTransportTest
       });
    }
    
-   static TcpReceiver makeHangingReceiver()
+   static ForwardedReceiver makeHangingReceiver() throws MessageTransportException
    {
       TcpServer server = new TcpServer()
       {
          int count = 0;
          
          @Override
-         protected ClientThread makeNewClientThread(Object clientSocket) throws IOException
+         protected ClientThread makeNewClientThread(Object clientSocket)
          {
             count++;
             return count == 1 ? new ClientThread(clientSocket)
@@ -321,7 +337,7 @@ public class TcpTransportTest
          }
       };
       
-      return new TcpReceiver(server,null,getFailFast());
+      return new ForwardedReceiver(server,makeExecutor(false),getFailFast(),true);
    }
    
    @Test
@@ -333,7 +349,7 @@ public class TcpTransportTest
          public void check(int port, boolean localhost) throws Throwable
          {
             SenderFactory factory = null;
-            TcpReceiver adaptor = null;
+            ForwardedReceiver adaptor = null;
             final byte[] message = new byte[1024 * 8];
             BasicStatsCollector statsCollector = new BasicStatsCollector();
             try
@@ -347,16 +363,16 @@ public class TcpTransportTest
                adaptor.setListener(receiver);
                factory = makeSenderFactory(false,statsCollector);
 
-               if (port > 0) adaptor.server.setPort(port);
-               if (localhost) adaptor.server.setUseLocalhost(localhost);
+               if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
+               if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
                //===========================================
 
                adaptor.start(); // start the adaptor
                Destination destination = adaptor.getDestination(); // get the destination
 
                // send a message
-               final TcpSender sender = (TcpSender)factory.getSender(destination);
-               sender.connection.setTimeoutMillis(100);
+               final ForwardingSender sender = (ForwardingSender)factory.getSender(destination);
+               ((TcpSenderConnection)sender.getConnection()).setTimeoutMillis(100);
                
                // wait for it to fail
                assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, new TestUtils.Condition<BasicStatsCollector>()
@@ -414,14 +430,14 @@ public class TcpTransportTest
       int port = -1;
       boolean localhost = false;
       SenderFactory factory = null;
-      TcpReceiver adaptor = null;
+      ForwardedReceiver adaptor = null;
       SenderFactory senderFactory = null;
       try
       {
          //===========================================
          // setup the sender and receiver
          TcpServer server = new TcpServer();
-         adaptor = new TcpReceiver(server,null,getFailFast());
+         adaptor = new ForwardedReceiver(server,makeExecutor(false),getFailFast(),true);
          factory = makeSenderFactory(false,null); // distruptible sender factory
          receiveLargeMessageLatch = new CountDownLatch(1);
          adaptor.setListener( new Listener()
@@ -438,17 +454,17 @@ public class TcpTransportTest
             public void transportShuttingDown() { }
          } );
 
-         if (port <= 0) adaptor.server.setUseEphemeralPort(true);
-         if (port > 0) adaptor.server.setPort(port);
-         if (localhost) adaptor.server.setUseLocalhost(localhost);
+         if (port <= 0) ((TcpServer)adaptor.getServer()).setUseEphemeralPort(true);
+         if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
+         if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
          //===========================================
 
          adaptor.start(); // start the adaptor
          adaptor.start(); // double start ... just want more coverage.
 
          Destination destination = adaptor.getDestination(); // get the destination
-         if (port > 0) adaptor.server.setPort(port);
-         if (localhost) adaptor.server.setUseLocalhost(localhost);
+         if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
+         if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
 
          senderFactory = makeSenderFactory(false,null);
 
@@ -457,8 +473,8 @@ public class TcpTransportTest
          for (int i = 0; i < size; i++)
             tosend[i] = (byte)i;
 
-         TcpSender sender = (TcpSender)senderFactory.getSender( destination );
-         sender.connection.setTimeoutMillis(100000); // extend the timeout because of the larger messages
+         ForwardingSender sender = (ForwardingSender)senderFactory.getSender( destination );
+         ((TcpSenderConnection)sender.getConnection()).setTimeoutMillis(100000); // extend the timeout because of the larger messages
          sender.send( tosend );
 
          assertTrue(receiveLargeMessageLatch.await(1,TimeUnit.MINUTES));
@@ -497,19 +513,19 @@ public class TcpTransportTest
          public void check(int port, boolean localhost) throws Throwable
          {
             SenderFactory factory = null;
-            TcpReceiver adaptor = null;
+            ForwardedReceiver adaptor = null;
             BasicStatsCollector statsCollector = new BasicStatsCollector();
             try
             {
                //===========================================
                // setup the sender and receiver
                TcpServer server = new TcpServer();
-               adaptor = new TcpReceiver(server,null,getFailFast());
+               adaptor = new ForwardedReceiver(server,makeExecutor(false),getFailFast(),true);
                adaptor.setStatsCollector(statsCollector);
                factory = makeSenderFactory(true,statsCollector); // distruptible sender factory
 
-               if (port > 0) adaptor.server.setPort(port);
-               if (localhost) adaptor.server.setUseLocalhost(localhost);
+               if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
+               if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
                //===========================================
 
                adaptor.start(); // start the adaptor
@@ -616,21 +632,21 @@ public class TcpTransportTest
          public void check(int port, boolean localhost) throws Throwable
          {
             SenderFactory factory = null;
-            TcpReceiver adaptor = null;
+            ForwardedReceiver adaptor = null;
             BasicStatsCollector statsCollector = new BasicStatsCollector();
             try
             {
                //===========================================
                // setup the sender and receiver
                TcpServer server = new TcpServer();
-               adaptor = new TcpReceiver(server,null,getFailFast());
+               adaptor = new ForwardedReceiver(server,makeExecutor(false),getFailFast(),true);
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
                factory = makeSenderFactory(false,statsCollector); // not disruptible
 
-               if (port > 0) adaptor.server.setPort(port);
-               if (localhost) adaptor.server.setUseLocalhost(localhost);
+               if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
+               if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
                //===========================================
 
                adaptor.start(); // start the adaptor
@@ -741,7 +757,7 @@ public class TcpTransportTest
          public void check(int port, boolean localhost) throws Throwable
          {
             SenderFactory factory = null;
-            TcpReceiver adaptor = null;
+            ForwardedReceiver adaptor = null;
             final byte[] message = new byte[1024 * 8];
             BasicStatsCollector statsCollector = new BasicStatsCollector();
             try
@@ -755,18 +771,18 @@ public class TcpTransportTest
                adaptor.setListener(receiver);
                factory = makeSenderFactory(false,statsCollector);
 
-               if (port > 0) adaptor.server.setPort(port);
-               if (localhost) adaptor.server.setUseLocalhost(localhost);
+               if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
+               if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
                //===========================================
 
                adaptor.start(); // start the adaptor
                Destination destination = adaptor.getDestination(); // get the destination
 
                // send a message
-               final TcpSender sender = (TcpSender)factory.getSender(destination);
+               final ForwardingSender sender = (ForwardingSender)factory.getSender(destination);
                final int maxQueuedMessages = 100;
                
-               sender.connection.setMaxNumberOfQueuedMessages(maxQueuedMessages);
+               ((TcpSenderConnection)sender.getConnection()).setMaxNumberOfQueuedMessages(maxQueuedMessages);
                
                assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, new TestUtils.Condition<BasicStatsCollector>()
                {
@@ -775,15 +791,15 @@ public class TcpTransportTest
                   {
                      // this should eventually fail
                      sender.send(message); // this should work
-                     return sender.connection.getQ().size() > (maxQueuedMessages * 2);
+                     return sender.getConnection().getQ().size() > (maxQueuedMessages * 2);
                   }
                }));
                
                Thread.sleep(100);
                
-               final int backup = sender.connection.getQ().size();
+               final int backup = sender.getConnection().getQ().size();
                
-               sender.connection.socketTimeout.disrupt(); // kick it.
+               ((TcpSenderConnection)sender.getConnection()).socketTimeout.disrupt(); // kick it.
                
                // wait for it to fail
                assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, new TestUtils.Condition<BasicStatsCollector>()
@@ -980,14 +996,14 @@ public class TcpTransportTest
       onlyOnce = true;
    }
    
-   private TcpSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector)
+   private ForwardingSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector)
    {
       return disruptible ? 
-            new TcpSenderFactory(new ConcurrentHashMap<Destination, TcpSenderConnection>(),statsCollector,-1,10000,false){
-         protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
+            new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,-1,10000,false){
+         protected ForwardingSender makeTcpSender(ReceiverIndexedDestination destination) throws MessageTransportException
          {
             TcpSenderConnection connection = 
-                  new TcpSenderConnection(destination.baseDestination(), maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessages)
+                  new TcpSenderConnection((TcpDestination)makeBaseDestination(destination), maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessages)
             {
                boolean onceOnly = onlyOnce;
                boolean didItOnceAlready = false;
@@ -1010,9 +1026,9 @@ public class TcpTransportTest
                }
             };
             
-            return new TcpSender(connection,(TcpDestination)destination,statsCollector);
+            return new ForwardingSender(connection,(TcpDestination)destination,statsCollector,null);
          }
-      } : new TcpSenderFactory(new ConcurrentHashMap<Destination, TcpSenderConnection>(),statsCollector,-1,10000,false);
+      } : new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,-1,10000,false);
    }
    
    @Test
@@ -1024,13 +1040,13 @@ public class TcpTransportTest
          public void check(int port, boolean localhost) throws Throwable
          {
             SenderFactory factory = null;
-            TcpReceiver adaptor = null;
+            ForwardedReceiver adaptor = null;
             try
             {
                //===========================================
                // setup the sender and receiver
                TcpServer server = new TcpServer();
-               adaptor = new TcpReceiver(server,null,getFailFast());
+               adaptor = new ForwardedReceiver(server,makeExecutor(false),getFailFast(),true);
                final Object latch = new Object();
                BasicStatsCollector statsCollector = new BasicStatsCollector();
                adaptor.setStatsCollector(statsCollector);
@@ -1038,8 +1054,8 @@ public class TcpTransportTest
                adaptor.setListener(receiver);
                factory = makeSenderFactory(false,statsCollector); // distruptible sender factory
 
-               if (port > 0) adaptor.server.setPort(port);
-               if (localhost) adaptor.server.setUseLocalhost(localhost);
+               if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
+               if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
                //===========================================
 
                adaptor.start(); // start the adaptor
@@ -1048,20 +1064,20 @@ public class TcpTransportTest
                // send a message
                final Sender sender = factory.getSender(destination);
                
-               final int numAdaptorThreads = adaptor.executor.getNumThreads();
+               final int numAdaptorThreads = adaptor.getExecutor().getNumThreads();
                
                assertTrue(numAdaptorThreads > 1);
                
                // send as many messages as there are threads.
                
-               for (int i = 0; i < (((DefaultDempsyExecutor)adaptor.executor).getMaxNumberOfQueuedLimitedTasks() + adaptor.executor.getNumThreads()); i++)
+               for (int i = 0; i < (((DefaultDempsyExecutor)adaptor.getExecutor()).getMaxNumberOfQueuedLimitedTasks() + adaptor.getExecutor().getNumThreads()); i++)
                   sender.send("Hello".getBytes());
                
                // wait until all Listeners are in and all threads enqueued
                assertTrue(TestUtils.poll(baseTimeoutMillis, receiver, new TestUtils.Condition<StringListener>() 
                      { @Override public boolean conditionMet(StringListener o) { return o.numIn.get() == numAdaptorThreads; } }));
 
-               assertTrue(TestUtils.poll(baseTimeoutMillis, ((DefaultDempsyExecutor)adaptor.executor), new TestUtils.Condition<DefaultDempsyExecutor>() 
+               assertTrue(TestUtils.poll(baseTimeoutMillis, ((DefaultDempsyExecutor)adaptor.getExecutor()), new TestUtils.Condition<DefaultDempsyExecutor>() 
                      { @Override public boolean conditionMet(DefaultDempsyExecutor o) { return o.getNumberLimitedPending() == o.getMaxNumberOfQueuedLimitedTasks(); } }));
 
                assertEquals(0,statsCollector.getDiscardedMessageCount());

@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
+import com.nokia.dempsy.messagetransport.util.ForwardingSender.Enqueued;
 
 /**
  * <p>This is a reusable helper class for developing transports. It provides for the
@@ -44,24 +45,15 @@ public abstract class SenderConnection implements Runnable
    private final AtomicBoolean isSenderRunning = new AtomicBoolean(false);
    private final AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
    private final String clientDescription;
+   private final BlockingQueue<Enqueued> sendingQueue = new LinkedBlockingQueue<Enqueued>();
    
    private Thread senderThread = null;
 
    private long maxNumberOfQueuedMessages;
    private boolean batchOutgoingMessages;
-   
-   private final BlockingQueue<Enqueued> sendingQueue = new LinkedBlockingQueue<Enqueued>();
+//   private int highWaterMark = 0;
    
    public final BlockingQueue<Enqueued> getQ() { return sendingQueue; }
-   
-   public static abstract class Enqueued
-   {
-      public byte[] messageBytes;
-      
-      public abstract void messageNotSent();
-      public abstract void messageSent();
-      public abstract int getReceiverIndex();
-   }
    
    protected SenderConnection(String clientDescription, long maxNumberOfQueuedOutgoing, boolean batchOutgoingMessages, Logger logger)
    {
@@ -157,7 +149,6 @@ public abstract class SenderConnection implements Runnable
          }
          
          int ioeFailedCount = -1;
-//         int queueSizeOnFirstFail = -1;
          
          while (senderKeepRunning.get())
          {
@@ -178,6 +169,10 @@ public abstract class SenderConnection implements Runnable
 
                   if (!batchOutgoingMessages)
                      ioeFailedCount = -1;
+                  
+//                  final int curSize = sendingQueue.size();
+//                  if (curSize > highWaterMark)
+//                     highWaterMark = curSize;
 
                   message.messageSent();
                }
@@ -193,11 +188,8 @@ public abstract class SenderConnection implements Runnable
                if (ioeFailedCount == -1)
                {
                    ioeFailedCount = 0; // this will be incremented to 0
-//                   queueSizeOnFirstFail = sendingQueue.size();
                    logger.warn("It appears the client " + clientDescription + " is no longer taking calls. This message may be supressed for a while.",ioe);
                }
-//               else if (ioeFailedCount >= queueSizeOnFirstFail)
-//                   ioeFailedCount = -1;
                else
                    ioeFailedCount++;
             }
@@ -220,6 +212,7 @@ public abstract class SenderConnection implements Runnable
          synchronized(this) { senderThread = null; }
          close();
          isSenderRunning.set(false);
+//         System.out.println("High water mark for the outbound queue to " + clientDescription + " was " + highWaterMark);
       }
    }
    

@@ -29,7 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.util.ReceiverIndexedDestination;
 import com.nokia.dempsy.messagetransport.util.Server;
 
@@ -53,7 +52,7 @@ public class TcpServer extends Server
       }
    }
    
-   public TcpServer() { super(logger); }
+   public TcpServer() { super(logger,true); }
 
    @Override
    protected final ClientHolder accept() throws IOException { 
@@ -128,7 +127,7 @@ public class TcpServer extends Server
    }
    
    @Override
-   protected final void closeClient(Object acceptReturn)
+   protected final void closeClient(Object acceptReturn, boolean fromClientThread)
    {
       ClientHolder holder = (ClientHolder)acceptReturn;
       IOUtils.closeQuietly(holder.dataInputStream);
@@ -171,9 +170,6 @@ public class TcpServer extends Server
       }
    }
    
-   @Override
-   protected void handleMessage(Receiver receiver, byte[] message) { ((TcpReceiver)receiver).handleMessage(message); }
-
    private void closeQuietly(ClientHolder holder) 
    {
       Socket socket = holder.clientSocket;
