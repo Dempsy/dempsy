@@ -150,7 +150,7 @@ public class Dempsy
                   Destination thisDestination = null;
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                   {
-                     receiver = transport.createInbound(executor);
+                     receiver = transport.createInbound(executor,currentClusterId.toString());
                      receiver.setListener(container);
                      receiver.start();
                      thisDestination = receiver.getDestination();
@@ -167,7 +167,8 @@ public class Dempsy
                         receiver.setStatsCollector(statsCollector);
                   }
                   
-                  senderFactory = transport.createOutbound(executor, statsCollector);
+                  String senderFactoryDescription = currentClusterId.toString() + (thisDestination == null ? "" : ("[" + thisDestination + "]")); 
+                  senderFactory = transport.createOutbound(executor, statsCollector,senderFactoryDescription);
                   router.setDefaultSenderFactory(senderFactory);
 
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
