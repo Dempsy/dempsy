@@ -121,7 +121,7 @@ public class DempsyTestBase
          if ("tcp".equals(profile))
          {
             System.out.println(" ... also using Tcp for the transport.");
-            transports = new String[][] { { "testDempsy/Transport-ZmqActx.xml" } };
+            transports = new String[][] { { "testDempsy/Transport-TcpBlockingActx.xml" } };
          }
          else
             transports = new String[][] { {"testDempsy/Transport-BlockingQueueActx.xml"} };

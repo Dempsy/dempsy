@@ -28,8 +28,9 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.container.Container;
 import com.nokia.dempsy.container.ContainerTestAccess;
+import com.nokia.dempsy.executor.DefaultDempsyExecutor;
 import com.nokia.dempsy.messagetransport.Receiver;
-import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
+import com.nokia.dempsy.messagetransport.util.ForwardedReceiver;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 import com.nokia.dempsy.util.Pair;
 
@@ -57,7 +58,17 @@ public class TestElasticity extends DempsyTestBase
       public Integer getNumber() { return number; }
       
       @Override
-      public String toString() { return "" + number; }
+      public String toString() { return "" + number + "[" + rankIndex + "]"; }
+   }
+   
+   public static class VerifyNumber extends Number implements Serializable
+   {
+      private static final long serialVersionUID = 1L;
+      
+      public VerifyNumber() {}
+      public VerifyNumber(Integer number, int rankIndex) { super(number,rankIndex); }
+      
+      @Override public String toString() { return "verifying " + super.toString(); }
    }
    
    public static class NumberCount implements Serializable
@@ -75,7 +86,7 @@ public class TestElasticity extends DempsyTestBase
       @MessageKey
       public Integer getKey() { return number; } 
       
-      @Override public String toString() { return "(" + count + " "  + number + "s)"; }
+      @Override public String toString() { return "(" + count + " "  + number + "s)[" + rankIndex + "]"; }
    }
    
    public static class NumberProducer implements Adaptor
@@ -102,7 +113,12 @@ public class TestElasticity extends DempsyTestBase
       public void initMe(String key) { this.wordText = key; }
       
       @MessageHandler
-      public NumberCount handle(Number word) { messageCount.incrementAndGet(); return new NumberCount(word,counter++); }
+      public NumberCount handle(Number word) 
+      {
+         logger.trace("NumberCount recevied " + word);
+         messageCount.incrementAndGet();
+         return new NumberCount(word,counter++);
+      }
       
       @Override
       public NumberCounter clone() throws CloneNotSupportedException { return (NumberCounter) super.clone(); }
@@ -124,6 +140,7 @@ public class TestElasticity extends DempsyTestBase
       @MessageHandler
       public void handle(NumberCount wordCount) 
       {
+         logger.trace("NumberRank received " + wordCount);
          totalMessages.incrementAndGet();
          countMap.get()[wordCount.rankIndex].put(wordCount.number, wordCount.count); 
       }
@@ -157,6 +174,7 @@ public class TestElasticity extends DempsyTestBase
       {
          kryo.setRegistrationRequired(true);
          kryo.register(Number.class);
+         kryo.register(VerifyNumber.class);
          kryo.register(NumberCount.class);
       }
 
@@ -192,8 +210,8 @@ public class TestElasticity extends DempsyTestBase
                   for (int i = 1; i < contexts.length; i++)
                   {
                      Receiver r = TestUtils.getReceiver(i, contexts);
-                     if (TcpReceiver.class.isAssignableFrom(r.getClass()))
-                        ((TcpReceiver)r).setBlocking(true);
+                     if (ForwardedReceiver.class.isAssignableFrom(r.getClass()))
+                        ((DefaultDempsyExecutor)((ForwardedReceiver)r).getExecutor()).setBlocking(true);
                   }
                }
                
@@ -208,6 +226,8 @@ public class TestElasticity extends DempsyTestBase
 
                // grab access to the Dispatcher from the Adaptor
                final Dispatcher dispatcher = adaptor.dispatcher;
+               
+               long startTime = System.currentTimeMillis();
                
                for (int i = 0; i < numbers.length; i++)
                   dispatcher.dispatch(numbers[i]);
@@ -227,7 +247,9 @@ public class TestElasticity extends DempsyTestBase
                      }))
                         break;
                   }
-                  
+
+                  logger.trace("testForProfiler time " + (System.currentTimeMillis() - startTime));
+
                   assertEquals(profilerTestNumberCount,rank.totalMessages.get());
                   assertEquals(profilerTestNumberCount,NumberCounter.messageCount.get());
                }
@@ -251,6 +273,7 @@ public class TestElasticity extends DempsyTestBase
       new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"), //  .
       new Pair<String[],String>(new String[]{ actxPath }, "test-cluster1"), //  .
       new Pair<String[],String>(new String[]{ actxPath }, "test-cluster2"));// NumberRank
+      
 
    }
    
@@ -284,16 +307,39 @@ public class TestElasticity extends DempsyTestBase
       //  other thread run.
       if (!TestUtils.getReceiver(indexOfNumberCountMp, contexts).getFailFast())
       {
+         logger.trace("++++ Sending through 20 messages.");
+         
+         // OK ... the sender thread has overwhelmed everything and we need to wait until message top being processed.
+         long curTotalMessages = rank.totalMessages.get();
+         long prevTotalMessages = 0;
+         while (curTotalMessages != prevTotalMessages)
+         {
+            logger.trace("++++ Waiting for all messages to finish " + prevTotalMessages + ", " + curTotalMessages);
+            Thread.sleep(1000);
+            prevTotalMessages = curTotalMessages;
+            curTotalMessages = rank.totalMessages.get();
+         }
+         
          // now that all of the through details are there, we want to clear the rank map and send a single
          // value per slot back through.
          rankIndexToSend.incrementAndGet();
+         logger.trace("Verifying rank index of " + rankIndexToSend.get());
          for (int num = 0; num < 20; num++)
-            dispatcher.dispatch(new Number(num,rankIndexToSend.get()));
+            dispatcher.dispatch(new VerifyNumber(num,rankIndexToSend.get()));
+         
          // all 20 should make it to the end.
-         assertTrue(TestUtils.poll(baseTimeoutMillis, rank, new TestUtils.Condition<NumberRank>()
+         TestUtils.poll(baseTimeoutMillis, rank, new TestUtils.Condition<NumberRank>()
          {
             @Override public boolean conditionMet(NumberRank rank) { return rank.countMap.get()[rankIndexToSend.get()].size() == 20; }
-         }));
+         });
+         
+//         if (20 != rank.countMap.get()[rankIndexToSend.get()].size())
+//         {
+//            for (int num = 0; num < 20; num++)
+//               dispatcher.dispatch(new VerifyNumber(num,rankIndexToSend.get()));
+//         }
+         
+         assertEquals(20,rank.countMap.get()[rankIndexToSend.get()].size());
       }
       
       List<ClassPathXmlApplicationContext> tmpl = new ArrayList<ClassPathXmlApplicationContext>(contexts.length + additionalContexts.length);

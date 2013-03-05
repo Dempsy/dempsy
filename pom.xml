@@ -31,14 +31,11 @@
 
   <properties>
     <spring.version>3.0.6.RELEASE</spring.version>
-    <guice.version>3.0</guice.version>
     <metrics.version>2.0.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <mockito.version>1.9.0</mockito.version>
     <quartz.version>2.1.6</quartz.version>
     <kryo.version>2.20</kryo.version>
-    <jzmq.version>2.1.0</jzmq.version>
-    <native.os>${os.name}</native.os>
   </properties>
 
   <modules>
@@ -189,17 +186,6 @@
         <groupId>com.googlecode.disruptor</groupId>
         <artifactId>disruptor</artifactId>
         <version>2.10.4</version>
-      </dependency>
-      <dependency>
-        <groupId>org.zeromq</groupId>
-        <artifactId>jzmq</artifactId>
-        <version>${jzmq.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.zeromq</groupId>
-        <artifactId>jzmq</artifactId>
-        <version>${jzmq.version}</version>
-        <classifier>native-${os.arch}-${native.os}</classifier>
       </dependency>
     </dependencies>
   </dependencyManagement>

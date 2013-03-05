@@ -31,15 +31,6 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.zeromq</groupId>
-      <artifactId>jzmq</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.zeromq</groupId>
-      <artifactId>jzmq</artifactId>
-      <classifier>native-${os.arch}-${native.os}</classifier>
-    </dependency>
-    <dependency>
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
     </dependency>
