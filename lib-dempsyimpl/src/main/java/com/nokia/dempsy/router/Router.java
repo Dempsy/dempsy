@@ -99,6 +99,7 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
    private Serializer<Object> serializer;
    
    protected Set<Class<?>> stopTryingToSendTheseTypes = Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
+   protected boolean badTypesExist = false;
    
    @SuppressWarnings("unchecked")
    public Router(ClusterDefinition currentClusterDefinition)
@@ -181,11 +182,13 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
       Object msgKeysValue = null;
       try
       {
-         if (!stopTryingToSendTheseTypes.contains(messageClass))
+         // badTypesExist should speed up the check in the normal case
+         if (!badTypesExist || !stopTryingToSendTheseTypes.contains(messageClass))
             msgKeysValue = methodInvoker.invokeGetter(msg);
       }
       catch(IllegalArgumentException e1)
       {
+         badTypesExist = true;
          stopTryingToSendTheseTypes.add(msg.getClass());
          logger.warn("unable to retrieve key from message: " + SafeString.objectDescription(msg) +  
                " Please make sure its has a simple getter appropriately annotated: " + 
@@ -193,6 +196,7 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
       }
       catch(IllegalAccessException e1)
       {
+         badTypesExist = true;
          stopTryingToSendTheseTypes.add(msg.getClass());
          logger.warn("unable to retrieve key from message: " + SafeString.objectDescription(msg) + 
                " Please make sure all annotated getter access is public: " + 
