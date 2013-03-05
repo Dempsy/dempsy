@@ -1,17 +1,12 @@
 package com.nokia.dempsy.executor;
 
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +20,6 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    private final long executorCount;
    private boolean isRunning = false;
    
-   private ScheduledExecutorService schedule = null;
    private ThreadPoolExecutor executor = null;
    private AtomicLong numLimited = null;
    private long maxNumWaitingLimitedTasks = -1;
@@ -110,8 +104,6 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       executor = (ThreadPoolExecutor)Executors.newFixedThreadPool(threadPoolSize);
       String baseName = "DempsyExc-" + executorCount;
       new ThreadNamer(baseName, threadPoolSize, executor);
-      schedule = Executors.newSingleThreadScheduledExecutor();
-      new ThreadNamer(baseName + "-sched", 1, schedule);
       numLimited = new AtomicLong(0);
       
       if (maxNumWaitingLimitedTasks < 0)
@@ -135,9 +127,6 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          if (executor != null)
             executor.shutdown();
 
-         if (schedule != null)
-            schedule.shutdown();
-      
          synchronized(numLimited) { numLimited.notifyAll(); }
          
          isRunning = false;
@@ -162,8 +151,8 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    }
 
    
-   public boolean isRunning() { return (schedule != null && executor != null) &&
-         !(schedule.isShutdown() || schedule.isTerminated()) &&
+   public boolean isRunning() { 
+      return (executor != null) &&
          !(executor.isShutdown() || executor.isTerminated()); }
    
    @Override
@@ -218,74 +207,6 @@ public class DefaultDempsyExecutor implements DempsyExecutor
       }
    }
    
-   @Override
-   public <V> Future<V> schedule(final Callable<V> r, long delay, TimeUnit unit)
-   {
-      // here we are going to wrap the Callable and the Future to change the 
-      // submission to one of the other queues.
-      // proxy the return future.
-      return new ProxyFuture<V>(r, delay, unit);
-   }
-
-   @SuppressWarnings({"rawtypes","unchecked"})
-   private class ProxyFuture<V> implements Future<V>, Runnable
-   {
-      private final AtomicReference<Future> ret;
-      private boolean isScheduled = false;
-      private final Callable<V> callable;
-      
-      private ProxyFuture(Callable<V> callable, long delay, TimeUnit unit)
-      {
-         this.callable = callable;
-         this.ret = new AtomicReference<Future>(schedule.schedule(this,delay,unit));
-      }
-      
-      @Override
-      public void run()
-      {
-         // now resubmit the callable we're proxying
-         set(submit(callable));
-      }
-
-      private void set(Future<V> f)
-      {
-         Future cur = ret.getAndSet(f);
-         if (cur.isCancelled())
-            f.cancel(true);
-         synchronized(this)
-         {
-            isScheduled = true;
-            this.notifyAll();
-         }
-      }
-      
-      @Override
-      public boolean cancel(boolean mayInterruptIfRunning){ return ret.get().cancel(mayInterruptIfRunning); }
-
-      @Override
-      public boolean isCancelled() { return ret.get().isCancelled(); }
-
-      @Override
-      public boolean isDone() { return ret.get().isDone(); }
-
-      @Override
-      public synchronized V get() throws InterruptedException, ExecutionException 
-      {
-         while (!isScheduled)
-            this.wait();
-         return (V)ret.get().get();
-      }
-
-      @Override
-      public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException
-      {
-         long cur = System.currentTimeMillis();
-         while (ret == null)
-            this.wait(unit.toMillis(timeout));
-         return (V)ret.get().get(System.currentTimeMillis() - cur,TimeUnit.MILLISECONDS);
-      }
-   }
-
    /**
     * Names threads in a thread pool. Only works for fixed size pools.
     */
