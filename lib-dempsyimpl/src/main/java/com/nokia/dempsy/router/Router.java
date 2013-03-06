@@ -220,15 +220,13 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
          else
          {
             if (statsCollector != null) statsCollector.messageNotSent(msg);
-            logger.warn("No router found for message type \""+ SafeString.valueOf(msg) + 
-                  (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
+            logger.warn("No router found for message type \""+ SafeString.objectDescription(msg) + "\"");
          }
       }
       else
       {
          if (statsCollector != null) statsCollector.messageNotSent(msg);
-         logger.warn("Null message key for \""+ SafeString.valueOf(msg) + 
-               (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
+         logger.warn("Null message key for \""+ SafeString.objectDescription(msg) + "\"");
       }
 
    }
