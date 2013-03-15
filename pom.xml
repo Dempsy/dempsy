@@ -5,7 +5,7 @@
 
   <groupId>net.dempsy</groupId>
   <artifactId>dempsy-parent</artifactId>
-  <version>0.7.2</version>
+  <version>0.8-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>
 
