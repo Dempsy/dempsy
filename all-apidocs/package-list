@@ -1,8 +1,12 @@
 com.nokia.dempsy
 com.nokia.dempsy.annotations
+com.nokia.dempsy.cluster
+com.nokia.dempsy.cluster.invm
+com.nokia.dempsy.cluster.zookeeper
 com.nokia.dempsy.config
 com.nokia.dempsy.container
 com.nokia.dempsy.container.internal
+com.nokia.dempsy.executor
 com.nokia.dempsy.internal.util
 com.nokia.dempsy.messagetransport
 com.nokia.dempsy.messagetransport.blockingqueue
@@ -11,10 +15,10 @@ com.nokia.dempsy.messagetransport.tcp
 com.nokia.dempsy.messagetransport.util
 com.nokia.dempsy.monitoring
 com.nokia.dempsy.monitoring.coda
-com.nokia.dempsy.mpcluster
-com.nokia.dempsy.mpcluster.invm
-com.nokia.dempsy.mpcluster.zookeeper
+com.nokia.dempsy.output
 com.nokia.dempsy.router
 com.nokia.dempsy.serialization
 com.nokia.dempsy.serialization.java
+com.nokia.dempsy.serialization.kryo
 com.nokia.dempsy.spring
+com.nokia.dempsy.util
