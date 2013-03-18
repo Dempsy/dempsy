@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -29,7 +28,7 @@ public class TcpSenderConnection implements Runnable
    
    private enum IsLocalAddress { Yes, No, Unknown };
    private IsLocalAddress isLocalAddress = IsLocalAddress.Unknown;
-   private AtomicReference<Thread> senderThread = new AtomicReference<Thread>();
+   private Thread senderThread = null;
 
    private AtomicBoolean isSenderRunning = new AtomicBoolean(false);
    private AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
@@ -56,9 +55,21 @@ public class TcpSenderConnection implements Runnable
    {
       if (senders.size() == 0)
       {
-         senderThread.set(new Thread(this,"TcpSender to " + sender.destination));
-         senderThread.get().setDaemon(true);
-         senderThread.get().start();
+         senderKeepRunning.set(true);
+         senderThread = new Thread(this,"TcpSender to " + sender.destination);
+         senderThread.setDaemon(true);
+         senderThread.start();
+         synchronized(isSenderRunning) 
+         {
+            // if the sender isn't running yet, then wait for it.
+            if (!isSenderRunning.get())
+            {
+               try { isSenderRunning.wait(10000); } catch (InterruptedException ie) {}
+            }
+            
+            if (!isSenderRunning.get())
+               logger.error("Failed to start TcpSender thread for " + sender.destination);
+         }
       }
       
       senders.add(sender);
@@ -69,14 +80,14 @@ public class TcpSenderConnection implements Runnable
       senders.remove(sender);
       if (senders.size() == 0)
       {
-         Thread t = senderThread.get();
          senderKeepRunning.set(false);
          
-         if (t != null)
+         // poll with interrupts, for the thread to exit.
+         if (senderThread != null)
          {
             for (int i = 0; i < 3000; i++)
             {
-               t.interrupt();
+               senderThread.interrupt();
                try { Thread.sleep(1); } catch (InterruptedException ie) {}
 
                if (!isSenderRunning.get())
@@ -84,29 +95,32 @@ public class TcpSenderConnection implements Runnable
             }
          }
          
-         // and just because
-         closeQuietly(socket);
-         if (socketTimeout != null)
-            socketTimeout.stop();
-         
          if (isSenderRunning.get())
+         {
             logger.error("Couldn't seem to stop the sender thread. Ignoring.");
+
+            // attempt a cleanup anyway.
+            closeQuietly(socket);
+            if (socketTimeout != null)
+               socketTimeout.stop();
+         }
       }
    }
 
    public void setTimeoutMillis(long timeoutMillis) { this.timeoutMillis = timeoutMillis; }
 
-   public void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
-   
    @Override
    public void run()
    {
       TcpSender.Enqueued message = null;
       try
       {
-         isSenderRunning.set(true);
-         senderKeepRunning.set(true);
-
+         synchronized(isSenderRunning)
+         {
+            isSenderRunning.set(true);
+            isSenderRunning.notifyAll();
+         }
+         
          int ioeFailedCount = -1;
          int queueSizeOnFirstFail = -1;
          
@@ -115,7 +129,7 @@ public class TcpSenderConnection implements Runnable
             try
             {
                message = batchOutgoingMessages ? sendingQueue.poll() : sendingQueue.take();
-               
+
                DataOutputStream localDataOutputStream = getDataOutputStream();
 
                if (message == null)
@@ -151,7 +165,7 @@ public class TcpSenderConnection implements Runnable
             catch (IOException ioe)
             {
                socketTimeout.end();
-               message.messageNotSent();
+               if (message != null) message.messageNotSent();
                close();
                // This can happen lots of times so let's track it
                if (ioeFailedCount == -1)
@@ -168,26 +182,29 @@ public class TcpSenderConnection implements Runnable
             catch (InterruptedException ie)
             {
                socketTimeout.end();
-               message.messageNotSent();
+               if (message != null) message.messageNotSent();
                if (senderKeepRunning.get()) // if we're supposed to be running still, then we're not shutting down. Not sure why we reset.
                   logger.warn("Sending data to " + destination + " was interrupted for no good reason.",ie);
             }
             catch (Throwable th)
             {
                socketTimeout.end();
-               message.messageNotSent();
+               if (message != null) message.messageNotSent();
                logger.error("Unknown exception thrown while trying to send a message to " + destination);
             }
          }
       }
+      catch (RuntimeException re) { logger.error("Unexpected Exception!",re); }
       finally
       {
-         senderThread.set(null);
-         isSenderRunning.set(false);
+         synchronized(this) { senderThread = null; }
          socketTimeout.stop();
          close();
+         isSenderRunning.set(false);
       }
    }
+   
+   protected void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
    
    // this should ONLY be called from the read thread
    private DataOutputStream getDataOutputStream() throws MessageTransportException, IOException

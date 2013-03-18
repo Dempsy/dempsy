@@ -18,6 +18,7 @@ package com.nokia.dempsy.messagetransport.tcp;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -54,6 +55,7 @@ public class TcpTransportTest
    private static final int numThreads = 4;
    
    private static long baseTimeoutMillis = 20000;
+   private static long socketWriteTimeoutMillis = 10000;
    
 //-------------------------------------------------------------------------------------
 // Support code for multirun tests.
@@ -73,23 +75,167 @@ public class TcpTransportTest
    
    private void runAllCombinations(Checker check) throws Throwable
    {
-      logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
-      check.check(-1, false);
-      logger.debug("checking " + check + " with port 8765 and not using \"localhost.\"");
-      check.check(8765, false);
-      logger.debug("checking " + check + " with ephemeral port using \"localhost.\"");
-      check.check(-1, true);
-      logger.debug("checking " + check + " with port 8765 using \"localhost.\"");
-      check.check(8765, true);
+      try
+      {
+         logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
+         check.check(-1, false);
+         logger.debug("checking " + check + " with port 8765 and not using \"localhost.\"");
+         check.check(8765, false);
+         logger.debug("checking " + check + " with ephemeral port using \"localhost.\"");
+         check.check(-1, true);
+         logger.debug("checking " + check + " with port 8765 using \"localhost.\"");
+         check.check(8765, true);
+      }
+      finally
+      {
+         logger.debug("ending combinations for " + check);
+      }
    }
    
-
+   private void runMain(Checker check) throws Throwable
+   {
+      try
+      {
+         logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
+         check.check(-1, false);
+      }
+      finally
+      {
+         logger.debug("ending combinations for " + check);
+      }
+   }
+   
 //-------------------------------------------------------------------------------------
 // multirun tests.
 //-------------------------------------------------------------------------------------
    /**
     * Just send a simple message and make sure it gets through.
     */
+   final int numMessagesPerThread = 1000000;
+   
+   @Test
+   public void transportBlockingSimpleMessage() throws Throwable
+   {
+      boolean oldTrackProblems = BasicStatsCollector.trackProblems;
+      BasicStatsCollector.trackProblems = true;
+      long oldSocketWriteTimeoutMillis = socketWriteTimeoutMillis;
+      socketWriteTimeoutMillis = 100000;
+      
+      try
+      {
+         runMain(new Checker()
+         {
+            @Override
+            public void check(int port, boolean localhost) throws Throwable
+            {
+               logger.trace("========= Starting");
+               SenderFactory factory = null;
+               TcpReceiver adaptor = null;
+               StatsCollector statsCollector = new BasicStatsCollector();
+               TcpServer server = null;
+               final AtomicLong messageCount = new AtomicLong(0);
+               final AtomicBoolean keepGoing = new AtomicBoolean(true);
+
+               try
+               {
+                  //===========================================
+                  // setup the sender and receiver
+                  server = new TcpServer();
+                  adaptor = new TcpReceiver(server,null,getFailFast());
+                  adaptor.setBlocking(true);
+                  adaptor.setStatsCollector(statsCollector);
+                  adaptor.setListener(new Listener()
+                  {
+                     @Override public void shuttingDown() { }
+                     @Override public boolean onMessage(byte[] messageBytes, boolean failFast) { messageCount.incrementAndGet(); return true; }
+                  });
+                  factory = makeSenderFactory(false,statsCollector); // distruptible sender factory
+
+                  // always use an ephemeral port and not localhost.
+                  //               if (port > 0) server.setPort(port);
+                  //               if (localhost) server.setUseLocalhost(localhost);
+                  //===========================================
+
+                  adaptor.start(); // start the adaptor
+                  Destination destination = adaptor.getDestination(); // get the destination
+
+                  // send a message
+                  final Sender sender = factory.getSender(destination);
+                  final byte[] message = "Hello".getBytes();
+                  final AtomicBoolean failed = new AtomicBoolean(false);
+
+                  for (int i = 0; i < numThreads; i++)
+                  {
+                     Thread t = new Thread(new Runnable()
+                     {
+                        @Override  public void run()
+                        {
+                           try
+                           {
+                              for (int i = 0; i < numMessagesPerThread && keepGoing.get(); i++)
+                                 sender.send(message);
+                           }
+                           catch(Throwable e)
+                           {
+                              failed.set(true);
+                              throw new RuntimeException(e);
+                           }
+                        }
+                     });
+                     t.start();
+                  }
+
+                  assertFalse(failed.get());
+
+                  TestUtils.Condition<AtomicLong> correctNumMessagesReceived = new TestUtils.Condition<AtomicLong>()
+                  {
+                     @Override public boolean conditionMet(AtomicLong o) { return o.get() == (numMessagesPerThread * numThreads); } 
+                  };
+
+                  long lastNumberOfMessages = -1;
+                  while (messageCount.get() > lastNumberOfMessages)
+                  {
+                     lastNumberOfMessages = messageCount.get();
+                     if (TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived))
+                        break;
+                  }
+
+                  // wait for it to be received.
+                  TestUtils.poll(baseTimeoutMillis, messageCount, correctNumMessagesReceived);
+
+                  assertEquals(numMessagesPerThread * numThreads, messageCount.get());
+               }
+               finally
+               {
+                  logger.trace("========= Stopping");
+
+                  keepGoing.set(false);
+
+                  if (server != null)
+                     server.stop();
+
+                  if (factory != null)
+                     factory.shutdown();
+
+                  if (adaptor != null)
+                     adaptor.shutdown();
+
+                  logger.trace("========= Finished");
+               }
+
+            }
+
+            @Override
+            public String toString() { return "transportBlockingSimpleMessage"; }
+         });
+      }
+      finally
+      {
+         BasicStatsCollector.trackProblems = oldTrackProblems;
+         socketWriteTimeoutMillis = oldSocketWriteTimeoutMillis;
+      }
+   }
+   
    @Test
    public void transportSimpleMessage() throws Throwable
    {
@@ -101,11 +247,12 @@ public class TcpTransportTest
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
             StatsCollector statsCollector = new BasicStatsCollector();
+            TcpServer server = null;
             try
             {
                //===========================================
                // setup the sender and receiver
-               TcpServer server = new TcpServer();
+               server = new TcpServer();
                adaptor = new TcpReceiver(server,null,getFailFast());
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
@@ -136,13 +283,15 @@ public class TcpTransportTest
             }
             finally
             {
+               if (server != null)
+                  server.stop();
+               
                if (factory != null)
                   factory.shutdown();
                
                if (adaptor != null)
                   adaptor.shutdown();
             }
-
          }
          
          @Override
@@ -265,6 +414,7 @@ public class TcpTransportTest
       boolean localhost = false;
       SenderFactory factory = null;
       TcpReceiver adaptor = null;
+      SenderFactory senderFactory = null;
       try
       {
          //===========================================
@@ -299,7 +449,7 @@ public class TcpTransportTest
          if (port > 0) adaptor.server.setPort(port);
          if (localhost) adaptor.server.setUseLocalhost(localhost);
 
-         TcpSenderFactory senderFactory = makeSenderFactory(false,null);
+         senderFactory = makeSenderFactory(false,null);
 
          int size = 1024*1024*10;
          byte[] tosend = new byte[size];
@@ -321,6 +471,9 @@ public class TcpTransportTest
 
          if (adaptor != null)
             adaptor.shutdown();
+         
+         if (senderFactory != null)
+            senderFactory.shutdown();
 
          receivedByteArrayMessage = null;
       }
@@ -337,7 +490,7 @@ public class TcpTransportTest
    @Test
    public void transportMultipleConnectionsFailedClient() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
@@ -456,7 +609,7 @@ public class TcpTransportTest
    @Test
    public void transportMultipleConnectionsFailedReceiver() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
@@ -581,7 +734,7 @@ public class TcpTransportTest
    @Test
    public void testBoundedOutputQueue() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
@@ -864,7 +1017,7 @@ public class TcpTransportTest
    @Test
    public void transportMTWorkerMessage() throws Throwable
    {
-      runAllCombinations(new Checker()
+      runMain(new Checker()
       {
          @Override
          public void check(int port, boolean localhost) throws Throwable
@@ -951,7 +1104,8 @@ public class TcpTransportTest
          }
          
          @Override
-         public String toString() { return "testTransportSimpleMessage"; }
+         public String toString() { return "transportMTWorkerMessage"; }
       });
+      
    }
 }

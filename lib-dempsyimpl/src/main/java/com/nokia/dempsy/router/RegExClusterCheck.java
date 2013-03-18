@@ -31,13 +31,19 @@ import com.nokia.dempsy.config.ClusterId;
  */
 public class RegExClusterCheck implements CurrentClusterCheck
 {
-   private ClusterId currentCluster = null;
-   private Pattern clusterNamePattern = null;
+   private final ClusterId currentCluster;
+   private final Pattern clusterNamePattern;
+   private final Pattern appNamePattern;
    
    public RegExClusterCheck(String applicationName, String regExpClusterName)
    {
       this(new ClusterId(applicationName,regExpClusterName));
    }
+   
+   /**
+    * Matches any application but the regExp for the cluster name.
+    */
+   public RegExClusterCheck(String regExpClusterName) { this(new ClusterId(".*",regExpClusterName)); }
    
    /**
     * Construct a {@link RegExClusterCheck} that matches the given clusterId. The 
@@ -48,6 +54,7 @@ public class RegExClusterCheck implements CurrentClusterCheck
    {
       this.currentCluster = clusterId;
       this.clusterNamePattern = Pattern.compile(currentCluster.getMpClusterName());
+      this.appNamePattern = Pattern.compile(currentCluster.getApplicationName());
    }
    
    @Override
@@ -63,7 +70,10 @@ public class RegExClusterCheck implements CurrentClusterCheck
    @Override
    public boolean isThisNodePartOfApplication(String applicationName)
    {
-      String curApplicationName = currentCluster == null ? null : currentCluster.getApplicationName();
-      return curApplicationName == null ? false : curApplicationName.equals(applicationName);
+      if (currentCluster == null)
+         return false;
+
+      // assume the clusterName is a regexp. If it's not then this will simply match perfectly.
+      return appNamePattern.matcher(applicationName).matches();
    }
 }

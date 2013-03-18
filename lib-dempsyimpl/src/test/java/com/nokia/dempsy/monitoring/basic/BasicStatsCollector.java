@@ -18,6 +18,9 @@ package com.nokia.dempsy.monitoring.basic;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 
@@ -29,6 +32,10 @@ import com.nokia.dempsy.monitoring.coda.MetricGetters;
  */
 public class BasicStatsCollector implements StatsCollector, MetricGetters
 {
+   public static boolean trackProblems = false;
+   private static Logger logger = LoggerFactory.getLogger(BasicStatsCollector.class);
+
+   
    private final AtomicLong messagesReceived = new AtomicLong();
    private final AtomicLong messagesDiscarded = new AtomicLong();
    private final AtomicLong messagesCollisions = new AtomicLong();
@@ -115,12 +122,18 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    {
       messagesDiscarded.incrementAndGet();
       inProcessMessages.decrementAndGet();
+
+      if (trackProblems)
+         logger.error("messageDiscarded",new RuntimeException());
    }
 
    @Override
    public void messageCollision(Object message)
    {
       messagesCollisions.incrementAndGet();
+
+      if (trackProblems)
+         logger.error("messageCollision",new RuntimeException());
    }
 
    @Override
@@ -135,12 +148,18 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    {
       messagesFailed.incrementAndGet();
       inProcessMessages.decrementAndGet();
+      
+      if (trackProblems)
+         logger.error("messageFailed",new RuntimeException());
    }
 
    @Override
    public void messageNotSent(Object message)
    {
       messagesUnsent.incrementAndGet();
+      
+      if (trackProblems)
+         logger.error("messageNotSent",new RuntimeException());
    }
 
    @Override

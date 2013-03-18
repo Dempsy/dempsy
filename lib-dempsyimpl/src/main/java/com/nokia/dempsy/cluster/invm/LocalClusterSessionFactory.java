@@ -24,7 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
@@ -40,6 +40,7 @@ import com.nokia.dempsy.cluster.ClusterInfoWatcher;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.util.Pair;
 
 /**
  * This class is for running all cluster management from within the same vm, and 
@@ -50,7 +51,7 @@ import com.nokia.dempsy.internal.util.SafeString;
 public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
 {
    private static Logger logger = LoggerFactory.getLogger(LocalClusterSessionFactory.class);
-   private List<LocalSession> currentSessions = new CopyOnWriteArrayList<LocalSession>();
+   private static List<LocalSession> currentSessions = new ArrayList<LocalSession>();
 
    // ====================================================================
    // This section pertains to the management of the tree information
@@ -59,16 +60,48 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       reset();
    }
    
-   public static Map<String,Entry> getEntries() { return entries; }
-   
    /// initially add the root. 
-   public static void reset() { entries.clear(); entries.put("/", new Entry()); }
+   public static synchronized void reset() { entries.clear(); entries.put("/", new Entry()); }
+   
+   public static synchronized void completeReset()
+   {
+      synchronized(currentSessions)
+      {
+         if (!isReset())
+            logger.error("LocalClusterSessionFactory beging reset with sessions or entries still open.");
+         
+         List<LocalSession> sessions = new ArrayList<LocalSession>(currentSessions.size());
+         sessions.addAll(currentSessions);
+         currentSessions.clear();
+         for (LocalSession session : sessions)
+            session.stop(false);
+         reset();
+      }
+   }
+   
+   public static boolean isReset() { return currentSessions.size() == 0 && entries.size() == 1; }
+   
+   private static synchronized Set<LocalSession.WatcherProxy> ogatherWatchers(Entry ths, boolean node, boolean child)
+   {
+      Set<LocalSession.WatcherProxy> twatchers = new HashSet<LocalSession.WatcherProxy>();
+      if (node)
+      {
+         twatchers.addAll(ths.nodeWatchers);
+         ths.nodeWatchers = new HashSet<LocalSession.WatcherProxy>();
+      }
+      if (child)
+      {
+         twatchers.addAll(ths.childWatchers);
+         ths.childWatchers = new HashSet<LocalSession.WatcherProxy>();
+      }
+      return twatchers;
+   }
 
    private static class Entry
    {
       private AtomicReference<Object> data = new AtomicReference<Object>();
-      private Set<ClusterInfoWatcher> nodeWatchers = new HashSet<ClusterInfoWatcher>();
-      private Set<ClusterInfoWatcher> childWatchers = new HashSet<ClusterInfoWatcher>();
+      private Set<LocalSession.WatcherProxy> nodeWatchers = new HashSet<LocalSession.WatcherProxy>();
+      private Set<LocalSession.WatcherProxy> childWatchers = new HashSet<LocalSession.WatcherProxy>();
       private Collection<String> children = new ArrayList<String>();
       private Map<String,AtomicLong> childSequences = new HashMap<String, AtomicLong>();
 
@@ -81,30 +114,16 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
          return children.toString() + " " + SafeString.valueOf(data.get());
       }
       
-      private Set<ClusterInfoWatcher> gatherWatchers(boolean node, boolean child)
+      private Set<LocalSession.WatcherProxy> gatherWatchers(boolean node, boolean child)
       {
-         synchronized(LocalClusterSessionFactory.class)
-         {
-            Set<ClusterInfoWatcher> twatchers = new HashSet<ClusterInfoWatcher>();
-            if (node)
-            {
-               twatchers.addAll(nodeWatchers);
-               nodeWatchers = new HashSet<ClusterInfoWatcher>();
-            }
-            if (child)
-            {
-               twatchers.addAll(childWatchers);
-               childWatchers = new HashSet<ClusterInfoWatcher>();
-            }
-            return twatchers;
-         }
+         return ogatherWatchers(this,node,child);
       }
       
-      private Set<ClusterInfoWatcher> toCallQueue = new HashSet<ClusterInfoWatcher>();
+      private Set<LocalSession.WatcherProxy> toCallQueue = new HashSet<LocalSession.WatcherProxy>();
       
       private void callWatchers(boolean node, boolean child)
       {
-         Set<ClusterInfoWatcher> twatchers = gatherWatchers(node,child);
+         Set<LocalSession.WatcherProxy> twatchers = gatherWatchers(node,child);
          
          processLock.lock();
          try {
@@ -124,7 +143,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
                // and we'll run it again.
                toCallQueue.removeAll(twatchers);
                
-               for(ClusterInfoWatcher watcher: twatchers)
+               for(LocalSession.WatcherProxy watcher: twatchers)
                {
                   try
                   {
@@ -142,7 +161,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
                }
                
                // now we need to reset twatchers to any new toCallQueue
-               twatchers = new HashSet<ClusterInfoWatcher>();
+               twatchers = new HashSet<LocalSession.WatcherProxy>();
                twatchers.addAll(toCallQueue); // in case we run again
                
             } while (toCallQueue.size() > 0);
@@ -161,8 +180,9 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       File f = new File(path);
       return f.getParent();
    }
-   
-   private static Entry get(String absolutePath, ClusterInfoWatcher watcher, boolean nodeWatch) throws ClusterInfoException.NoNodeException
+
+   // This should only be called from a static synchronized method on the LocalClusterSessionFactory
+   private static Entry get(String absolutePath, LocalSession.WatcherProxy watcher, boolean nodeWatch) throws ClusterInfoException.NoNodeException
    {
       Entry ret;
       ret = entries.get(absolutePath);
@@ -178,7 +198,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return ret;
    }
    
-   private static synchronized Object ogetData(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
+   private static synchronized Object ogetData(String path, LocalSession.WatcherProxy watcher) throws ClusterInfoException
    {
       Entry e = get(path,watcher,true);
       return e.data.get();
@@ -191,7 +211,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       e.callWatchers(true,false);
    }
    
-   private static synchronized boolean oexists(String path,ClusterInfoWatcher watcher)
+   private static synchronized boolean oexists(String path,LocalSession.WatcherProxy watcher)
    {
       Entry e = entries.get(path);
       if (e != null && watcher != null)
@@ -201,75 +221,81 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
    
    private static String omkdir(String path, DirMode mode) throws ClusterInfoException
    {
-      Entry parent = null;
-      String pathToUse;
-      
-      synchronized(LocalClusterSessionFactory.class)
-      {
-         if (oexists(path,null))
-            return null;
-
-         String parentPath = parent(path);
-
-         parent = entries.get(parentPath);
-         if (parent == null)
-         {
-            throw new ClusterInfoException("No Parent for \"" + path + "\" which is expected to be \"" +
-                  parent(path) + "\"");
-         }
-
-         long seq = -1;
-         if (mode.isSequential())
-         {
-            AtomicLong cseq = parent.childSequences.get(path);
-            if (cseq == null)
-               parent.childSequences.put(path, cseq = new AtomicLong(0));
-            seq = cseq.getAndIncrement();
-         }
-
-         pathToUse = seq >= 0 ? (path + seq) : path;
-         
-         entries.put(pathToUse, new Entry());
-         // find the relative path
-         int lastSlash = pathToUse.lastIndexOf('/');
-         parent.children.add(pathToUse.substring(lastSlash + 1));
-      }
+      Pair<Entry,String> results = doomkdir(path,mode);
+      Entry parent = results.getFirst();
+      String pathToUse = results.getSecond();
       
       if (parent != null)
          parent.callWatchers(false,true);
       return pathToUse;
    }
    
-   private static void ormdir(String path) throws ClusterInfoException {   ormdir(path,true);  }
+   private static synchronized Pair<Entry,String> doomkdir(String path, DirMode mode) throws ClusterInfoException
+   {
+      if (oexists(path,null))
+         return new Pair<Entry,String>(null,null);
+
+      String parentPath = parent(path);
+
+      Entry parent = entries.get(parentPath);
+      if (parent == null)
+      {
+         throw new ClusterInfoException("No Parent for \"" + path + "\" which is expected to be \"" +
+               parent(path) + "\"");
+      }
+
+      long seq = -1;
+      if (mode.isSequential())
+      {
+         AtomicLong cseq = parent.childSequences.get(path);
+         if (cseq == null)
+            parent.childSequences.put(path, cseq = new AtomicLong(0));
+         seq = cseq.getAndIncrement();
+      }
+
+      String pathToUse = seq >= 0 ? (path + seq) : path;
+      
+      entries.put(pathToUse, new Entry());
+      // find the relative path
+      int lastSlash = pathToUse.lastIndexOf('/');
+      parent.children.add(pathToUse.substring(lastSlash + 1));
+      return new Pair<Entry, String>(parent,pathToUse);
+   }
+   
+   private static void ormdir(String path) throws ClusterInfoException { ormdir(path,true); }
    
    private static void ormdir(String path, boolean notifyWatchers) throws ClusterInfoException
    {
-      Entry ths;
-      Entry parent = null;
+      Pair<Entry,Entry> results = doormdir(path);
+      Entry ths = results.getFirst();
+      Entry parent = results.getSecond();
       
-      synchronized(LocalClusterSessionFactory.class)
-      {
-         ths = entries.get(path);
-         if (ths == null)
-            throw new ClusterInfoException("rmdir of non existant node \"" + path + "\"");
-
-         parent = entries.get(parent(path));
-         entries.remove(path);
-      }
-      
-      if (parent != null)
-      {
-         int lastSlash = path.lastIndexOf('/');
-         parent.children.remove(path.substring(lastSlash + 1));
-         if (notifyWatchers)
-            parent.callWatchers(false,true);
-      }
+      if (parent != null && notifyWatchers)
+         parent.callWatchers(false,true);
       
       if (notifyWatchers)
          ths.callWatchers(true, true);
    }
    
-   private static synchronized Collection<String> ogetSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
+   private static synchronized Pair<Entry,Entry> doormdir(String path) throws ClusterInfoException
+   {
+      Entry ths = entries.get(path);
+      if (ths == null)
+         throw new ClusterInfoException("rmdir of non existant node \"" + path + "\"");
+
+      Entry parent = entries.get(parent(path));
+      entries.remove(path);
+      
+      if (parent != null)
+      {
+         int lastSlash = path.lastIndexOf('/');
+         parent.children.remove(path.substring(lastSlash + 1));
+      }
+
+      return new Pair<Entry,Entry>(ths,parent);
+   }
+   
+   private static synchronized Collection<String> ogetSubdirs(String path, LocalSession.WatcherProxy watcher) throws ClusterInfoException
    {
       Entry e = get(path,watcher,false);
       Collection<String>ret = new ArrayList<String>(e.children.size());
@@ -281,18 +307,36 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
    @Override
    public ClusterInfoSession createSession()
    {
-      LocalSession ret = new LocalSession();
-      currentSessions.add(ret);
-      return ret;
+      synchronized (currentSessions)
+      {
+         LocalSession ret = new LocalSession();
+         currentSessions.add(ret);
+         return ret;
+      }
    }
    
    public class LocalSession implements ClusterInfoSession, DisruptibleSession
    {
       private List<String> localEphemeralDirs = new ArrayList<String>();
+      private AtomicBoolean stopping = new AtomicBoolean(false);
+      
+      private class WatcherProxy
+      {
+         private final ClusterInfoWatcher watcher;
+         private WatcherProxy(ClusterInfoWatcher watcher) { this.watcher = watcher; }
+         private final void process() { if (!stopping.get()) watcher.process(); }
+         @Override public int hashCode() { return watcher.hashCode(); }
+         @Override public boolean equals(Object o) { return watcher.equals(((WatcherProxy)o).watcher); }
+      }
+      
+      private final WatcherProxy makeWatcher(ClusterInfoWatcher watcher) { return watcher == null ? null : new WatcherProxy(watcher); }
       
       @Override
       public String mkdir(String path, DirMode mode) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("mkdir called on stopped session.");
+         
          String ret = omkdir(path,mode);
          if (ret != null && mode.isEphemeral())
          {
@@ -307,6 +351,9 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       @Override
       public void rmdir(String path) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("rmdir called on stopped session.");
+
          ormdir(path);
          synchronized(localEphemeralDirs)
          {
@@ -317,25 +364,33 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       @Override
       public boolean exists(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
       {
-         return oexists(path,watcher);
+         if (stopping.get())
+            throw new ClusterInfoException("exists called on stopped session.");
+         return oexists(path,makeWatcher(watcher));
       }
 
       @Override
       public Object getData(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
       {
-         return ogetData(path,watcher);
+         if (stopping.get())
+            throw new ClusterInfoException("getData called on stopped session.");
+         return ogetData(path,makeWatcher(watcher));
       }
 
       @Override
       public void setData(String path, Object data) throws ClusterInfoException
       {
+         if (stopping.get())
+            throw new ClusterInfoException("setData called on stopped session.");
          osetData(path,data);
       }
 
       @Override
       public Collection<String> getSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
       {
-         return ogetSubdirs(path,watcher);
+         if (stopping.get())
+            throw new ClusterInfoException("getSubdirs called on stopped session.");
+         return ogetSubdirs(path,makeWatcher(watcher));
       }
 
       @Override
@@ -346,12 +401,15 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       
       private void stop(boolean notifyWatchers)
       {
+         stopping.set(true);
          synchronized(localEphemeralDirs)
          {
             for (int i = localEphemeralDirs.size() - 1; i >= 0; i--)
             {
                try
                {
+                  if (logger.isTraceEnabled())
+                     logger.trace("Removing ephemeral directory due to stopped session " + localEphemeralDirs.get(i));
                   ormdir(localEphemeralDirs.get(i),notifyWatchers);
                }
                catch (ClusterInfoException cie)
@@ -363,21 +421,14 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
             }
             localEphemeralDirs.clear();
          }
-         currentSessions.remove(this);
          
          synchronized(currentSessions)
          {
+            currentSessions.remove(this);
             if (currentSessions.size() == 0)
-            {
-               synchronized(LocalClusterSessionFactory.class)
-               {
-                  entries.clear();
-                  entries.put("/", new Entry()); /// initially add the root.
-               }
-            }
+               reset();
          }
       }
-      
       
       @Override
       public void disrupt()

@@ -17,5 +17,5 @@
 package com.nokia.dempsy.monitoring.coda;
 
 public enum MetricsReporterType {
-	CONSOLE, CVS, GRAPHITE, GANGLIA, CSV;
+	CONSOLE, GRAPHITE, GANGLIA, CSV;
 }

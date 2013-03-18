@@ -34,18 +34,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.TestUtils.Condition;
+import com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.router.microshard.MicroShardUtils;
 
 public class TestAllClusterImpls
 {
+   private static Logger logger = LoggerFactory.getLogger(TestAllClusterImpls.class);
+
    String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-LocalActx.xml", "testDempsy/ClusterInfo-ZookeeperActx.xml" };
-//   String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-LocalActx.xml" };
-//   String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml" };
    
    private List<ClusterInfoSession> sessionsToClose = new ArrayList<ClusterInfoSession>();
 
@@ -62,12 +65,14 @@ public class TestAllClusterImpls
    public static void setupZookeeperSystemVars() throws IOException
    {
       zkServer = new InitZookeeperServerBean();
+      LocalClusterSessionFactory.completeReset();
    }
    
    @AfterClass
    public static void shutdownZookeeper()
    {
       zkServer.stop();
+      LocalClusterSessionFactory.completeReset();
    }
    
    private static interface Checker
@@ -79,6 +84,9 @@ public class TestAllClusterImpls
    {
       for (String clusterManager : clusterManagers)
       {
+         if (logger.isTraceEnabled())
+            logger.trace("TestAllClusterImpls: test " + checker.toString() + ", pass:" + clusterManager);
+
          ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(clusterManager);
          actx.registerShutdownHook();
 
@@ -129,6 +137,9 @@ public class TestAllClusterImpls
             session.stop();
          }
          
+         @Override
+         public String toString() { return "testMpClusterFromFactory"; }
+         
       });
    }
    
@@ -155,6 +166,9 @@ public class TestAllClusterImpls
             
             session.stop();
          }
+         
+         @Override
+         public String toString() { return "testSimpleClusterLevelData"; }
          
       });
    }
@@ -189,6 +203,9 @@ public class TestAllClusterImpls
             session.stop();
 
          }
+         
+         @Override
+         public String toString() { return "testSimpleClusterLevelDataThroughApplication"; }
          
       });
    }
@@ -231,6 +248,57 @@ public class TestAllClusterImpls
             
             session.stop();
          }
+         
+         @Override
+         public String toString() { return "testSimpleJoinTest"; }
+      });
+   }
+   
+   @Test
+   public void testDataOnEpheralNodeFromDifferentSession() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(String pass, ClusterInfoSessionFactory factory) throws Throwable
+         {
+            ClusterId cid = new ClusterId("testDataOnEpheralNodeFromDifferentSession","test-cluster");
+            final ClusterInfoSession session = factory.createSession();
+            assertNotNull(pass,session);
+            sessionsToClose.add(session);
+            final ClusterInfoSession session2 = factory.createSession();
+            sessionsToClose.add(session2);
+            
+            MicroShardUtils msutil = new MicroShardUtils(cid);
+            msutil.mkAllPersistentAppDirs(session, null);
+            String dir = session.mkdir(msutil.getShardsDir() + "/node1_", DirMode.EPHEMERAL_SEQUENTIAL);
+            
+            // wait for no more than ten seconds
+            assertTrue(pass, poll(10000, dir, new Condition<String>()
+            {
+               @Override
+               public boolean conditionMet(String dir) throws Throwable
+               {
+                  return session2.exists(dir, null);
+               }
+            }));
+            
+            session2.setData(dir, "Hello");
+            
+            // now make sure we can read the data from the first node.
+            assertTrue(pass, poll(10000, dir, new Condition<String>()
+            {
+               @Override
+               public boolean conditionMet(String dir) throws Throwable
+               {
+                  return "Hello".equals((String)session.getData(dir, null));
+               }
+            }));
+         }
+         
+         @Override
+         public String toString() { return "testDataOnEpheralNodeFromDifferentSession"; }
+
       });
    }
    
@@ -325,7 +393,9 @@ public class TestAllClusterImpls
             Thread.sleep(500);
             assertFalse(mainAppWatcher.recdUpdate);
          }
-         
+
+         @Override
+         public String toString() { return "testSimpleWatcherData"; }
       });
    }
    
@@ -401,6 +471,9 @@ public class TestAllClusterImpls
             session2.stop();
             session1.stop();
          }
+
+         @Override
+         public String toString() { return "testConsumerCluster"; }
       });
    }
    
@@ -436,6 +509,9 @@ public class TestAllClusterImpls
             
             session.stop();
          }
+         
+         @Override
+         public String toString() { return "testGetSetDataNoNode"; }
       });
    }
    
@@ -502,7 +578,9 @@ public class TestAllClusterImpls
             assertEquals(pass,data,cdata);
             session.stop();
          }
-         
+
+         @Override
+         public String toString() { return "testNullWatcherBehavior"; }
       });
    }
    

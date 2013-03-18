@@ -18,8 +18,11 @@ package com.nokia.dempsy.messagetransport.tcp;
 
 import java.io.Serializable;
 import java.net.InetAddress;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 
 import com.nokia.dempsy.messagetransport.Destination;
+import com.nokia.dempsy.messagetransport.MessageTransportException;
 
 public class TcpDestination implements Destination, Serializable
 {
@@ -28,6 +31,28 @@ public class TcpDestination implements Destination, Serializable
    protected InetAddress inetAddress;
    protected int port;
    protected int sequence = 0;
+   
+   public final static TcpDestination createNewDestinationForThisHost(int port, boolean useLocalhost) throws MessageTransportException
+   {
+      try
+      {
+         InetAddress inetAddress = useLocalhost ? InetAddress.getLocalHost() : TcpTransport.getFirstNonLocalhostInetAddress();
+         if (inetAddress == null)
+            throw new MessageTransportException("Failed to set the Inet Address for this host. Is there a valid network interface?");
+         
+         return new TcpDestination(inetAddress, port);
+      }
+      catch(UnknownHostException e)
+      {
+         throw new MessageTransportException("Failed to identify the current hostname", e);
+      }
+      catch(SocketException e)
+      {
+         throw new MessageTransportException("Failed to identify the current hostname", e);
+      }
+   }
+
+
    
    public TcpDestination() {   }
    

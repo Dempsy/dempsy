@@ -70,7 +70,6 @@ public class TestRouterInstantiation
 
       Object o;
       router.dispatch(o = new Object() {
-         @SuppressWarnings("unused")
          @MessageKey
          public String getKey() { return "hello"; }
       });

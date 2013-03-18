@@ -22,9 +22,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -47,6 +44,7 @@ import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
+import com.nokia.dempsy.util.AutoDisposeSingleThreadScheduler;
 
 public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
 {
@@ -311,8 +309,10 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          catch(KeeperException.NodeExistsException e)
          {         
 
-            if(logger.isDebugEnabled())
-               logger.debug("Failed call to " + name + " at " + path);
+            if(logger.isTraceEnabled())
+               logger.trace("Failed call to " + name + " at " + path + " because the node already exists.",e);
+            else if(logger.isDebugEnabled())
+               logger.debug("Failed call to " + name + " at " + path + " because the node already exists.");
             return null; // this is only thrown from mkdir and so if the Node Exists
                          //   we simply want to return a null String 
          }
@@ -338,8 +338,8 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       throw new ClusterInfoException(name + " called on stopped ZookeeperSession.");
    }
    
-   private ScheduledExecutorService scheduler = null;
-   private volatile ScheduledFuture<?> beingReset = null;
+   private final AutoDisposeSingleThreadScheduler scheduler = new AutoDisposeSingleThreadScheduler("Zookeeper Session Reset");
+   private volatile AutoDisposeSingleThreadScheduler.Cancelable beingReset = null;
    
    private synchronized void resetZookeeper(final ZooKeeper failedZooKeeper)
    {
@@ -354,9 +354,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          //   and if we're not already working on beingReset
          if (tmpZkRef != null && tmpZkRef.get() == failedZooKeeper && (beingReset == null || beingReset.isDone()))
          {
-            if (scheduler == null)
-               scheduler = Executors.newScheduledThreadPool(1);
-            
             Runnable runnable = new Runnable()
             {
                ZooKeeper failedInstance = failedZooKeeper;
@@ -417,9 +414,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
                         {
                            setNewZookeeper(newZk);
                            beingReset = null;
-                           if (scheduler != null)
-                              scheduler.shutdown();
-                           scheduler = null;
                         }
 
                         // now notify the watchers
@@ -487,16 +481,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       {
          beingReset = null;
          logger.error("resetZookeeper failed for attempted reset to " + connectString,re);
-         try
-         {
-            if (scheduler != null)
-               scheduler.shutdownNow();
-         }
-         catch (Throwable th)
-         {
-            logger.error("Failed to shut down ScheduledExecutorService. This may result in a thread leak.",th);
-         }
-         scheduler = null;
       }
       
    }
@@ -574,7 +558,7 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          }
          return (jsonData != null)?jsonData.getBytes():null;
       }
-
+      
    }
 
 }

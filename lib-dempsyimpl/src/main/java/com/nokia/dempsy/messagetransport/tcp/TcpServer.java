@@ -21,12 +21,10 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -193,7 +191,7 @@ public class TcpServer
    protected synchronized TcpDestination getDestination() throws MessageTransportException
    {
       if (destination == null)
-         destination = doGetDestination();
+         destination = TcpDestination.createNewDestinationForThisHost(port, useLocalhost);
 
       if (destination.isEphemeral())
          bind();
@@ -201,26 +199,6 @@ public class TcpServer
       return destination;
    }
       
-   private TcpDestination doGetDestination() throws MessageTransportException
-   {
-      try
-      {
-         InetAddress inetAddress = useLocalhost ? InetAddress.getLocalHost() : TcpTransport.getFirstNonLocalhostInetAddress();
-         if (inetAddress == null)
-            throw new MessageTransportException("Failed to set the Inet Address for this host. Is there a valid network interface?");
-         
-         return new TcpDestination(inetAddress, port);
-      }
-      catch(UnknownHostException e)
-      {
-         throw new MessageTransportException("Failed to identify the current hostname", e);
-      }
-      catch(SocketException e)
-      {
-         throw new MessageTransportException("Failed to identify the current hostname", e);
-      }
-   }
-
    /**
     * Directs the factory to create TcpDestinations using "localhost." By default
     * the factory will not do this since the use of this InetAddress from another

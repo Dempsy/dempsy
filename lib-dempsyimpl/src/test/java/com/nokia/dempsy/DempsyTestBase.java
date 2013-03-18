@@ -35,7 +35,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.slf4j.Logger;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -46,49 +45,52 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
-import com.nokia.dempsy.cluster.DisruptibleSession;
+import com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
-import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
+import com.nokia.dempsy.util.Pair;
 
 public class DempsyTestBase
 {
    /**
     * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in 
-    * every runAllCombinations call. This can make TestDempsy run for a loooooong time.
+    * every runAllCombinations call. This can make tests run for a loooooong time.
     */
    public static boolean hardcore = false;
+   public static boolean profile = false;
 
    protected static Logger logger;
    protected static long baseTimeoutMillis = 20000; // 20 seconds
 
-   public String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
+   public static String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
 
-   public String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
-   public String[][] transports = new String[][] {
-         { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
+   public static String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
+   public static String[][] transports = new String[][] {
+         { "testDempsy/Transport-PassthroughActx.xml","testDempsy/Transport-PassthroughBlockingActx.xml" }, 
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
          { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
 
-   public String[] serializers = new String[]
+   public static String[] serializers = new String[]
          { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml", "testDempsy/Serializer-KryoOptimizedActx.xml" };
 
-   public String[] routingStrategies = new String[]
+   public static String[] routingStrategies = new String[]
          { "testDempsy/RoutingStrategy-DecentralizedActx.xml" };
    
    // bad combinations.
-   public List<ClusterId> badCombos = Arrays.asList(new ClusterId[] {
-         // this is a hack ... use a ClusterId as a String tuple for comparison
-
+   @SuppressWarnings("unchecked")
+   public static List<Pair<String,String>> badCombos = Arrays.asList((Pair<String,String>[])new Pair[] {
          // the passthrough Destination is not serializable but zookeeper requires it to be
-         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
-         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml") , 
+         new Pair<String,String>("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughActx.xml") , 
+         new Pair<String,String>("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml") , 
 
          // the blockingqueue Destination is not serializable but zookeeper requires it to be
-         new ClusterId("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
+         new Pair<String,String>("testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/Transport-BlockingQueueActx.xml") 
    });
+   
+   public static String defaultClusterCheck;
 
    public static InitZookeeperServerBean zkServer = null;
 
@@ -99,19 +101,34 @@ public class DempsyTestBase
       System.setProperty("cluster", "test-cluster2");
       zkServer = new InitZookeeperServerBean();
       
+      LocalClusterSessionFactory.completeReset();
+
       // check for the system property that will set the hardcore flag to true
       if (System.getProperties().containsKey("test.hardcore"))
          hardcore = true;
       
       if (hardcore)
          System.out.println("Hardcore testing in progress. This will take a while, you might as well go get a coffee.");
+      
+      if (System.getProperties().containsKey("test.profile"))
+         profile = true;
+      
+      if (profile)
+      {
+         baseTimeoutMillis *= 3;
+         System.out.println("Running only PassThrough transport and LocalClusterSessionFactory to optimize profiling.");
+         serializers = new String[] { "testDempsy/Serializer-KryoOptimizedActx.xml" };
+         transports = new String[][] { {"testDempsy/Transport-BlockingQueueActx.xml"} };
+         clusterManagers = new String[]{ "testDempsy/ClusterInfo-LocalActx.xml" };
+      }
    }
 
    @AfterClass
-   public static void shutdownZookeeper()
+   public static void shutdownClusterInfoSessions()
    {
       zkServer.stop();
       TestZookeeperSessionFactory.useSingletonSession = false;
+      LocalClusterSessionFactory.completeReset();
    }
    
    public static class TestZookeeperSessionFactory extends ZookeeperSessionFactory
@@ -129,14 +146,13 @@ public class DempsyTestBase
    @Before
    public void init()
    {
-      KeySourceImpl.disruptSession = false;
-      KeySourceImpl.infinite = false;
-      KeySourceImpl.pause = new CountDownLatch(0);
       TestMp.currentOutputCount = 10;
       TestMp.activateCheckedException = false;
       TestMp.alwaysPauseOnActivation = false;
       System.setProperty("nodecount","1");
       TestZookeeperSessionFactory.useSingletonSession = false;
+      defaultClusterCheck = "testDempsy/ClusterCheck-AlwaysInCurrentCluster.xml";
+      TestKryoOptimizer.proxy = null;
    }
 
    public static class TestMessage implements Serializable
@@ -157,23 +173,34 @@ public class DempsyTestBase
          return o == null ? false :
             String.valueOf(val).equals(String.valueOf(((TestMessage)o).val)); 
       }
+      
+      public String toString() { return "{" + val + "}"; }
    }
 
    public static class TestKryoOptimizer implements KryoOptimizer
    {
-
+      public static KryoOptimizer proxy = null;
+      
       @Override
       public void preRegister(Kryo kryo)
       {
-         kryo.setRegistrationRequired(true);
+         if (proxy != null)
+            proxy.preRegister(kryo);
+         else
+            kryo.setRegistrationRequired(true);
       }
 
       @Override
       public void postRegister(Kryo kryo)
       {
-         @SuppressWarnings("unchecked")
-         FieldSerializer<TestMessage> valSer = (FieldSerializer<TestMessage>)kryo.getSerializer(TestMessage.class);
-         valSer.setFieldsCanBeNull(false);
+         if (proxy != null)
+            proxy.postRegister(kryo);
+         else
+         {
+            @SuppressWarnings("unchecked")
+            FieldSerializer<TestMessage> valSer = (FieldSerializer<TestMessage>)kryo.getSerializer(TestMessage.class);
+            valSer.setFieldsCanBeNull(false);
+         }
       }
 
    }
@@ -285,91 +312,19 @@ public class DempsyTestBase
 
       public void pushMessage(Object message)
       {
+         logger.trace(TestAdaptor.class.getSimpleName() + " is pushing " + SafeString.objectDescription(message));
          lastSent = message;
          dispatcher.dispatch(message);
       }
    }
 
-   public static class KeySourceImpl implements KeySource<String>
-   {
-      private Dempsy dempsy = null;
-      private ClusterId clusterId = null;
-      public static volatile boolean disruptSession = false;
-      public static volatile boolean infinite = false;
-      public static volatile CountDownLatch pause = new CountDownLatch(0);
-      public static volatile KSIterable lastCreated = null;
-
-      public void setDempsy(Dempsy dempsy) { this.dempsy = dempsy; }
-
-      public void setClusterId(ClusterId clusterId) { this.clusterId = clusterId; }
-
-      public class KSIterable implements Iterable<String>
-      {
-         public volatile String lastKey = "";
-         public CountDownLatch m_pause = pause;
-         public volatile boolean m_infinite = infinite;
-
-         {
-            lastCreated = this;
-         }
-
-         @Override
-         public Iterator<String> iterator()
-         {
-            return new Iterator<String>()
-                  {
-               long count = 0;
-
-               @Override
-               public boolean hasNext() { if (count >= 1) kickClusterInfoMgr(); return m_infinite ? true : (count < 2);  }
-
-               @Override
-               public String next() { try { m_pause.await(); } catch (InterruptedException ie) {} count++; return (lastKey = "test" + count);}
-
-               @Override
-               public void remove() { throw new UnsupportedOperationException(); }
-
-               private void kickClusterInfoMgr() 
-               {
-                  if (!disruptSession)
-                     return;
-                  disruptSession = false; // one disruptSession
-                  Dempsy.Application.Cluster c = dempsy.getCluster(clusterId);
-                  Object session = TestUtils.getSession(c);
-                  if (session instanceof DisruptibleSession)
-                  {
-                     DisruptibleSession dses = (DisruptibleSession)session;
-                     dses.disrupt();
-                  }
-               }
-                  };
-         }
-
-      }
-
-      @Override
-      public Iterable<String> getAllPossibleKeys()
-      {
-         // The array is proxied to create the ability to rip out the cluster manager
-         // in the middle of iterating over the key source. This is to create the 
-         // condition in which the key source is being iterated while the routing strategy
-         // is attempting to get slots.
-         return new KSIterable();
-      }
-   }
-
    public static abstract class Checker
    {
-      public abstract void check(ApplicationContext context) throws Throwable;
-      
-      public void setup() {}
-   }
+      public void check(ClassPathXmlApplicationContext[] context) throws Throwable { check(context[0]); }
 
-   public static abstract class MultiCheck
-   {
-      public abstract void check(ApplicationContext[] contexts) throws Throwable;
+      public void check(ClassPathXmlApplicationContext context) throws Throwable { throw new RuntimeException("I shouldn't be here"); }
       
-      public void setup() {}
+      public void setup() throws Throwable {}
    }
 
    private static class WaitForShutdown implements Runnable
@@ -422,103 +377,192 @@ public class DempsyTestBase
 
    }
 
-   public void runAllCombinations(String applicationContext, Checker checker) throws Throwable
-   {
-      runAllCombinations(checker,applicationContext);
-   }
-
    static int runCount = 0;
    public void runAllCombinations(Checker checker, String... applicationContexts) throws Throwable
    {
-      for (String clusterManager : clusterManagers)
+      String[][] param = new String[1][];
+      param[0] = applicationContexts;
+      runAllCombinations(checker,param);
+   }
+
+   public void runAllCombinations(Checker checker, String[]... applicationContextsArray) throws Throwable
+   {
+      
+      @SuppressWarnings("unchecked")
+      Pair<String[],String>[] param = (Pair<String[],String>[])new Pair[applicationContextsArray.length];
+      int index = 0;
+      for (String[] curAppCtx : applicationContextsArray)
+         param[index++] = new Pair<String[],String>(curAppCtx,null);
+      runAllCombinations(checker,param);
+   }
+   
+   private Pair<String[],String>[] currentlyRunningClusterDescriptions = null;
+   private String curClusterManager;
+   private String curTransport;
+   private String curSerializer;
+   private String curDempsyConfig;
+   private String curRoutingStrategy;
+   List<ClassPathXmlApplicationContext> curContexts;
+   
+   private synchronized ClassPathXmlApplicationContext startDempsy(Pair<String[],String> desc)
+   {
+      int count = 6;
+      String[] applicationContexts = desc.getFirst();
+      String[] ctx = new String[count + applicationContexts.length];
+      ctx[0] = curDempsyConfig; ctx[1] = curClusterManager; ctx[2] = curTransport; ctx[3] = curSerializer; ctx[4] = curRoutingStrategy; 
+
+      String clusterIndicator = desc.getSecond();
+      if (clusterIndicator == null)
+         ctx[5] = defaultClusterCheck;
+      else
       {
-         for (String[] alternatingTransports : transports)
+         ctx[5] = "testDempsy/ClusterCheck-RegExClusterCheck.xml";
+         System.setProperty("clustermatch.regexp",clusterIndicator);
+      }
+
+      for (String appctx : applicationContexts)
+         ctx[count++] = "testDempsy/" + appctx;
+
+      logger.debug("Starting up the appliction context " + Arrays.asList(ctx) );
+      ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
+      actx.registerShutdownHook();
+      return actx;
+   }
+
+   public synchronized ClassPathXmlApplicationContext startAnotherNode(int dempsyIndex)
+   {
+      if (currentlyRunningClusterDescriptions == null)
+         throw new RuntimeException("There doesn't appear to be a currently executing runAllCombinations test.");
+      
+      ClassPathXmlApplicationContext actx = startDempsy(currentlyRunningClusterDescriptions[dempsyIndex]);
+      curContexts.add(actx);
+      return actx;
+   }
+
+   /**
+    * <p>This mega integration test driver allows for the creation of an entire distributed application
+    * within this JVM. The clusterDescriptions need some ... description.</p>
+    * 
+    * <p>This clusterDescriptions parameter provides fine grained behavior over what get's instantiated
+    * per node. The first String[] in the outer Pair is a set of xml files that make up a single
+    * Spring application contest. With each Spring application context you can provide a regexpr for the 
+    * ClusterCheck to select out the appropriate Cluster for the node being instantiated.</p>
+    */
+   public synchronized void runAllCombinations(Checker checker, Pair<String[],String>... clusterDescriptions) throws Throwable
+   {
+      if (currentlyRunningClusterDescriptions != null)
+         throw new RuntimeException("Cannot start another test before finishing the previous one.");
+      currentlyRunningClusterDescriptions = clusterDescriptions;
+      
+      try
+      {
+         for (String clusterManager : clusterManagers)
          {
-            // select one of the alternatingTransports
-            for (String transport : new AlternatingIterable(hardcore,alternatingTransports))
+            curClusterManager = clusterManager;
+            for (String[] alternatingTransports : transports)
             {
-               for (String serializer : new AlternatingIterable(hardcore,serializers))
+               // select one of the alternatingTransports
+               for (String transport : new AlternatingIterable(hardcore,alternatingTransports))
                {
-                  // alternate the dempsy configs
-                  for (String dempsyConfig : new AlternatingIterable(hardcore,dempsyConfigs))
+                  curTransport = transport;
+                  for (String serializer : new AlternatingIterable(hardcore,serializers))
                   {
-                     for (String routingStrategy : routingStrategies)
+                     curSerializer = serializer;
+                     // alternate the dempsy configs
+                     for (String dempsyConfig : new AlternatingIterable(hardcore,dempsyConfigs))
                      {
-
-                        if (! badCombos.contains(new ClusterId(clusterManager,transport)))
+                        curDempsyConfig = dempsyConfig;
+                        for (String routingStrategy : routingStrategies)
                         {
-                           String pass = Arrays.asList(applicationContexts).toString() + " test: " + (checker == null ? "none" : checker) + " using " + 
-                                 dempsyConfig + "," + clusterManager + "," + serializer + "," + transport + "," + routingStrategy;
-
-                           ClassPathXmlApplicationContext actx = null;
-                           Thread waitingForShutdownThread = null;
-                           WaitForShutdown waitingForShutdown = null;
-
-                           try
+                           curRoutingStrategy = routingStrategy;
+                           
+                           if (! badCombos.contains(new Pair<String,String>(curClusterManager,curTransport)))
                            {
-                              logger.debug("*****************************************************************");
-                              logger.debug(pass);
-                              logger.debug("*****************************************************************");
-                              
-                              if (checker != null)
-                                 checker.setup();
+                              // for the sake of the 'pass' string we need to convert the String[][] to a list of lists.
+                              List<List<String>> tpassname = new ArrayList<List<String>>();
+                              for (Pair<String[],String> cur : clusterDescriptions)
+                                 tpassname.add(Arrays.asList(cur.getFirst()));
+                              String pass = tpassname.toString() + " test: " + (checker == null ? "none" : checker) + " using " + 
+                                    curDempsyConfig + "," + curClusterManager + "," + curSerializer + "," + curTransport + "," + curRoutingStrategy;
 
-                              int count = 5;
-                              String[] ctx = new String[count + applicationContexts.length];
-                              ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer; ctx[4] = routingStrategy;
+                              curContexts = new ArrayList<ClassPathXmlApplicationContext>(clusterDescriptions.length);
+                              WaitForShutdown[] shutdownWaits = new WaitForShutdown[clusterDescriptions.length];
+                              Dempsy[] dempsys = new Dempsy[clusterDescriptions.length];
+                              int dempsyCount = 0;
 
-                              for (String appctx : applicationContexts)
-                                 ctx[count++] = "testDempsy/" + appctx;
-
-                              logger.debug("Starting up the appliction context ...");
-                              actx = new ClassPathXmlApplicationContext(ctx);
-                              actx.registerShutdownHook();
-
-                              Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
-
-                              assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
-
-                              waitingForShutdown = new WaitForShutdown(dempsy);
-                              waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
-                              waitingForShutdownThread.start();
-                              Thread.yield();
-
-                              logger.debug("Running test ...");
-                              if (checker != null)
-                                 checker.check(actx);
-                              logger.debug("Done with test, stopping the application context ...");
-
-                           }
-                           catch (AssertionError re)
-                           {
-                              logger.error("***************** FAILED ON: iteration " + runCount + " pass:" + pass);
-                              throw re;
-                           }
-                           finally
-                           {
                               try
                               {
-                                 if (actx != null)
+                                 logger.debug("*****************************************************************");
+                                 logger.debug(pass);
+                                 logger.debug("*****************************************************************");
+
+                                 if (checker != null)
+                                    checker.setup();
+
+                                 // instantiate each Dempsy
+                                 for (Pair<String[],String> desc : clusterDescriptions)
                                  {
-                                    actx.stop();
-                                    actx.destroy();
+                                    ClassPathXmlApplicationContext actx = startDempsy(desc);
+                                    Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
+                                    dempsys[dempsyCount] = dempsy;
+                                    curContexts.add(actx);
+                                    dempsyCount++;
                                  }
 
-                                 if (waitingForShutdown != null)
+                                 dempsyCount = 0;
+                                 for (Dempsy dempsy : dempsys)
                                  {
-                                    assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
-                                    assertTrue(waitingForShutdown.shutdown);
+                                    assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
+
+                                    WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
+                                    Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
+                                    waitingForShutdownThread.start();
+                                    shutdownWaits[dempsyCount++] = waitingForShutdown;
                                  }
+
+                                 logger.debug("Running test ...");
+                                 if (checker != null)
+                                    checker.check(curContexts.toArray(new ClassPathXmlApplicationContext[0]));
+                                 logger.debug("Done with test, stopping the application context ...");
+
+                                 logger.debug("Finished this pass.");
                               }
-                              catch (Throwable th)
+                              catch (AssertionError re)
                               {
-                                 logger.error("FAILED TO SHUT DOWN TEST. SUBSEQUENT TESTS MAY BE CORRUPTED!",th);
+                                 logger.error("***************** FAILED ON: " + pass);
+                                 throw re;
+                              }
+                              finally
+                              {
+                                 try
+                                 {
+                                    for (ClassPathXmlApplicationContext cur : curContexts)
+                                    {
+                                       ClassPathXmlApplicationContext actx = cur;
+                                       if (actx != null)
+                                       {
+                                          actx.stop();
+                                          actx.destroy();
+                                       }
+                                    }
+
+                                    for (WaitForShutdown waitingForShutdown : shutdownWaits)
+                                    {
+                                       if (waitingForShutdown != null)
+                                       {
+                                          assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
+                                          assertTrue(waitingForShutdown.shutdown);
+                                       }
+                                    }
+                                 }
+                                 catch (Throwable th)
+                                 {
+                                    logger.error("FAILED TO SHUT DOWN TEST. SUBSEQUENT TESTS MAY BE CORRUPTED!",th);
+                                 }
                               }
 
-                              logger.debug("Finished this pass.");
+                              runCount++;
                            }
-
-                           runCount++;
                         }
                      }
                   }
@@ -526,125 +570,15 @@ public class DempsyTestBase
             }
          }
       }
-   }
-
-   public void runAllCombinationsMultiDempsy(MultiCheck checker, String[]... applicationContextsArray) throws Throwable
-   {
-      for (String clusterManager : clusterManagers)
+      finally
       {
-         for (String[] alternatingTransports : transports)
-         {
-            // select one of the alternatingTransports
-            for (String transport : new AlternatingIterable(hardcore,alternatingTransports))
-            {
-               for (String serializer : new AlternatingIterable(hardcore,serializers))
-               {
-                  // alternate the dempsy configs
-                  for (String dempsyConfig : new AlternatingIterable(hardcore,dempsyConfigs))
-                  {
-                     for (String routingStrategy : routingStrategies)
-                     {
-                        if (! badCombos.contains(new ClusterId(clusterManager,transport)))
-                        {
-                           // for the sake of the 'pass' string we need to convert the String[][] to a list of lists.
-                           List<List<String>> tpassname = new ArrayList<List<String>>();
-                           for (String[] cur : applicationContextsArray)
-                              tpassname.add(Arrays.asList(cur));
-                           String pass = tpassname.toString() + " test: " + (checker == null ? "none" : checker) + " using " + 
-                                 dempsyConfig + "," + clusterManager + "," + serializer + "," + transport + "," + routingStrategy;
-
-                           ClassPathXmlApplicationContext[] contexts = new ClassPathXmlApplicationContext[applicationContextsArray.length];
-                           WaitForShutdown[] shutdownWaits = new WaitForShutdown[applicationContextsArray.length];
-                           Dempsy[] dempsys = new Dempsy[applicationContextsArray.length];
-                           int dempsyCount = 0;
-
-                           try
-                           {
-                              logger.debug("*****************************************************************");
-                              logger.debug(pass);
-                              logger.debug("*****************************************************************");
-
-                              if (checker != null)
-                                 checker.setup();
-
-                              // instantiate each Dempsy
-                              for (String[] applicationContexts : applicationContextsArray)
-                              {
-                                 int count = 5;
-                                 String[] ctx = new String[count + applicationContexts.length];
-                                 ctx[0] = dempsyConfig; ctx[1] = clusterManager; ctx[2] = transport; ctx[3] = serializer; ctx[4] = routingStrategy;
-
-                                 for (String appctx : applicationContexts)
-                                    ctx[count++] = "testDempsy/" + appctx;
-
-                                 logger.debug("Starting up the appliction context ...");
-                                 ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(ctx);
-                                 actx.registerShutdownHook();
-                                 contexts[dempsyCount] = actx;
-                                 Dempsy dempsy = (Dempsy)actx.getBean("dempsy");
-                                 dempsys[dempsyCount] = dempsy;
-                                 dempsyCount++;
-                              }
-
-                              dempsyCount = 0;
-                              for (Dempsy dempsy : dempsys)
-                              {
-                                 assertTrue(pass,TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
-
-                                 WaitForShutdown waitingForShutdown = new WaitForShutdown(dempsy);
-                                 Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
-                                 waitingForShutdownThread.start();
-                                 shutdownWaits[dempsyCount] = waitingForShutdown;
-                                 dempsyCount++;
-                              }
-
-                              logger.debug("Running test ...");
-                              if (checker != null)
-                                 checker.check(contexts);
-                              logger.debug("Done with test, stopping the application context ...");
-
-                              logger.debug("Finished this pass.");
-                           }
-                           catch (AssertionError re)
-                           {
-                              logger.error("***************** FAILED ON: " + pass);
-                              throw re;
-                           }
-                           finally
-                           {
-                              try
-                              {
-                                 for (ClassPathXmlApplicationContext actx : contexts)
-                                 {
-                                    if (actx != null)
-                                    {
-                                       actx.stop();
-                                       actx.destroy();
-                                    }
-                                 }
-
-                                 for (WaitForShutdown waitingForShutdown : shutdownWaits)
-                                 {
-                                    if (waitingForShutdown != null)
-                                    {
-                                       assertTrue(waitingForShutdown.waitForShutdownDoneLatch.await(baseTimeoutMillis, TimeUnit.MILLISECONDS));
-                                       assertTrue(waitingForShutdown.shutdown);
-                                    }
-                                 }
-                              }
-                              catch (Throwable th)
-                              {
-                                 logger.error("FAILED TO SHUT DOWN TEST. SUBSEQUENT TESTS MAY BE CORRUPTED!",th);
-                              }
-                           }
-
-                           runCount++;
-                        }
-                     }
-                  }
-               }
-            }
-         }
+         currentlyRunningClusterDescriptions = null;
+         curClusterManager = null;
+         curTransport = null;
+         curSerializer = null;
+         curDempsyConfig = null;
+         curRoutingStrategy = null;
+         curContexts = null;
       }
    }
 }

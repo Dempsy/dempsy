@@ -54,6 +54,7 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.router.RoutingStrategy.Outbound;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
+import com.nokia.dempsy.util.Pair;
 
 /**
  * <p>This class implements the routing for all messages leaving a node. Please note:
@@ -146,6 +147,8 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
    
    @Override
    public ClusterId getThisClusterId() { return currentClusterDefinition.getClusterId(); }
+   
+   private static final Class<?> iterableClass = Iterable.class;
 
    /**
     * A {@link Router} is also a {@link Dispatcher} that is the instance that's typically
@@ -153,7 +156,7 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
     * to the appropriate {@link MessageProcessor} in the appropriate {@link ClusterDefinition}
     */
    @Override
-   public void dispatch(Object message)
+   public final void dispatch(final Object message)
    {
       if(message == null)
       {
@@ -161,64 +164,69 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
          return;
       }
       
-      List<Object> messages = new ArrayList<Object>();
-      getMessages(message, messages);
-      for(Object msg: messages)
+      final Class<?> msgClass = message.getClass();
+      if (iterableClass.isAssignableFrom(msgClass))
       {
-         Class<?> messageClass = msg.getClass();
-         
-         Object msgKeysValue = null;
-         try
+         final List<Object> messages = new ArrayList<Object>();
+         getMessages(message, messages);
+         for(Object msg: messages)
+            doDispatch(msg,msg.getClass());
+      }
+      else
+         doDispatch(message,msgClass);
+   }
+   
+   private final void doDispatch(final Object msg, final Class<?> messageClass)
+   {
+      Object msgKeysValue = null;
+      try
+      {
+         if (!stopTryingToSendTheseTypes.contains(messageClass))
+            msgKeysValue = methodInvoker.invokeGetter(msg);
+      }
+      catch(IllegalArgumentException e1)
+      {
+         stopTryingToSendTheseTypes.add(msg.getClass());
+         logger.warn("unable to retrieve key from message: " + SafeString.objectDescription(msg) +  
+               " Please make sure its has a simple getter appropriately annotated: " + 
+               e1.getLocalizedMessage()); // no stack trace.
+      }
+      catch(IllegalAccessException e1)
+      {
+         stopTryingToSendTheseTypes.add(msg.getClass());
+         logger.warn("unable to retrieve key from message: " + SafeString.objectDescription(msg) + 
+               " Please make sure all annotated getter access is public: " + 
+               e1.getLocalizedMessage()); // no stack trace.
+      }
+      catch(InvocationTargetException e1)
+      {
+         logger.warn("unable to retrieve key from message: " + SafeString.objectDescription(msg) + 
+               " due to an exception thrown from the getter: " + 
+               e1.getLocalizedMessage(),e1.getCause());
+      }
+      
+      if(msgKeysValue != null)
+      {
+         Collection<RoutingStrategy.Outbound> routers = outboundManager.retrieveOutbounds(msg.getClass());
+         if(routers != null && routers.size() > 0)
          {
-            if (!stopTryingToSendTheseTypes.contains(messageClass))
-               msgKeysValue = methodInvoker.invokeGetter(msg);
-         }
-         catch(IllegalArgumentException e1)
-         {
-            stopTryingToSendTheseTypes.add(msg.getClass());
-            logger.warn("unable to retrieve key from message: " + String.valueOf(message) + 
-                  (message != null ? "\" of type \"" + SafeString.valueOf(message.getClass()) : "") + 
-                  "\" Please make sure its has a simple getter appropriately annotated: " + 
-                  e1.getLocalizedMessage()); // no stack trace.
-         }
-         catch(IllegalAccessException e1)
-         {
-            stopTryingToSendTheseTypes.add(msg.getClass());
-            logger.warn("unable to retrieve key from message: " + String.valueOf(message) + 
-                  (message != null ? "\" of type \"" + SafeString.valueOf(message.getClass()) : "") + 
-                  "\" Please make sure all annotated getter access is public: " + 
-                  e1.getLocalizedMessage()); // no stack trace.
-         }
-         catch(InvocationTargetException e1)
-         {
-            logger.warn("unable to retrieve key from message: " + String.valueOf(message) + 
-                  (message != null ? "\" of type \"" + SafeString.valueOf(message.getClass()) : "") + 
-                  "\" due to an exception thrown from the getter: " + 
-                  e1.getLocalizedMessage(),e1.getCause());
-         }
-         
-         if(msgKeysValue != null)
-         {
-            Collection<RoutingStrategy.Outbound> routers = outboundManager.retrieveOutbounds(msg.getClass());
-            if(routers != null && routers.size() > 0)
-            {
-               for(Outbound router: routers)
-                  route(router, msgKeysValue,msg);
-            }
-            else
-            {
-               if (statsCollector != null) statsCollector.messageNotSent(msg);
-               logger.warn("No router found for message type \""+ SafeString.valueOf(msg) + 
-                     (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
-            }
+            for(Outbound router: routers)
+               route(router, msgKeysValue,msg);
          }
          else
          {
             if (statsCollector != null) statsCollector.messageNotSent(msg);
-            logger.warn("Null message key for \""+ SafeString.valueOf(msg) + 
+            logger.warn("No router found for message type \""+ SafeString.valueOf(msg) + 
                   (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
          }
       }
+      else
+      {
+         if (statsCollector != null) statsCollector.messageNotSent(msg);
+         logger.warn("Null message key for \""+ SafeString.valueOf(msg) + 
+               (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
+      }
+
    }
    
    @Override
@@ -274,8 +282,9 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
       Sender sender = null;
       try
       {
-         Destination destination = strategyOutbound.selectDestinationForMessage(key, message);
+         Pair<Destination,Object> destinationPair = strategyOutbound.selectDestinationForMessage(key, message);
 
+         Destination destination = destinationPair == null ? null : destinationPair.getFirst();
          if (destination == null)
          {
             if (logger.isInfoEnabled())
@@ -323,15 +332,16 @@ public class Router implements Dispatcher, RoutingStrategy.OutboundManager.Clust
    
    protected void getMessages(Object message, List<Object> messages)
    {
-      if(message instanceof Iterable)
+      @SuppressWarnings("rawtypes")
+      Iterator it = ((Iterable)message).iterator();
+      while(it.hasNext())
       {
-         @SuppressWarnings("rawtypes")
-         Iterator it = ((Iterable)message).iterator();
-         while(it.hasNext())
-            getMessages(it.next(), messages);
+         final Object cur = it.next();
+         if (iterableClass.isAssignableFrom(cur.getClass()))
+            getMessages(cur, messages);
+         else
+            messages.add(cur);
       }
-      else
-         messages.add(message);
    }
     
 }

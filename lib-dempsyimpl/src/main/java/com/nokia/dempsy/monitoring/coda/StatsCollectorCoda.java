@@ -233,7 +233,6 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    public void messageNotSent(Object message)
    {
       messagesUnsent.mark();
-
    }
    @Override
    public void messageProcessorCreated(Object key) {

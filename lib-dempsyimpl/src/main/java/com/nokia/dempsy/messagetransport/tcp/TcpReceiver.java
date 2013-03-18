@@ -27,16 +27,19 @@ import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
+import com.nokia.dempsy.messagetransport.util.TransportUtils;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpReceiver implements Receiver
 {
    private static Logger logger = LoggerFactory.getLogger(TcpReceiver.class);
    protected TcpDestination destination;
-   
+   private String destinationString = "";
+
    private Listener messageTransportListener;
    private OverflowHandler overflowHandler = null;
    private boolean failFast;
+   private boolean blocking;
    
    protected DempsyExecutor executor = null;
    protected boolean iStartedIt = false;
@@ -69,6 +72,7 @@ public class TcpReceiver implements Receiver
          defexecutor.setCoresFactor(1.0);
          defexecutor.setAdditionalThreads(1);
          defexecutor.setMaxNumberOfQueuedLimitedTasks(10000);
+         defexecutor.setBlocking(blocking);
          executor = defexecutor;
          iStartedIt = true;
          executor.start();
@@ -77,52 +81,23 @@ public class TcpReceiver implements Receiver
       setPendingGague();
       
       isStarted.set(true);
-    }
+   }
+   
+   @Override
+   public boolean getFailFast() { return failFast; }
+   
+   public void setBlocking(boolean blocking)
+   {
+      this.blocking = blocking;
+      if (executor != null && DefaultDempsyExecutor.class.isAssignableFrom(executor.getClass()))
+         ((DefaultDempsyExecutor)executor).setBlocking(blocking);
+   }
    
    public void handleMessage(byte[] messageBytes)
    {
-      if ( messageTransportListener != null)
-      {
-         try
-         {
-            final byte[] pass = messageBytes;
-            executor.submitLimited(new DempsyExecutor.Rejectable<Object>()
-                  {
-               byte[] message = pass;
-
-               @Override
-               public Object call() throws Exception
-               {
-                  boolean messageSuccess = messageTransportListener.onMessage( message, failFast );  
-                  if (overflowHandler != null && !messageSuccess)
-                     overflowHandler.overflow(message);
-                  return null;
-               }
-
-               @Override
-               public void rejected()
-               {
-                  if (statsCollector != null)
-                     statsCollector.messageDiscarded(message);
-               }
-                  });
-
-         }
-         catch (Throwable se)
-         {
-            String messageAsString;
-            try { messageAsString = (messageBytes == null ? "null" : messageBytes.toString()); } catch (Throwable th) { messageAsString = "(failed to convert message to a string)"; }
-            logger.error("Unexpected listener exception on adaptor for " + destination +
-                  " trying to process a message of type " + messageBytes.getClass().getSimpleName() + " with a value of " +
-                  messageAsString + " using listener " + messageTransportListener.getClass().getSimpleName(), se);
-         }
-      }
+      TransportUtils.handleMessage(messageBytes, executor, messageTransportListener, failFast, overflowHandler, statsCollector, logger, destinationString);
    }
    
-   /**
-    * When an overflow handler is set the Adaptor indicates that a 'failFast' should happen
-    * and any failed message deliveries end up passed to the overflow handler. 
-    */
    public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; }
    
    public synchronized void shutdown()
@@ -146,6 +121,8 @@ public class TcpReceiver implements Receiver
    {
       if (destination == null)
          destination = server.register(this);
+      
+      destinationString = destination.toString();
 
       return destination;
    }

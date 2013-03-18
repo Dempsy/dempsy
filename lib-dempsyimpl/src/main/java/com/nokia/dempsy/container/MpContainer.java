@@ -49,6 +49,7 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.internal.AnnotatedMethodInvoker;
+import com.nokia.dempsy.container.internal.InstanceWrapper;
 import com.nokia.dempsy.container.internal.LifecycleHelper;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
@@ -59,6 +60,7 @@ import com.nokia.dempsy.router.RoutingStrategy;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
+import com.nokia.dempsy.util.RunningEventSwitch;
 
 /**
  *  <p>The {@link MpContainer} manages the lifecycle of message processors for the
@@ -99,92 +101,13 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    // This holds the keySource for pre(re)-instantiation
    private KeySource<?> keySource = null;
 
-   private volatile boolean isRunning = true;
+   private AtomicBoolean isRunning = new AtomicBoolean(true);
    
    private DempsyExecutor executor = null;
+   
+   public RoutingStrategy.Inbound strategyInbound = null;
 
    public MpContainer(ClusterId clusterId) { this.clusterId = clusterId; }
-
-   protected static class InstanceWrapper
-   {
-      private Object instance;
-      private Semaphore lock = new Semaphore(1,true); // basically a mutex
-      private boolean evicted = false;
-
-      /**
-       * DO NOT CALL THIS WITH NULL OR THE LOCKING LOGIC WONT WORK
-       */
-      public InstanceWrapper(Object o) { this.instance = o; }
-
-      /**
-       * MAKE SURE YOU USE A FINALLY CLAUSE TO RELEASE THE LOCK.
-       * @param block - whether or not to wait for the lock.
-       * @return the instance if the lock was aquired. null otherwise.
-       */
-      public Object getExclusive(boolean block)
-      {
-         if (block)
-         {
-            boolean gotLock = false;
-            while (!gotLock)
-            {
-               try { lock.acquire(); gotLock = true; } catch (InterruptedException e) { }
-            }
-         }
-         else
-         {
-            if (!lock.tryAcquire())
-               return null;
-         }
-
-         // if we got here we have the lock
-         return instance;
-      }
-
-      /**
-       * MAKE SURE YOU USE A FINALLY CLAUSE TO RELEASE THE LOCK.
-       * MAKE SURE YOU OWN THE LOCK IF YOU UNLOCK IT.
-       */
-      public void releaseLock()
-      {
-         lock.release();
-      }
-
-      public boolean tryLock()
-      {
-         return lock.tryAcquire();
-      }
-      
-//      /**
-//       * This will set the instance reference to null. MAKE SURE
-//       * YOU OWN THE LOCK BEFORE CALLING.
-//       */
-//      public void markPassivated() { instance = null; }
-//
-//      /**
-//       * This will tell you if the instance reference is null. MAKE SURE
-//       * YOU OWN THE LOCK BEFORE CALLING.
-//       */
-//      public boolean isPassivated() { return instance == null; }
-
-
-      /**
-       * This will prevent further operations on this instance. 
-       * MAKE SURE YOU OWN THE LOCK BEFORE CALLING.
-       */
-      public void markEvicted() { evicted = true; }
-
-      /**
-       * Flag to indicate this instance has been evicted and no further operations should be enacted.
-       * THIS SHOULDN'T BE CALLED WITHOUT HOLDING THE LOCK.
-       */
-      public boolean isEvicted() { return evicted; }
-
-      //----------------------------------------------------------------------------
-      //  Test access
-      //----------------------------------------------------------------------------
-      protected Object getInstance() { return instance; }
-   }
 
    //----------------------------------------------------------------------------
    //  Configuration
@@ -199,6 +122,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       if (outputConcurrency > 0)
          setupOutputConcurrency();
    }
+   
+   @Override
+   public void setInboundStrategy(RoutingStrategy.Inbound strategyInbound) { this.strategyInbound = strategyInbound; }
    
    /**
     * Run any methods annotated PreInitilze on the MessageProcessor prototype
@@ -347,10 +273,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    @Override
    public void shuttingDown()
    {
-      isRunning = false;
+      isRunning.set(false);
       shutdown();
       // we don't care about the transport shutting down (currently)
-
    }
 
    public void shutdown()
@@ -375,101 +300,11 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       return instances.size();
    }
    
-   /**
-    * This is a helper class with unique synchronizataion behavior. It can be used to start
-    * a worker in another thread, allow the initiating thread to verify that's it's been 
-    * started, and allow the early termination of that worker thread.
-    */
-   private class RunningEventSwitch
-   {
-      final AtomicBoolean isRunning = new AtomicBoolean(false);
-      final AtomicBoolean stopRunning = new AtomicBoolean(false);
-      // this flag is used to hold up the calling thread's exit of this method
-      //  until the worker is underway.
-      final AtomicBoolean runningGate = new AtomicBoolean(false);
-      
-      /**
-       * This is called from the worker thread to notify the fact that
-       * it's been started.
-       */
-      public void workerInitiateRun()
-      {
-         // this is synchronized because it's used as a condition variable 
-         // along with the condition.
-         synchronized(isRunning) { isRunning.set(true); }
-         stopRunning.set(false);
-         
-         synchronized(runningGate)
-         {
-            runningGate.set(true);
-            runningGate.notify();
-         }
-      }
-      
-      /**
-       * The worker thread can use this method to check if it's been explicitly preempted.
-       * @return
-       */
-      public boolean wasPreempted() { return stopRunning.get(); }
-      
-      /**
-       * The worker thread should indicate that it's done in a finally clause on it's way
-       * out.
-       */
-      public void workerStopping()
-      {
-         // This kicks the preemptWorkerAndWait out.
-         synchronized(isRunning)
-         {
-            isRunning.set(false);
-            isRunning.notify();
-         }
-      }
-      
-      /**
-       * The main thread uses this method when it needs to preempt the worker and
-       * wait for the worker to finish before continuing.
-       */
-      public void preemptWorkerAndWait()
-      {
-         // We need to see if we're already executing
-         stopRunning.set(true); // kick out any running instantiation thread
-         // wait for it to exit, it it's even running - also consider the overall
-         //  Mp isRunning flag.
-         synchronized(isRunning)
-         {
-            while (isRunning.get() && MpContainer.this.isRunning)
-            {
-               try { isRunning.wait(); } catch (InterruptedException e) {}
-            }
-         }
-      }
-      
-      /**
-       * This allows the main thread to wait until the worker is started in order
-       * to continue. This method only works once. It resets the flag so a second
-       * call will block until another thread calls to workerInitiateRun().
-       */
-      public void waitForWorkerToStart()
-      {
-         // make sure the thread is running before we head out from the synchronized block
-         synchronized(runningGate)
-         {
-            while (runningGate.get() == false && MpContainer.this.isRunning)
-            {
-               try { runningGate.wait(); } catch (InterruptedException ie) {}
-            }
-
-            runningGate.set(false); // reset this flag
-         }
-      }
-   }
-   
-   final RunningEventSwitch expand = new RunningEventSwitch();
-   final RunningEventSwitch contract = new RunningEventSwitch();
+   final RunningEventSwitch expand = new RunningEventSwitch(isRunning);
+   final RunningEventSwitch contract = new RunningEventSwitch(isRunning);
    final Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
    
-   private void runExpandKeyspace(final RoutingStrategy.Inbound strategyInbound)
+   private void runExpandKeyspace()
    {
       List<Future<Object>> futures = new ArrayList<Future<Object>>();
       expand.workerInitiateRun();
@@ -480,9 +315,11 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          Iterable<?> iterable = keySource.getAllPossibleKeys();
          for(final Object key: iterable)
          {
-            if (expand.wasPreempted() || !isRunning)
+            if (expand.wasPreempted() || !isRunning.get())
                break;
             
+            // strategyInbound can't be null if we're in runExpandKeyspace since it was invoked 
+            //  indirectly from it. So here we don't need to check for null.
             if(strategyInbound.doesMessageKeyBelongToNode(key))
             {
                Callable<Object> callable = new Callable<Object>()
@@ -527,7 +364,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    }
    
    @Override
-   public void keyspaceResponsibilityChanged(final RoutingStrategy.Inbound strategyInbound, boolean less, boolean more)
+   public void keyspaceResponsibilityChanged(boolean less, boolean more)
    {
       synchronized(keyspaceResponsibilityChangedLock)
       {
@@ -548,8 +385,10 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                      {
                         // we shouldEvict if the message key no longer belongs as 
                         //  part of this container.
+                        // strategyInbound can't be null if we're here since this was invoked 
+                        //  indirectly from it. So here we don't need to check for null.
                         @Override
-                        public boolean shouldEvict(Object key, InstanceWrapper wrapper) { return !strategyInbound.doesMessageKeyBelongToNode(key); }
+                        public boolean shouldEvict(Object key, Object instance) { return !strategyInbound.doesMessageKeyBelongToNode(key); }
                         // In this case, it's evictable.
                         @Override
                         public boolean isGenerallyEvitable() { return true; }
@@ -575,7 +414,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             Thread t = new Thread(new Runnable()
             {
                @Override
-               public void run() { runExpandKeyspace(strategyInbound);  }
+               public void run() { runExpandKeyspace();  }
             }, "Pre-Instantation Thread");
             t.setDaemon(true);
             t.start();
@@ -604,7 +443,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    protected Object getMessageProcessor(Object key)
    {
       InstanceWrapper wrapper = instances.get(key);
-      return (wrapper != null) ? wrapper.getInstance() : null;
+      return (wrapper != null) ? wrapper.ecnatsnIteg() : null;
    }
 
 
@@ -654,12 +493,12 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                }
                else
                {
-                  invokeOperation(wrapper.getInstance(), Operation.handle, message);
+                  invokeOperation(instance, Operation.handle, message);
                   messageDispatchSuccessful = true;
                }
             }
             finally { wrapper.releaseLock(); }
-         } 
+         }
          else  // ... we didn't get the lock
          {
             if (logger.isTraceEnabled())
@@ -668,7 +507,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             statCollector.messageCollision(message);
          }
       } while (evictedAndBlocking);
-
+      
       return messageDispatchSuccessful;
    }
 
@@ -687,6 +526,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                " that does not handle messages of class " + SafeString.valueOfClass(message));
 
       Object key = getKeyFromMessage(message);
+      if (!strategyInbound.doesMessageKeyBelongToNode(key))
+         throw new ContainerException("Key " + SafeString.objectDescription(key) + " doesn't belong to this node.");
+      
       InstanceWrapper wrapper = getInstanceForKey(key);
       return wrapper;
    }
@@ -696,9 +538,8 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       doEvict(new EvictCheck()
       {
          @Override
-         public boolean shouldEvict(Object key, InstanceWrapper wrapper)
+         public boolean shouldEvict(Object key, Object instance)
          {
-            Object instance = wrapper.getInstance();
             try 
             {
                return prototype.invokeEvictable(instance);
@@ -728,14 +569,14 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    {
       boolean isGenerallyEvitable();
       
-      boolean shouldEvict(Object key, InstanceWrapper wrapper);
+      boolean shouldEvict(Object key, Object instance);
       
       boolean shouldStopEvicting();
    }
    
    private void doEvict(EvictCheck check)
    {
-      if (!check.isGenerallyEvitable() || !isRunning)
+      if (!check.isGenerallyEvitable() || !isRunning.get())
          return;
 
       StatsCollector.TimerContext tctx = null;
@@ -748,7 +589,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          Map<Object,InstanceWrapper> instancesToEvict = new HashMap<Object,InstanceWrapper>(instances.size() + 10);
          instancesToEvict.putAll(instances);
 
-         while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning && !check.shouldStopEvicting())
+         while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting())
          {
             // store off anything that passes for later removal. This is to avoid a
             // ConcurrentModificationException.
@@ -761,10 +602,10 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                
                Object key = entry.getKey();
                InstanceWrapper wrapper = entry.getValue();
-               boolean gotLock = false;
+               Object instance = null;
                try {
-                  gotLock = wrapper.tryLock();
-                  if (gotLock) {
+                  instance = wrapper.getExclusive(false);
+                  if (instance != null) {
 
                      // since we got here we're done with this instance,
                      // so add it's key to the list of keys we plan don't
@@ -775,18 +616,15 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
 
                      try 
                      {
-                        if (check.shouldEvict(key,wrapper))
+                        if (check.shouldEvict(key,instance))
                         {
                            removeInstance = true;
                            wrapper.markEvicted();
-                           prototype.passivate(wrapper.getInstance());
-//                           wrapper.markPassivated();
+                           prototype.passivate(instance);
                         }
                      } 
                      catch (Throwable e)
                      {
-                        Object instance = null;
-                        try { instance = wrapper.getInstance(); } catch(Throwable th) {} // not sure why this would ever happen
                         logger.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance == null ? wrapper : instance) + 
                               " resulted in an exception.",e);
                      }
@@ -800,7 +638,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                      }
                   }
                } finally {
-                  if (gotLock)
+                  if (instance != null)
                      wrapper.releaseLock();
                }
 
@@ -847,7 +685,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    
    private void setupOutputConcurrency()
    {
-      if (prototype.isOutputSupported() && isRunning)
+      if (prototype.isOutputSupported() && isRunning.get())
       {
          synchronized(lockForExecutorServiceSetter)
          {
@@ -865,7 +703,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
 
    // This method MUST NOT THROW
    public void outputPass() {
-      if (!prototype.isOutputSupported() || !isRunning)
+      if (!prototype.isOutputSupported() || !isRunning.get())
          return;
 
       // take a snapshot of the current container state.
@@ -889,16 +727,14 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       final AtomicLong numExecutingOutputs = new AtomicLong(0);
 
       // keep going until all of the outputs have been invoked
-      while (toOutput.size() > 0 && isRunning)
+      while (toOutput.size() > 0 && isRunning.get())
       {
          for (final Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) 
          {
             final InstanceWrapper wrapper = iter.next();
-            boolean gotLock = false;
+            final Object instance = wrapper.getExclusive(false);
 
-            gotLock = wrapper.tryLock();
-
-            if (gotLock) 
+            if (instance != null) 
             {
                // If we've been evicted then we're on our way out
                // so don't do anything else with this.
@@ -909,7 +745,6 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   continue;
                } 
 
-               final Object instance = wrapper.getInstance(); // only called while holding the lock
                final Semaphore taskSepaphore = taskLock;
 
                // This task will release the wrapper's lock.
@@ -920,7 +755,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   {
                      try
                      {
-                        if (isRunning && !wrapper.isEvicted()) 
+                        if (isRunning.get() && !wrapper.isEvicted()) 
                            invokeOperation(instance, Operation.output, null); 
                      }
                      finally 
@@ -987,7 +822,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
             {
                // if we were interupted for a shutdown then just stop
                // waiting for all of the threads to finish
-               if (!isRunning)
+               if (!isRunning.get())
                   break;
                // otherwise continue checking.
             }

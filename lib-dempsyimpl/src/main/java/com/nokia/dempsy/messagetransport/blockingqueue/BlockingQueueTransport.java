@@ -49,11 +49,10 @@ public class BlockingQueueTransport implements Transport
    @Override
    public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
    {
-      BlockingQueueAdaptor ret = new BlockingQueueAdaptor();
+      BlockingQueueAdaptor ret = new BlockingQueueAdaptor(executor);
       ret.setQueue(getNewQueue());
       if (overflowHandler != null)
          ret.setOverflowHandler(overflowHandler);
-      ret.start(); // @PostConstruct
       return ret;
    }
    
