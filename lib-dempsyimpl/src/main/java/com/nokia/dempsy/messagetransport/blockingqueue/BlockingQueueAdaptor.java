@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
@@ -53,6 +54,10 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    private boolean failFast = false; // this has been the default - since it's equivalent to there being no overflowHandler
    private boolean explicitFailFast = false;
    
+   protected BlockingQueueAdaptor(DempsyExecutor executor) { }
+   
+   public BlockingQueueAdaptor() {} // some tests explicitly instantiate this class without an executor.
+   
    /**
     * <p>This method starts a background thread that reads messages from the queue and sends
     * them to a registered MessageTransportListener.</p>
@@ -82,12 +87,9 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    @Override
    public synchronized void shutdown()
    {
-      synchronized(this)
-      {
-         shutdown.set(true);
-         if (running != null)
-            running.interrupt();
-      }
+      shutdown.set(true);
+      if (running != null)
+         running.interrupt();
    }
    
    @Override
@@ -95,8 +97,14 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    {
       synchronized(this)
       {
-         // this is done in case start() wasn't used to start this thread.
-         running = Thread.currentThread();
+         if (running == null)
+            // this is done in case start() wasn't used to start this thread.
+            running = Thread.currentThread();
+         else if (running != Thread.currentThread())
+         {
+            logger.error(BlockingQueueAdaptor.class.getSimpleName() + " was started in a Runnable more than once. Exiting the additional thread.");
+            return;
+         }
       }
       
       while (!shutdown.get())
@@ -155,6 +163,9 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
       explicitFailFast = true; 
       this.failFast = failFast; 
    }
+   
+   @Override
+   public boolean getFailFast() { return failFast; }
 
    public BlockingQueue<byte[]> getQueue() { return destination == null ? null : destination.queue; }
 

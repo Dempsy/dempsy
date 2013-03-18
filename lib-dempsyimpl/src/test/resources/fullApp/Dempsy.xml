@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<beans xmlns="http://www.springframework.org/schema/beans" xmlns:util="http://www.springframework.org/schema/util" xmlns:context="http://www.springframework.org/schema/context"
-   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-   xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
-                           http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
-                           http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
-
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN 2.0//EN"
+    "http://www.springframework.org/dtd/spring-beans-2.0.dtd">
+<beans>
    <bean id="properties"
       class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" />
       
@@ -15,15 +12,15 @@
       </property>
       <property name="defaultRoutingStrategy">
          <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
-            <constructor-arg name="defaultTotalShards" type="int" value="20" />
-            <constructor-arg name="minNumberOfNodes" type="int" value="1" />
+            <constructor-arg index="0" type="int" value="${testFullApp.totalShards}" />
+            <constructor-arg index="1" type="int" value="1" />
          </bean>
       </property>
       <property name="defaultSerializer">
          <bean class="com.nokia.dempsy.serialization.kryo.KryoSerializer" />
       </property>
       <property name="defaultStatsCollectorFactory">
-      	<bean class="com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda" />
+      	<bean class="com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory" />
       </property>
       <property name="defaultTransport" ref="transport" />
    </bean>

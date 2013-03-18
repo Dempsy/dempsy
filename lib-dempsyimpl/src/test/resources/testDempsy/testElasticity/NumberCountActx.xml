@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN 2.0//EN"
+    "http://www.springframework.org/dtd/spring-beans-2.0.dtd">
+<beans>
+   <bean class="com.nokia.dempsy.config.ApplicationDefinition">
+      <constructor-arg type="java.lang.String" value="test-numbercount" />
+      <property name="clusterDefinitions">
+         <list>
+            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+               <constructor-arg type="java.lang.String" value="test-cluster0" />
+               <property name="adaptor">
+                  <bean class="com.nokia.dempsy.TestElasticity$NumberProducer" />
+               </property>
+            </bean>
+            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+               <constructor-arg type="java.lang.String" value="test-cluster1" />
+               <property name="messageProcessorPrototype">
+                  <bean class="com.nokia.dempsy.TestElasticity$NumberCounter" />
+               </property>
+            </bean>
+            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+               <constructor-arg type="java.lang.String" value="test-cluster2" />
+               <property name="messageProcessorPrototype">
+                  <bean class="com.nokia.dempsy.TestElasticity$NumberRank" />
+               </property>
+            </bean>
+         </list>
+      </property>
+   </bean>
+</beans>

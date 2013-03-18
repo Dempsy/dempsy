@@ -42,6 +42,8 @@ public class FullApplication
    public int maxValue = 10;
    public AtomicLong finalMessageCount = new AtomicLong(0);
    
+   public static boolean mpOnly = false;
+   
    public FullApplication() {}
    
    public static class MyMessage implements Serializable
@@ -175,8 +177,6 @@ public class FullApplication
          count[messageCount.getValue()] = messageCount.getCount();
          finalMessageCount.incrementAndGet();
          messageCount.hitMe();
-//         if (messageCount.getClass().getSimpleName().indexOf("MyMessageCountChild") >= 0)
-//            System.out.println("Got One In Main!");
       }
       
       @Start
@@ -199,10 +199,17 @@ public class FullApplication
    
    public ApplicationDefinition getTopology() throws DempsyException
    {
-      ApplicationDefinition ret = createBaseApplicationDefinition().
-            add(new ClusterDefinition(MyAdaptor.class.getSimpleName()).setAdaptor(new MyAdaptor())).
-            add(new ClusterDefinition(MyMp.class.getSimpleName()).setMessageProcessorPrototype(new MyMp()).setOutputExecuter(new RelativeOutputSchedule(100, TimeUnit.MILLISECONDS))).
-            add(new ClusterDefinition(MyRankMp.class.getSimpleName()).setMessageProcessorPrototype(new MyRankMp()));
+      ApplicationDefinition ret;
+      if (mpOnly)
+      {
+         ret = createBaseApplicationDefinition().
+               add(new ClusterDefinition(MyMp.class.getSimpleName()).setMessageProcessorPrototype(new MyMp()).setOutputExecuter(new RelativeOutputSchedule(100, TimeUnit.MILLISECONDS)));
+      }
+      else
+         ret = createBaseApplicationDefinition().
+               add(new ClusterDefinition(MyAdaptor.class.getSimpleName()).setAdaptor(new MyAdaptor())).
+               add(new ClusterDefinition(MyMp.class.getSimpleName()).setMessageProcessorPrototype(new MyMp()).setOutputExecuter(new RelativeOutputSchedule(100, TimeUnit.MILLISECONDS))).
+               add(new ClusterDefinition(MyRankMp.class.getSimpleName()).setMessageProcessorPrototype(new MyRankMp()));
       
       return ret;
    }

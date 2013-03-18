@@ -42,8 +42,14 @@ public interface Receiver
    public void shutdown();
    
    /**
-    * This stats collector should be available to any Sender or Receiver that results
+    * This {@link StatsCollector} should be available to any Sender or Receiver that results
     * from this Transport instance.
     */
    public void setStatsCollector(StatsCollector statsCollector);
+   
+   /**
+    * Every {@link Receiver} will pass a failFast flag to the {@link Listener}. This
+    * method tells you what this {@link Receiver} will pass.
+    */
+   public boolean getFailFast();
 }

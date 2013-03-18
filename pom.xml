@@ -193,6 +193,11 @@
         <artifactId>metrics-ganglia</artifactId>
         <version>${metrics.version}</version>
       </dependency>
+      <dependency>
+        <groupId>com.googlecode.disruptor</groupId>
+        <artifactId>disruptor</artifactId>
+        <version>2.10.4</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 

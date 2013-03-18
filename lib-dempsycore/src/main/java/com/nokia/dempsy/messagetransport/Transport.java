@@ -46,7 +46,7 @@ public interface Transport
    /**
     * Create a new instance of the Receiver for this transport.This
     * Receiver should be able to create Destinations from which the SenderFactory
-    * instantiated from the getOutbound can then instantiate Senders. 
+    * instantiated from the createOutbound can then instantiate Senders. 
     * 
     * The executor is the centralized Executor for worker threads in Dempsy. The
     * implementor of the transport may or may not choose to use it. It MAY be

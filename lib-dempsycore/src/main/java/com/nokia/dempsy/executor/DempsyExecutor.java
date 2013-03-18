@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
  * Transport. The implementation of the DempsyExecutor should be chosen
  * along with the Transport. If, for example, the transport can handle 
  * acknowledged delivery of messages then the Executor should be able to 
- * apply 'back pressure' but blocking in the submitLimted.</p>
+ * apply 'back pressure' through blocking in the submitLimted.</p>
  */
 public interface DempsyExecutor
 {

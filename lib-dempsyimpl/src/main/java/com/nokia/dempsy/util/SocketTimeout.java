@@ -1,8 +1,6 @@
 package com.nokia.dempsy.util;
 
 import java.net.Socket;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -17,27 +15,18 @@ import org.slf4j.LoggerFactory;
  */
 public class SocketTimeout implements Runnable
 {
-   Logger logger = LoggerFactory.getLogger(SocketTimeout.class);
+   static final Logger logger = LoggerFactory.getLogger(SocketTimeout.class);
    
-   private Socket socket;
-   private long timeoutMillis;
-   
-   private AtomicLong startTime = new AtomicLong(-1);
    private Thread thread = null;
-   private AtomicBoolean done = new AtomicBoolean(false);
+
+   private final Socket socket;
+   private final long timeoutMillis;
    
-   private static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-   static {
-      // set the single thread's name
-      scheduler.execute(new Runnable()
-      {
-         @Override
-         public void run()
-         {
-            Thread.currentThread().setName("Static SocketTimeout Schedule");
-         }
-      });
-   }
+   private final AtomicLong startTime = new AtomicLong(-1);
+   private final AtomicBoolean done = new AtomicBoolean(false);
+   
+   private static AutoDisposeSingleThreadScheduler scheduler = 
+         new AutoDisposeSingleThreadScheduler("Static SocketTimeout Schedule");
    
    public SocketTimeout(Socket socket, long timeoutMillis)
    {
@@ -48,11 +37,14 @@ public class SocketTimeout implements Runnable
       scheduler.schedule(this,timeoutMillis,TimeUnit.MILLISECONDS);
    }
    
-   public void begin() {  startTime.set(System.currentTimeMillis()); }
+   public void begin() { startTime.set(System.currentTimeMillis()); }
    
    public void end() { startTime.set(0); }
    
-   public void stop() { done.set(true); }
+   public void stop() 
+   {
+      done.set(true);
+   }
    
    @Override
    public void run()

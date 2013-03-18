@@ -47,12 +47,13 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda;
+import com.nokia.dempsy.router.RoutingStrategy;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
 /**
- * Test load handling / sheding in the MP container.
+ * Test load handling / shedding in the MP container.
  * This is probably involved enough to merit not mixing into
  * the existing MPContainer test cases.
  */
@@ -94,6 +95,13 @@ public class TestMpContainerLoadHandling
       container.setStatCollector(sc);
       container.setSerializer(serializer);
       container.setPrototype(new TestMessageProcessor());
+      container.setInboundStrategy(new RoutingStrategy.Inbound()
+      {
+         @Override public boolean doesMessageKeyBelongToNode(Object messageKey) { return true; }
+         @Override public void stop() { }
+         @Override public boolean isInitialized() { return true; }
+      });
+            
       
       forceOutputException = false;
    }

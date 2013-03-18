@@ -122,6 +122,12 @@ public class TestMpContainer
       System.setProperty("failFast", failFast);
       context = new ClassPathXmlApplicationContext("TestMPContainer.xml");
       container = (MpContainer)context.getBean("container");
+      container.setInboundStrategy(new RoutingStrategy.Inbound()
+      {
+         @Override public boolean doesMessageKeyBelongToNode(Object messageKey) { return true; }
+         @Override public void stop() { }
+         @Override public boolean isInitialized() { return true; }
+      });
       assertNotNull(container.getSerializer());
       inputQueue = (BlockingQueue<Object>)context.getBean("inputQueue");
       outputQueue = (BlockingQueue<Object>)context.getBean("outputQueue");
@@ -648,8 +654,9 @@ public class TestMpContainer
       
       // set a keysource with 2 keys
       container.setKeySource(keysource);
+      container.setInboundStrategy(inbound);
       
-      container.keyspaceResponsibilityChanged(inbound, false, true);
+      container.keyspaceResponsibilityChanged(false, true);
       
       TestProcessor prototype = context.getBean(TestProcessor.class);
       
@@ -660,7 +667,7 @@ public class TestMpContainer
       assertEquals(2,prototype.cloneCount.intValue());
       
       inbound.clear(); // force the Inbound to deny that any Mp should run here.
-      container.keyspaceResponsibilityChanged(inbound, true, false);
+      container.keyspaceResponsibilityChanged(true, false);
       
       assertTrue(TestUtils.poll(baseTimeoutMillis, container, new TestUtils.Condition<MpContainer>() 
             { @Override public boolean conditionMet(MpContainer o) { return o.getInstances().size() == 0; } }));
@@ -681,8 +688,9 @@ public class TestMpContainer
       
       // set a keysource with 2 keys
       container.setKeySource(keysource);
+      container.setInboundStrategy(inbound);
       
-      container.keyspaceResponsibilityChanged(inbound, false, true);
+      container.keyspaceResponsibilityChanged(false, true);
       
       TestProcessor prototype = context.getBean(TestProcessor.class);
       assertTrue(TestUtils.poll(baseTimeoutMillis, prototype.cloneCount, new TestUtils.Condition<AtomicInteger>() 
@@ -692,7 +700,7 @@ public class TestMpContainer
       assertEquals(2,prototype.cloneCount.intValue());
       
       inbound.set((Object[])keysShard2); // force the Inbound to deny that any Mp should run here.
-      container.keyspaceResponsibilityChanged(inbound, true, true);
+      container.keyspaceResponsibilityChanged(true, true);
       
       // check to make sure the total clone count is now 4 since two new Mps should be there
       assertTrue(TestUtils.poll(baseTimeoutMillis, prototype.cloneCount, new TestUtils.Condition<AtomicInteger>() 
@@ -721,8 +729,9 @@ public class TestMpContainer
       
       // set a keysource with 2 keys
       container.setKeySource(keysource);
+      container.setInboundStrategy(inbound);
       
-      container.keyspaceResponsibilityChanged(inbound, false, true);
+      container.keyspaceResponsibilityChanged(false, true);
       
       assertTrue(TestUtils.poll(baseTimeoutMillis, prototype.cloneCount, new TestUtils.Condition<AtomicInteger>() 
             { @Override public boolean conditionMet(AtomicInteger o) { return o.intValue() == 2; } }));
@@ -734,7 +743,7 @@ public class TestMpContainer
       // now we're going to passivate but the passivate will block
       
       inbound.clear(); // force the Inbound to deny that any Mp should run here.
-      container.keyspaceResponsibilityChanged(inbound, true, false);
+      container.keyspaceResponsibilityChanged(true, false);
       
       // the Mp deletion should be hung in passivate on the frist one ... this test will break if eviction
       //  becomes concurrent since both Mps will be blocked and released at the same time. We want the 
@@ -758,7 +767,7 @@ public class TestMpContainer
             try
             {
                isRunningKSChange.set(true);
-               container.keyspaceResponsibilityChanged(inbound, true, false);
+               container.keyspaceResponsibilityChanged(true, false);
             }
             finally
             {

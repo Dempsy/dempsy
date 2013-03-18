@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<beans xmlns="http://www.springframework.org/schema/beans" xmlns:util="http://www.springframework.org/schema/util" xmlns:context="http://www.springframework.org/schema/context"
-   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-   xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
-                           http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
-                           http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
-
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN 2.0//EN"
+    "http://www.springframework.org/dtd/spring-beans-2.0.dtd">
+<beans>
 	<bean name="transport" class="com.nokia.dempsy.messagetransport.tcp.TcpTransport" >
 	  <property name="failFast" value="false" />
+
+	  <!-- For testing purposes we are going to set the Outbound queue to unbounded when
+           we are also going to 'failFast.' In this way tests that check for failFast, which
+           normally only affects the Receive side, can also assume blocking all the way through -->
+       <property name="maxNumberOfQueuedOutbound" value="-1" />
 	</bean>
 </beans>

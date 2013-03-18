@@ -18,6 +18,7 @@ package com.nokia.dempsy.messagetransport.passthrough;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.executor.DempsyExecutor;
@@ -128,6 +129,9 @@ public class PassthroughTransport implements Transport
          }
          
          @Override
+         public boolean getFailFast() { return PassthroughTransport.this.getFailFast(); }
+         
+         @Override
          public void shutdown() {}
          
          @Override
@@ -169,9 +173,14 @@ public class PassthroughTransport implements Transport
    
    private static class PassthroughDestination implements Destination
    {
-      Sender sender;
+      private final static AtomicLong destinationIdSequence = new AtomicLong(0);
       
-      PassthroughDestination(Sender sender) { this.sender = sender; }
+      private Sender sender;
+      private long destinationId;
+      
+      PassthroughDestination(Sender sender) { this.sender = sender; destinationId = destinationIdSequence.getAndIncrement(); }
+      
+      @Override public String toString() { return "Passthrough(" + destinationId + ")"; }
    }
    
 }

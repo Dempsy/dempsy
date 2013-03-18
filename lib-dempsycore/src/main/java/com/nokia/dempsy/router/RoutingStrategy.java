@@ -26,6 +26,8 @@ import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
+import com.nokia.dempsy.router.RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener;
+import com.nokia.dempsy.util.Pair;
 
 /**
  * <p>A {@link RoutingStrategy} is responsible for determining how to find the appropriate
@@ -79,10 +81,12 @@ public interface RoutingStrategy
        * @param messageKey is the message key for the message to be routed
        * @param message is the message to be routed.
        * @return a transport Destination indicating the unique node in the downstream cluster 
-       * that the message should go to.
+       * that the message should go to. The {@link Pair} can optionally contain a second value which 
+       * includes metadata for the message information. If non-null this metadata will be 
+       * serialized along with the message itself and provided to the Inbound.
        * @throws DempsyException when something distasteful happens.
        */
-      public Destination selectDestinationForMessage(Object messageKey, Object message) throws DempsyException;
+      public Pair<Destination,Object> selectDestinationForMessage(Object messageKey, Object message) throws DempsyException;
       
       /**
        * The {@link Outbound} is responsible for providing the {@link ClusterId} for which it is the 
@@ -97,6 +101,11 @@ public interface RoutingStrategy
        */
       public boolean completeInitialization();
       
+      /**
+       * @return all of the currently known destinations. This is called in order to manage
+       * the clean shutdown of the transport when the cluster proxied by the {@link Outbound}
+       * changes state.
+       */
       public Collection<Destination> getKnownDestinations();
    }
    
@@ -111,9 +120,9 @@ public interface RoutingStrategy
    {
       /**
        * Since the {@link Inbound} has the responsibility to determine which instances of a 
-       * {@link MessageProcessor} are valid in 'this' node, it should be able to privide that
-       * information through the implementataion of this method. This is used as part of the
-       * Pre-instantiation phase of the Message Processor's lifecylce.
+       * {@link MessageProcessor} are valid in 'this' node, it should be able to provide that
+       * information through the implementation of this method. This is used as part of the
+       * Pre-instantiation phase of the Message Processor's lifecycle.
        */
       public boolean doesMessageKeyBelongToNode(Object messageKey);
       
@@ -135,15 +144,19 @@ public interface RoutingStrategy
        */
       public static interface KeyspaceResponsibilityChangeListener
       {
-         public void keyspaceResponsibilityChanged(Inbound inbound, boolean less, boolean more);
+         public void keyspaceResponsibilityChanged(boolean less, boolean more);
+         
+         public void setInboundStrategy(RoutingStrategy.Inbound inbound);
       }
-      
    }
    
    /**
-    * This method will be called from the Dempsy framework in order to instantiate the one Inbound for 
+    * <p>This method will be called from the Dempsy framework in order to instantiate the one Inbound for 
     * 'this' node. Keep in mind that when running in LocalVm mode there can be more than one inbound per
-    * process.
+    * process.</p>
+    * 
+    * <p>NOTE: The implementation should invoke the setInboundStrategy on the {@link KeyspaceResponsibilityChangeListener}
+    * before returning the Inbound from this method.</p>
     *
     * @param cluster is the cluster information manager handle for 'this' node.
     * @param messageTypes is the types of messages that Dempsy determined could be handled by the {@link MessageProcessor}
@@ -164,8 +177,18 @@ public interface RoutingStrategy
     */
    public static interface OutboundManager
    {
+      /**
+       * This will be called from Dempsy to notify the {@link OutboundManager} that it's
+       * finished and can be shut down.
+       */
       public void stop();
       
+      /**
+       * The RoutingStrategy is responsible for understanding which downstream cluster can 
+       * handle which object instances by their type. Dempsy will deferr to the routing
+       * strategy using this method. The likelyhood is that the {@link Outbound}s returned
+       * will be used to route messages of that type to.
+       */
       public Collection<Outbound> retrieveOutbounds(Class<?> messageType);
       
       /**
@@ -184,6 +207,11 @@ public interface RoutingStrategy
          public void clusterStateChanged(Outbound oldOutboundThatChanged);
       }
       
+      /**
+       * The Dempsy framework will register for future state changes with the RoutingStrategy implementation
+       * using this method. The RoutingStrategy implementation should call back on the instance provided
+       * whenever the state of the cluster changes.
+       */
       public void setClusterStateMonitor(ClusterStateMonitor monitor);
    }
    

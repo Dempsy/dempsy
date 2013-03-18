@@ -36,6 +36,7 @@ import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Receiver;
+import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.StatsCollectorFactory;
@@ -102,6 +103,7 @@ public class Dempsy
             RoutingStrategy.Inbound strategyInbound = null;
             List<Class<?>> acceptedMessageClasses = null;
             Receiver receiver = null;
+            SenderFactory senderFactory = null;
             StatsCollector statsCollector = null;
             
             private Node(ClusterDefinition clusterDefinition) { this.clusterDefinition = clusterDefinition; }
@@ -123,6 +125,9 @@ public class Dempsy
                   router.setClusterSession(clusterSession);
                   // get the executor if one is set
                   
+                  //=============================================================================
+                  // Initialize the container
+                  //=============================================================================
                   container = new MpContainer(currentClusterId);
                   container.setDispatcher(router);
                   if (executor != null)
@@ -130,11 +135,15 @@ public class Dempsy
                   Object messageProcessorPrototype = clusterDefinition.getMessageProcessorPrototype();
                   if (messageProcessorPrototype != null)
                     container.setPrototype(messageProcessorPrototype);
-                  acceptedMessageClasses = getAcceptedMessages(clusterDefinition);
-                  
                   Serializer<Object> serializer = (Serializer<Object>)clusterDefinition.getSerializer();
                   if (serializer != null)
                      container.setSerializer(serializer);
+                  KeySource<?> keySource = clusterDefinition.getKeySource();
+                  if (keySource != null)
+                     container.setKeySource(keySource);
+                  //=============================================================================
+                  
+                  acceptedMessageClasses = getAcceptedMessages(clusterDefinition);
                   
                   // there is only a reciever if we have an Mp (that is, we aren't an adaptor) and start accepting messages 
                   Destination thisDestination = null;
@@ -157,14 +166,11 @@ public class Dempsy
                         receiver.setStatsCollector(statsCollector);
                   }
                   
-                  router.setDefaultSenderFactory(transport.createOutbound(executor, statsCollector));
+                  senderFactory = transport.createOutbound(executor, statsCollector);
+                  router.setDefaultSenderFactory(senderFactory);
 
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
                   
-                  KeySource<?> keySource = clusterDefinition.getKeySource();
-                  if (keySource != null)
-                     container.setKeySource(keySource);
-
                   // there is only an inbound strategy if we have an Mp (that is, we aren't an adaptor) and
                   // we actually accept messages
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
@@ -197,6 +203,8 @@ public class Dempsy
             public StatsCollector getStatsCollector() { return statsCollector; }
             
             public MpContainer getMpContainer() { return container; }
+            
+            public Receiver getReceiver() { return receiver; }
 
             public void stop()
             {
@@ -221,6 +229,10 @@ public class Dempsy
                if (router != null)
                   try { router.stop(); router = null; } catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
                
+               // stop the sender factory after stopping the router.
+               if (senderFactory != null)
+                  try { senderFactory.shutdown(); senderFactory = null; } catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
+               
                if (statsCollector != null)
                   try { statsCollector.stop(); statsCollector = null;} catch (Throwable th) { logger.info("Problem shutting down node for " + SafeString.valueOf(clusterDefinition), th); }
 
@@ -234,6 +246,9 @@ public class Dempsy
             
             // Only called from tests
             public Router retouRteg() { return router; }
+            
+            // Only called from tests
+            protected Dempsy yspmeDteg() { return Dempsy.this; }
 
          } // end Node definition
          
@@ -261,17 +276,6 @@ public class Dempsy
          }
          
          public List<Node> getNodes() { return nodes; }
-         
-         /**
-          * This is only public for testing - DO NOT CALL!
-          * @throws DempsyException
-          */
-         public void instantiateAndStartAnotherNodeForTesting() throws DempsyException
-         {
-            Node node = new Node(clusterDefinition);
-            nodes.add(node);
-            node.start();
-         }
          
       } // end Cluster Definition
       
@@ -312,18 +316,8 @@ public class Dempsy
          
          for (Cluster cluster : appClusters)
          {
-//            if (multiThreadedStart)
-//            {
-//               Thread t = new Thread(new ClusterStart(cluster),"Starting cluster:" + cluster.clusterDefinition);
-//               toJoin.add(t);
-//               t.start();
-//               clusterStarted = true;
-//            }
-//            else 
-//            {
-               cluster.start();
-               clusterStarted = true;
-//            }
+            cluster.start();
+            clusterStarted = true;
          }
          
          for (Thread t : toJoin)
@@ -426,9 +420,6 @@ public class Dempsy
    // Dempsy lifecycle state
    private volatile boolean isRunning = false;
    private Object isRunningEvent = new Object();
-   
-//   // this is mainly for testing purposes.
-//   private boolean multiThreadedStart = false;
    
    public Dempsy() { }
    
@@ -596,8 +587,6 @@ public class Dempsy
       this.clusterCheck = clusterCheck;
    }
    
-//   public void setMultithreadedStart(boolean multiThreadedStart) { this.multiThreadedStart = multiThreadedStart; }
-   
    public void setDefaultTransport(Transport transport) { this.transport = transport; }
    
    public void setDefaultRoutingStrategy(RoutingStrategy defaultRoutingStrategy) { this.defaultRoutingStrategy = defaultRoutingStrategy; }
@@ -638,7 +627,10 @@ public class Dempsy
             if (timeInMillis < 0)
                isRunningEvent.wait();
             else
+            {
                isRunningEvent.wait(timeInMillis);
+               break;
+            }
          }
 
          if (traceEnabled)

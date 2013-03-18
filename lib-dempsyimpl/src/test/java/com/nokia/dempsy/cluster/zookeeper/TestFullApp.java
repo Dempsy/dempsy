@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy;
+import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.TestUtils.Condition;
 import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
@@ -50,7 +51,6 @@ import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.router.CurrentClusterCheck;
-
 
 public class TestFullApp
 {
@@ -77,6 +77,8 @@ public class TestFullApp
       System.setProperty("application", "test-app");
       System.setProperty("cluster", "test-cluster2");
       zkServer = new InitZookeeperServerBean();
+      FullApplication.mpOnly = false;
+      System.setProperty("testFullApp.totalShards", "20");
    }
    
    @After
@@ -240,8 +242,24 @@ public class TestFullApp
    @Test
    public void testStartForceMpDisconnectWithStandby() throws Throwable
    {
+      // by default the testFullApp.totalShards is set to 20. To NOT do elasticity we need to
+      // set it to 1 - the same as the minNode count.
+      System.setProperty("testFullApp.totalShards", "1");
+      runTestStartForceMpDisconnectWithRedundancy();
+   }
+   
+   @Test
+   public void testStartForceMpDisconnectWithElasticity() throws Throwable
+   {
+      runTestStartForceMpDisconnectWithRedundancy();
+   }
+   
+   private void runTestStartForceMpDisconnectWithRedundancy() throws Throwable
+   {
       ClassPathXmlApplicationContext actx = null;
+      ClassPathXmlApplicationContext actx2 = null;
       Dempsy dempsy = null;
+      Dempsy dempsy2 = null;
       
       try
       {
@@ -252,27 +270,28 @@ public class TestFullApp
          final FullApplication app = (FullApplication)actx.getBean("app");
 
          dempsy = (Dempsy)actx.getBean("dempsy");
+         
+         ZookeeperSessionFactory zsf = new ZookeeperSessionFactory(System.getProperty("zk_connect"), 5000)
+         {
+            int sessionCount = 0;
+
+            @Override
+            public synchronized ClusterInfoSession createSession() throws ClusterInfoException
+            {
+               sessionCount++;
+               ClusterInfoSession ret = super.createSession();
+
+               if (sessionCount == 2)
+                  zookeeperCluster = (ZookeeperSession)ret;
+               return ret;
+            }
+         }; 
 
          // Override the cluster session factory to keep track of the sessions asked for.
          // This is so that I can grab the ZookeeperSession that's being instantiated by
          // the MyMp cluster.
          zookeeperCluster = null;
-         dempsy.setClusterSessionFactory(
-               new ZookeeperSessionFactory(System.getProperty("zk_connect"), 5000)
-               {
-                  int sessionCount = 0;
-
-                  @Override
-                  public synchronized ClusterInfoSession createSession() throws ClusterInfoException
-                  {
-                     sessionCount++;
-                     ClusterInfoSession ret = super.createSession();
-
-                     if (sessionCount == 2)
-                        zookeeperCluster = (ZookeeperSession)ret;
-                     return ret;
-                  }
-               });
+         dempsy.setClusterSessionFactory(zsf);
 
          dempsy.start();
 
@@ -280,10 +299,18 @@ public class TestFullApp
          Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0);
          final StatsCollector collector = node.getStatsCollector();
          
+         assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy));
+         
          // we are going to create another node of the MyMp via a test hack
+         FullApplication.mpOnly = true;
+         actx2 = new ClassPathXmlApplicationContext(ctx);
+         actx2.registerShutdownHook();
+         dempsy2 = (Dempsy)actx2.getBean("dempsy");
+         dempsy2.setClusterSessionFactory(zsf);
+         dempsy2.start();
+         
          cluster = dempsy.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
          Dempsy.Application.Cluster.Node mpnode = cluster.getNodes().get(0);
-         cluster.instantiateAndStartAnotherNodeForTesting(); // the code for start instantiates a new node
 
          // this checks that the throughput works.
          assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
@@ -323,8 +350,8 @@ public class TestFullApp
          //... and then recover.
 
          // get the MyMp prototype
-         cluster = dempsy.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
-         node = cluster.getNodes().get(1); // notice, we're getting the SECOND node.
+         cluster = dempsy2.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
+         node = cluster.getNodes().get(0);
          final MyMp prototype = (MyMp)node.getMpContainer().getPrototype();
 
          // so let's see where we are
@@ -346,11 +373,21 @@ public class TestFullApp
          if (dempsy != null)
             dempsy.stop();
          
+         if (dempsy2 != null)
+            dempsy2.stop();
+         
          if (actx != null)
             actx.close();
 
+         if (actx2 != null)
+            actx2.close();
+
          if (dempsy != null)
             assertTrue(dempsy.waitToBeStopped(baseTimeoutMillis));
+         
+         if (dempsy2 != null)
+            assertTrue(dempsy2.waitToBeStopped(baseTimeoutMillis));
+
       }
 
    }
@@ -420,8 +457,6 @@ public class TestFullApp
                return app.finalMessageCount.get() > 100;
             }
          }));
-         
-         
       }
       finally
       {
@@ -435,10 +470,27 @@ public class TestFullApp
       }
    }
 
-
    @Test
-   public void testFailover() throws Throwable
+   public void testFailoverWithStandby() throws Throwable
    {
+      // by default the testFullApp.totalShards is set to 20. To NOT do elasticity we need to
+      // set it to 1 - the same as the minNode count.
+      runTestFailover(false);
+   }
+   
+   @Test
+   public void testFailoverWithElasticity() throws Throwable
+   {
+      runTestFailover(true);
+   }
+   
+   public void runTestFailover(boolean elastic) throws Throwable
+   {
+      // we need to set the totalShards = the minNodeCount to disable elasiticity.
+      // The default is totalShards = 20 from the @Before method
+      if (!elastic)
+         System.setProperty("testFullApp.totalShards", "1");
+
       // now start each cluster
       ctx[0] = "fullApp/Dempsy-FullUp.xml";
       Map<ClusterId,DempsyHolder> dempsys = new HashMap<ClusterId,DempsyHolder>();
@@ -488,19 +540,40 @@ public class TestFullApp
 
          Dempsy.Application.Cluster cluster = spare.dempsy.getCluster(spare.clusterid);
          Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0);
-         final StatsCollector collector = node.getStatsCollector();
+         final StatsCollector spareNodeStatsCollector = node.getStatsCollector();
          
          // we are going to create another node of the MyMp via a test hack
          cluster = spare.dempsy.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
          node = cluster.getNodes().get(0);
          final MyMp spareprototype = (MyMp)node.getMpContainer().getPrototype();
 
-         // TODO, see if we really need that check, and if so, implement
-         // an alternate way to get it, since with the stats collector rework
-         // we no longer use an independent MetricsRegistry per StatsCollector 
-         // instance.
-         assertEquals(0,((MetricGetters)collector).getDispatchedMessageCount());
-         assertEquals(0,spareprototype.myMpReceived.get());
+         // If we're elastic then we will get data to the spare. So we need to test for that.
+         if (elastic)
+         {
+            assertTrue(TestUtils.poll(baseTimeoutMillis, (MetricGetters)spareNodeStatsCollector, 
+                  new Condition<MetricGetters>()
+                  {
+                     @Override
+                     public boolean conditionMet(MetricGetters o) throws Throwable {
+                        return o.getDispatchedMessageCount() > 10;// we should eventually see messages here.
+                     }
+                  }));
+            assertTrue(TestUtils.poll(baseTimeoutMillis, spareprototype, 
+                  new Condition<MyMp>()
+                  {
+                     @Override
+                     public boolean conditionMet(MyMp o) throws Throwable {
+                        return o.myMpReceived.get() > 10;// we should eventually see messages here.
+                     }
+                  }));
+         }
+         // If we're not elastic then the spare should be in backup mode, and we should check for that.
+         else
+         {
+            Thread.sleep(100); // give some time for messages to wrongly be propagated
+            assertEquals(0,((MetricGetters)spareNodeStatsCollector).getDispatchedMessageCount());
+            assertEquals(0,spareprototype.myMpReceived.get());
+         }
          
          // now bring down the original
          DempsyHolder original = dempsys.get(spare.clusterid);
@@ -517,8 +590,9 @@ public class TestFullApp
             }
          }));
          
-         // check one more time
-         assertEquals(0,spareprototype.myMpReceived.get());
+         // check one more time ... if not elastic
+         if (!elastic)
+            assertEquals(0,spareprototype.myMpReceived.get());
 
          // now stop the original ... the spare should pick up.
          original.dempsy.stop();
