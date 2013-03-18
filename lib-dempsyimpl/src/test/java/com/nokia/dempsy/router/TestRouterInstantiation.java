@@ -46,7 +46,9 @@ public class TestRouterInstantiation
 
       List<Object> messages = new ArrayList<Object>();
       Object first = new Object();
-      router.getMessages(first, messages);
+      List<Object> iterable = new ArrayList<Object>();
+      iterable.add(first);
+      router.getMessages(iterable, messages);
       Assert.assertEquals(1, messages.size());
       Assert.assertSame(first, messages.get(0));
    }

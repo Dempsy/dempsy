@@ -15,9 +15,9 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TransportUtils
 {
-   public final static void handleMessage(final byte[] messageBytes, final DempsyExecutor executor,
-         final Listener messageTransportListener, final boolean failFast, final OverflowHandler overflowHandler, 
-         final StatsCollector statsCollector, final Logger logger, final String destinationString)
+   public static final void handleMessage(final byte[] messageBytes, final DempsyExecutor executor,final Listener messageTransportListener, 
+         final boolean failFast, final StatsCollector statsCollector, final OverflowHandler overflowHandler,
+         final Logger logger, final String destinationString)
    {
       if ( messageTransportListener != null)
       {
@@ -44,6 +44,9 @@ public class TransportUtils
                      statsCollector.messageDiscarded(message);
                }
             });
+            
+//            if (logger.isTraceEnabled())
+//               logger.error(destinationString + " has " + executor.getNumberPending() + " pending messages.");
 
          }
          catch (Throwable se)

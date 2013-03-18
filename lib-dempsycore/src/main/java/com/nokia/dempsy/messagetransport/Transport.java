@@ -41,7 +41,7 @@ public interface Transport
     * null. The executor will have already been started and should not be started
     * by the transport.
     */
-   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector) throws MessageTransportException;
+   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String thisNodeDescription) throws MessageTransportException;
    
    /**
     * Create a new instance of the Receiver for this transport.This
@@ -53,7 +53,7 @@ public interface Transport
     * null. The executor will have already been started and should not be started
     * by the transport.
     */
-   public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException;
+   public Receiver createInbound(DempsyExecutor executor, String thisNodeDescription) throws MessageTransportException;
    
    /**
     * If the implementation supports overflow handling then calling this

@@ -87,6 +87,10 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    @Override
    public synchronized void shutdown()
    {
+      Listener l = listener.get();
+      if (l != null)
+         l.transportShuttingDown();
+         
       shutdown.set(true);
       if (running != null)
          running.interrupt();

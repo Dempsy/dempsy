@@ -38,8 +38,7 @@ import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.executor.DefaultDempsyExecutor;
-import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
-import com.nokia.dempsy.messagetransport.tcp.TcpReceiverAccess;
+import com.nokia.dempsy.messagetransport.util.ForwardedReceiver;
 
 public class TestDempsy extends DempsyTestBase
 {
@@ -118,8 +117,8 @@ public class TestDempsy extends DempsyTestBase
          for (Dempsy.Application.Cluster cluster : dempsy.applications.values().iterator().next().appClusters)
          {
             // get the receiver from the node
-            TcpReceiver r = (TcpReceiver)cluster.getNodes().get(0).receiver;
-            executor = (DefaultDempsyExecutor)TcpReceiverAccess.getExecutor(r);
+            ForwardedReceiver r = (ForwardedReceiver)cluster.getNodes().get(0).receiver;
+            executor = (DefaultDempsyExecutor)r.getExecutor();
             assertEquals(123456,executor.getMaxNumberOfQueuedLimitedTasks());
             assertTrue(executor.isRunning());
          }

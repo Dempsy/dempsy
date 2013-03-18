@@ -5,206 +5,86 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
+import com.nokia.dempsy.messagetransport.util.ForwardingSender.Enqueued;
+import com.nokia.dempsy.messagetransport.util.SenderConnection;
 import com.nokia.dempsy.util.SocketTimeout;
 
-public class TcpSenderConnection implements Runnable
+public class TcpSenderConnection extends SenderConnection implements Runnable
 {
    private static Logger logger = LoggerFactory.getLogger(TcpSenderConnection.class);
 
    private DataOutputStream dataOutputStream = null;
-   private List<TcpSender> senders = new ArrayList<TcpSender>();
    
    private enum IsLocalAddress { Yes, No, Unknown };
    private IsLocalAddress isLocalAddress = IsLocalAddress.Unknown;
-   private Thread senderThread = null;
 
-   private AtomicBoolean isSenderRunning = new AtomicBoolean(false);
-   private AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
-   
    private long timeoutMillis;
    protected SocketTimeout socketTimeout = null;
-   private long maxNumberOfQueuedMessages;
-   private boolean batchOutgoingMessages;
    
    private Socket socket = null;
-   protected BlockingQueue<TcpSender.Enqueued> sendingQueue = new LinkedBlockingQueue<TcpSender.Enqueued>();
    protected TcpDestination destination;
    
    protected TcpSenderConnection(TcpDestination baseDestination, long maxNumberOfQueuedOutgoing, 
          long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
    {
+      super(baseDestination.toString(), maxNumberOfQueuedOutgoing, batchOutgoingMessages, logger);
       this.timeoutMillis = socketWriteTimeoutMillis;
-      this.batchOutgoingMessages = batchOutgoingMessages;
-      this.maxNumberOfQueuedMessages = maxNumberOfQueuedOutgoing;
       this.destination = baseDestination;
    }
 
-   protected synchronized void start(TcpSender sender)
+   @Override
+   protected synchronized void cleanup()
    {
-      if (senders.size() == 0)
-      {
-         senderKeepRunning.set(true);
-         senderThread = new Thread(this,"TcpSender to " + sender.destination);
-         senderThread.setDaemon(true);
-         senderThread.start();
-         synchronized(isSenderRunning) 
-         {
-            // if the sender isn't running yet, then wait for it.
-            if (!isSenderRunning.get())
-            {
-               try { isSenderRunning.wait(10000); } catch (InterruptedException ie) {}
-            }
-            
-            if (!isSenderRunning.get())
-               logger.error("Failed to start TcpSender thread for " + sender.destination);
-         }
-      }
-      
-      senders.add(sender);
-   }
-   
-   protected synchronized void stop(TcpSender sender)
-   {
-      senders.remove(sender);
-      if (senders.size() == 0)
-      {
-         senderKeepRunning.set(false);
-         
-         // poll with interrupts, for the thread to exit.
-         if (senderThread != null)
-         {
-            for (int i = 0; i < 3000; i++)
-            {
-               senderThread.interrupt();
-               try { Thread.sleep(1); } catch (InterruptedException ie) {}
-
-               if (!isSenderRunning.get())
-                  break;
-            }
-         }
-         
-         if (isSenderRunning.get())
-         {
-            logger.error("Couldn't seem to stop the sender thread. Ignoring.");
-
-            // attempt a cleanup anyway.
-            closeQuietly(socket);
-            if (socketTimeout != null)
-               socketTimeout.stop();
-         }
-      }
+      // attempt a cleanup anyway.
+      closeQuietly(socket);
+      if (socketTimeout != null)
+         socketTimeout.stop();
    }
 
    public void setTimeoutMillis(long timeoutMillis) { this.timeoutMillis = timeoutMillis; }
 
    @Override
-   public void run()
+   protected void doSend(final Enqueued message, final boolean batch) throws IOException, InterruptedException, MessageTransportException
    {
-      TcpSender.Enqueued message = null;
+      
+      DataOutputStream localDataOutputStream = getDataOutputStream();
+
+      int size = message.messageBytes.length;
+      if (size > Short.MAX_VALUE)
+         size = -1;
+      socketTimeout.begin();
+      
       try
       {
-         synchronized(isSenderRunning)
-         {
-            isSenderRunning.set(true);
-            isSenderRunning.notifyAll();
-         }
-         
-         int ioeFailedCount = -1;
-         int queueSizeOnFirstFail = -1;
-         
-         while (senderKeepRunning.get())
-         {
-            try
-            {
-               message = batchOutgoingMessages ? sendingQueue.poll() : sendingQueue.take();
-
-               DataOutputStream localDataOutputStream = getDataOutputStream();
-
-               if (message == null)
-               {
-                  socketTimeout.begin();
-                  localDataOutputStream.flush();
-                  socketTimeout.end();
-                  message = sendingQueue.take();
-               }
-            
-               if (maxNumberOfQueuedMessages < 0 || sendingQueue.size() <= maxNumberOfQueuedMessages)
-               {
-                  int size = message.messageBytes.length;
-                  if (size > Short.MAX_VALUE)
-                     size = -1;
-                  socketTimeout.begin();
-                  localDataOutputStream.write(message.getSequence());
-                  localDataOutputStream.writeShort( size );
-                  if (size == -1)
-                     localDataOutputStream.writeInt(message.messageBytes.length);
-                  localDataOutputStream.write( message.messageBytes );
-                  if (!batchOutgoingMessages)
-                     localDataOutputStream.flush(); // flush individual message
-
-                  ioeFailedCount = -1;
-                  socketTimeout.end();
-
-                  message.messageSent();
-               }
-               else
-                  message.messageNotSent();
-            }
-            catch (IOException ioe)
-            {
-               socketTimeout.end();
-               if (message != null) message.messageNotSent();
-               close();
-               // This can happen lots of times so let's track it
-               if (ioeFailedCount == -1)
-               {
-                   ioeFailedCount = 0; // this will be incremented to 0
-                   queueSizeOnFirstFail = sendingQueue.size();
-                   logger.warn("It appears the client " + destination + " is no longer taking calls. This message may be supressed for a while.",ioe);
-               }
-               else if (ioeFailedCount >= queueSizeOnFirstFail)
-                   ioeFailedCount = -1;
-               else
-                   ioeFailedCount++;
-            }
-            catch (InterruptedException ie)
-            {
-               socketTimeout.end();
-               if (message != null) message.messageNotSent();
-               if (senderKeepRunning.get()) // if we're supposed to be running still, then we're not shutting down. Not sure why we reset.
-                  logger.warn("Sending data to " + destination + " was interrupted for no good reason.",ie);
-            }
-            catch (Throwable th)
-            {
-               socketTimeout.end();
-               if (message != null) message.messageNotSent();
-               logger.error("Unknown exception thrown while trying to send a message to " + destination);
-            }
-         }
+         localDataOutputStream.write(message.getReceiverIndex());
+         localDataOutputStream.writeShort( size );
+         if (size == -1)
+            localDataOutputStream.writeInt(message.messageBytes.length);
+         localDataOutputStream.write( message.messageBytes );
+         if (!batch)
+            localDataOutputStream.flush(); // flush individual message
       }
-      catch (RuntimeException re) { logger.error("Unexpected Exception!",re); }
       finally
       {
-         synchronized(this) { senderThread = null; }
-         socketTimeout.stop();
-         close();
-         isSenderRunning.set(false);
+         socketTimeout.end();
       }
    }
    
-   protected void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
+   @Override
+   protected void flush() throws IOException, InterruptedException, MessageTransportException
+   {
+      DataOutputStream localDataOutputStream = getDataOutputStream();
+      socketTimeout.begin();
+      try { localDataOutputStream.flush(); }
+      finally { socketTimeout.end(); }
+   }
    
    // this should ONLY be called from the read thread
    private DataOutputStream getDataOutputStream() throws MessageTransportException, IOException
@@ -255,7 +135,7 @@ public class TcpSenderConnection implements Runnable
       return new Socket(destination.inetAddress,destination.port); 
    }
    
-   protected void closeQuietly(Socket socket) 
+   private void closeQuietly(Socket socket) 
    {
       if (socket != null)
       {
@@ -271,10 +151,18 @@ public class TcpSenderConnection implements Runnable
 
    
    // this ONLY be called from the run thread
-   private void close()
+   @Override
+   protected void close()
    {
-      if ( dataOutputStream != null) IOUtils.closeQuietly( dataOutputStream );
-      dataOutputStream = null;
+      if ( dataOutputStream != null)
+      {
+         try { dataOutputStream.flush(); } catch (Throwable th)
+         {
+//            logger.error("Failed attempting to flush last remaining messages to " + destination,th);
+         }
+         IOUtils.closeQuietly( dataOutputStream );
+         dataOutputStream = null;
+      }
       
       closeQuietly(socket); 
       socket = null;

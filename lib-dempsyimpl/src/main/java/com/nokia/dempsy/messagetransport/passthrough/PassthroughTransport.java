@@ -52,7 +52,7 @@ public class PassthroughTransport implements Transport
    private boolean failFast = true;
    
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor, final StatsCollector statsCollector)
+   public SenderFactory createOutbound(DempsyExecutor executor, final StatsCollector statsCollector, String desc)
    {
       return new SenderFactory()
       {
@@ -108,7 +108,7 @@ public class PassthroughTransport implements Transport
    }
    
    @Override
-   public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
+   public Receiver createInbound(DempsyExecutor executor, String desc) throws MessageTransportException
    {
       return new Receiver()
       {

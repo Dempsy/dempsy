@@ -59,7 +59,7 @@ public class DempsyTestBase
     * every runAllCombinations call. This can make tests run for a loooooong time.
     */
    public static boolean hardcore = false;
-   public static boolean profile = false;
+   public static String profile = null;
 
    protected static Logger logger;
    protected static long baseTimeoutMillis = 20000; // 20 seconds
@@ -68,9 +68,9 @@ public class DempsyTestBase
 
    public static String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
    public static String[][] transports = new String[][] {
-         { "testDempsy/Transport-PassthroughActx.xml","testDempsy/Transport-PassthroughBlockingActx.xml" }, 
-         { "testDempsy/Transport-BlockingQueueActx.xml" }, 
-         { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
+      { "testDempsy/Transport-PassthroughActx.xml","testDempsy/Transport-PassthroughBlockingActx.xml" }, 
+      { "testDempsy/Transport-BlockingQueueActx.xml" }, 
+      { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
 
    public static String[] serializers = new String[]
@@ -111,15 +111,23 @@ public class DempsyTestBase
          System.out.println("Hardcore testing in progress. This will take a while, you might as well go get a coffee.");
       
       if (System.getProperties().containsKey("test.profile"))
-         profile = true;
+         profile = System.getProperty("test.profile", null);
       
-      if (profile)
+      if (profile != null)
       {
          baseTimeoutMillis *= 3;
          System.out.println("Running only PassThrough transport and LocalClusterSessionFactory to optimize profiling.");
          serializers = new String[] { "testDempsy/Serializer-KryoOptimizedActx.xml" };
-         transports = new String[][] { {"testDempsy/Transport-BlockingQueueActx.xml"} };
+         if ("tcp".equals(profile))
+         {
+            System.out.println(" ... also using Tcp for the transport.");
+            transports = new String[][] { { "testDempsy/Transport-TcpBlockingActx.xml" } };
+         }
+         else
+            transports = new String[][] { {"testDempsy/Transport-BlockingQueueActx.xml"} };
          clusterManagers = new String[]{ "testDempsy/ClusterInfo-LocalActx.xml" };
+         
+         hardcore = true;
       }
    }
 
@@ -559,9 +567,9 @@ public class DempsyTestBase
                                  {
                                     logger.error("FAILED TO SHUT DOWN TEST. SUBSEQUENT TESTS MAY BE CORRUPTED!",th);
                                  }
-                              }
 
-                              runCount++;
+                                 runCount++;
+                              }
                            }
                         }
                      }

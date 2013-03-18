@@ -670,10 +670,10 @@ public class TestMpContainer
       container.keyspaceResponsibilityChanged(true, false);
       
       assertTrue(TestUtils.poll(baseTimeoutMillis, container, new TestUtils.Condition<MpContainer>() 
-            { @Override public boolean conditionMet(MpContainer o) { return o.getInstances().size() == 0; } }));
+            { @Override public boolean conditionMet(MpContainer o) { return o.getProcessorCount() == 0; } }));
       
       Thread.sleep(10);
-      assertEquals(0,container.getInstances().size());
+      assertEquals(0,container.getProcessorCount());
    }
    
    @Test
@@ -707,10 +707,10 @@ public class TestMpContainer
             { @Override public boolean conditionMet(AtomicInteger o) { return o.intValue() == 4; } }));
       
       assertTrue(TestUtils.poll(baseTimeoutMillis, container, new TestUtils.Condition<MpContainer>() 
-            { @Override public boolean conditionMet(MpContainer o) { return o.getInstances().size() == 2; } }));
+            { @Override public boolean conditionMet(MpContainer o) { return o.getProcessorCount() == 2; } }));
       
       Thread.sleep(10);
-      assertEquals(2,container.getInstances().size());
+      assertEquals(2,container.getProcessorCount());
    }
    
    @Test
@@ -789,9 +789,9 @@ public class TestMpContainer
       
       // this should result in preservation of the other Mps since we preempted the keyspace deletion
       assertTrue(TestUtils.poll(baseTimeoutMillis, container, new TestUtils.Condition<MpContainer>() 
-            { @Override public boolean conditionMet(MpContainer o) { return o.getInstances().size() == 1; } }));
+            { @Override public boolean conditionMet(MpContainer o) { return o.getProcessorCount() == 1; } }));
       Thread.sleep(10);
-      assertEquals(1,container.getInstances().size());
+      assertEquals(1,container.getProcessorCount());
       
       assertTrue(TestUtils.poll(baseTimeoutMillis, isRunningKSChange, new TestUtils.Condition<AtomicBoolean>() 
             { @Override public boolean conditionMet(AtomicBoolean o) { return !o.get(); } }));

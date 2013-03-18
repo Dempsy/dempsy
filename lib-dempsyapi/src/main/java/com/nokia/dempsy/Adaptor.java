@@ -16,6 +16,8 @@
 
 package com.nokia.dempsy;
 
+import com.nokia.dempsy.config.ClusterDefinition;
+
 /**
  * An {@link Adaptor} is used to adapt data streams from external sources
  * into Dempsy. Most Dempsy applictations contain at least one adaptor. The
@@ -42,7 +44,8 @@ public interface Adaptor
    /**
     * This will be called by Dempsy in order to get the Adaptor to stop. Under normal circumstances
     * the "start()" is still executing and the "stop()" should cause the "start()" to return. If
-    * it doesn't then Dempsy will most likely hang.
+    * it doesn't then Dempsy can hang unless the {@link Adaptor} is set as a daemon using 
+    * {@link ClusterDefinition#setAdaptorDaemon(boolean)} is set to {@code true}.
     */
    public void stop();
 }

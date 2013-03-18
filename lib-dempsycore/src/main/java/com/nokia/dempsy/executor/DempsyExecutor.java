@@ -2,7 +2,6 @@ package com.nokia.dempsy.executor;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 /**
  * <p>The Threading model for Dempsy needs to work in close concert with the
@@ -33,11 +32,6 @@ public interface DempsyExecutor
    public <V> Future<V> submitLimited(Rejectable<V> r);
    
    /**
-    * Schedule a task to be executed at some time in the future.
-    */
-   public <V> Future<V> schedule(Callable<V> r, long delay, TimeUnit timeUnit);
-   
-   /**
     * How many pending tasks are there.
     */
    public int getNumberPending();
@@ -48,12 +42,14 @@ public interface DempsyExecutor
    public int getNumberLimitedPending();
    
    /**
-    * Start up the executor
+    * Start up the executor. This method must be implemented
+    * in an idempotent manner.
     */
    public void start();
    
    /**
-    * Perform a clean shutdown of the executor
+    * Perform a clean shutdown of the executor. This method must be implemented
+    * in an idempotent manner.
     */
    public void shutdown();
    

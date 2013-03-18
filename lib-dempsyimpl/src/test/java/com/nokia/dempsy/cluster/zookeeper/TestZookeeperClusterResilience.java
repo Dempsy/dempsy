@@ -607,7 +607,7 @@ public class TestZookeeperClusterResilience
          MyRankAgain.called.set(0);
          
          // poll until messages get through
-         assertTrue(poll(baseTimeoutMillis,anotherAdaptor,new Condition<AnotherAdaptor>() {
+         assertTrue(poll(2*baseTimeoutMillis,anotherAdaptor,new Condition<AnotherAdaptor>() {
             @Override
             public boolean conditionMet(AnotherAdaptor o) { o.dispatcher.dispatch(new MyMessageCountChild(-1)); return (MyRankAgain.called.get() > 10) && app.finalMessageCount.get() > 10; }
          }));

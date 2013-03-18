@@ -188,7 +188,7 @@ public class TestDempsyDynamicTopology extends DempsyTestBase
    }
 
    @Test
-   public void testMessageThrough() throws Throwable
+   public void testMultiDempsyMessageThrough() throws Throwable
    {
       runAllCombinations(
             new Checker()

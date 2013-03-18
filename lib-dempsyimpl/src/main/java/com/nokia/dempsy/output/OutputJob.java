@@ -16,9 +16,8 @@
 
 package com.nokia.dempsy.output;
 
-import java.util.Map;
-
 import org.quartz.Job;
+import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.slf4j.Logger;
@@ -40,9 +39,8 @@ public class OutputJob implements Job {
    */
   public void execute(JobExecutionContext context) throws JobExecutionException {
 
-    @SuppressWarnings("unchecked")
-    Map<String, OutputInvoker> dataMap = (Map<String, OutputInvoker>)context.getJobDetail().getJobDataMap();
-    OutputInvoker outputInvoker = dataMap.get(OutputQuartzHelper.OUTPUT_JOB_NAME);
+    JobDataMap dataMap = context.getJobDetail().getJobDataMap();
+    OutputInvoker outputInvoker = (OutputInvoker)dataMap.get(OutputQuartzHelper.OUTPUT_JOB_NAME);
 
     if (outputInvoker != null) {
       // execute MP's output method
