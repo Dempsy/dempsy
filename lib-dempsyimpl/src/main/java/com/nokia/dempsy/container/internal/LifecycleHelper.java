@@ -28,7 +28,6 @@ import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Passivation;
 import com.nokia.dempsy.container.ContainerException;
-import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
 /**
@@ -48,6 +47,8 @@ public class LifecycleHelper
    private Method outputMethod;
    private MethodHandle evictableMethod;
    private AnnotatedMethodInvoker invocationMethods;
+   
+   public enum Operation { handle, output };
 
    public LifecycleHelper(Object prototype) throws ContainerException
    {
@@ -139,11 +140,11 @@ public class LifecycleHelper
       }
    }
 
-   public String invokeDescription(MpContainer.Operation op, Object message)
+   public String invokeDescription(Operation op, Object message)
    {
       Method method = null;
       Class<?> messageClass = void.class;
-      if(op == MpContainer.Operation.output)
+      if(op == Operation.output)
          method = outputMethod;
       else
       {

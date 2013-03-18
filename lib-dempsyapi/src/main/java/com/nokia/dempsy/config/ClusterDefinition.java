@@ -52,7 +52,7 @@ public class ClusterDefinition
    private Object outputExecuter = null;
    private boolean adaptorIsDaemon = false;
    private KeySource<?> keySource = null;
-   private long evictionFrequency = 600;
+   private long evictionTimePeriod = 600;
    private TimeUnit evictionTimeUnit = TimeUnit.SECONDS;
    
    private ApplicationDefinition parent;
@@ -122,9 +122,7 @@ public class ClusterDefinition
     * returns OutputExecuter
     * @return OutputExecuter
     */
-   public Object getOutputExecuter() {
-      return outputExecuter;
-   }
+   public Object getOutputExecuter() { return outputExecuter; }
    
    /**
     * returns ClusterDefinition
@@ -171,14 +169,18 @@ public class ClusterDefinition
    public KeySource<?> getKeySource(){ return keySource; }
    public ClusterDefinition setKeySource(KeySource<?> keySource){ this.keySource = keySource; return this; }
 
-	public long getEvictionFrequency() {
-		return evictionFrequency;
-	}
+   @Deprecated
+   public long getEvictionFrequency() { return getEvictionTimePeriod(); }
 
-	public ClusterDefinition setEvictionFrequency(long evictionFrequency) {
-		this.evictionFrequency = evictionFrequency; return this;
-	}
-	
+   @Deprecated
+   public ClusterDefinition setEvictionFrequency(long evictionFrequency) { return setEvictionTimePeriod(evictionFrequency); }
+   
+   public long getEvictionTimePeriod() { return evictionTimePeriod; }
+
+   public ClusterDefinition setEvictionTimePeriod(long evictionTimePeriod) {
+      this.evictionTimePeriod = evictionTimePeriod; return this;
+   }
+   
 	public TimeUnit getEvictionTimeUnit() {
 		return evictionTimeUnit;
 	}

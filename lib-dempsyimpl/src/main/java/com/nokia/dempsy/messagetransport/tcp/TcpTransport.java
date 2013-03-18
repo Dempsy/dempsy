@@ -22,8 +22,10 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
+import java.util.Map;
 
+import com.nokia.dempsy.executor.DefaultDempsyExecutor;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
@@ -31,6 +33,10 @@ import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
+import com.nokia.dempsy.messagetransport.util.ForwardingSender;
+import com.nokia.dempsy.messagetransport.util.ForwardingSenderFactory;
+import com.nokia.dempsy.messagetransport.util.SenderConnection;
+import com.nokia.dempsy.messagetransport.util.ForwardedReceiver;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpTransport implements Transport
@@ -42,18 +48,31 @@ public class TcpTransport implements Transport
    private long socketWriteTimeoutMillis = 30000; 
    private long maxNumberOfQueuedOutbound = 10000;
    private TcpServer server = new TcpServer();
-   private ConcurrentHashMap<Destination,TcpSenderConnection> connections = new ConcurrentHashMap<Destination, TcpSenderConnection>();
+   private Map<Destination,SenderConnection> connections = new HashMap<Destination, SenderConnection>();
 
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector) throws MessageTransportException
+   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String desc) throws MessageTransportException
    {
-      return new TcpSenderFactory(connections,statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
+      return new TcpSenderFactory(connections,statsCollector, maxNumberOfQueuedOutbound, 
+            socketWriteTimeoutMillis, batchOutgoingMessages);
    }
 
    @Override
-   public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
+   public Receiver createInbound(DempsyExecutor executor, String desc) throws MessageTransportException
    {
-      TcpReceiver receiver = new TcpReceiver(server,executor,failFast);
+      boolean receiverShouldStopExecutor = false;
+      if (executor == null)
+      {
+         DefaultDempsyExecutor defexecutor = new DefaultDempsyExecutor();
+         defexecutor.setCoresFactor(1.0);
+         defexecutor.setAdditionalThreads(1);
+         defexecutor.setMaxNumberOfQueuedLimitedTasks(10000);
+         defexecutor.start();
+         executor = defexecutor;
+         receiverShouldStopExecutor = true;
+      }
+      
+      ForwardedReceiver receiver = new ForwardedReceiver(server,executor,failFast, receiverShouldStopExecutor);
       receiver.setOverflowHandler(overflowHandler);
       return receiver;
    }
@@ -67,8 +86,8 @@ public class TcpTransport implements Transport
    public void setFailFast(boolean failFast) { this.failFast = failFast; }
    
    /**
-    * <p>By default the {@link TcpSender} sends and flushes one message at a time. You can have
-    * any {@link TcpSender} that results from the {@link TcpSenderFactory} from this instance
+    * <p>By default the {@link ForwardingSender} sends and flushes one message at a time. You can have
+    * any {@link ForwardingSender} that results from the {@link ForwardingSenderFactory} from this instance
     * of the {@link TcpTransport} batch up all pending messages prior to flushing the output 
     * buffer.</p>
     * 
@@ -81,7 +100,7 @@ public class TcpTransport implements Transport
    }
 
    /**
-    * Because the {@link TcpSender} does a blocking write, this will set a timeout on the 
+    * Because the {@link ForwardingSender} does a blocking write, this will set a timeout on the 
     * blocking write. The timeout measurement begins with a 'flush' of the data and ends when
     * either the timeout expires or when the flush is completed.
     */
@@ -91,7 +110,7 @@ public class TcpTransport implements Transport
    }
    
    /**
-    * <p>The {@link TcpSender} sends data from a dedicated thread and reads from a queue. This will set
+    * <p>The {@link ForwardingSender} sends data from a dedicated thread and reads from a queue. This will set
     * the maximum number of pending sends. When the maximum number of pending sends is reached, the oldest
     * data will be discarded.</p>
     * 

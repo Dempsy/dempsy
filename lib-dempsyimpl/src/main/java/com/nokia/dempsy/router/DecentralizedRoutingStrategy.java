@@ -369,10 +369,13 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             if (destinationArr == null)
                throw new DempsyException("It appears the Outbound strategy for the message key " + 
                      SafeString.objectDescription(messageKey) + " is being used prior to initialization.");
-            int length = destinationArr.length;
+            final int length = destinationArr.length;
             if (length == 0)
                return null;
             int calculatedModValue = Math.abs(messageKey.hashCode()%length);
+            
+            // TODO: Make this faster by storing the Pairs in the destinationArr rather
+            // than the destinations
             return new Pair<Destination,Object>(destinationArr[calculatedModValue],new ShardInfo(calculatedModValue));
          }
 
@@ -420,13 +423,16 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
 
          private PersistentTask setupDestinations = new PersistentTask(logger,isRunning,dscheduler,resetDelay)
          {
+            @Override
+            public String toString() { return "setup or reset known destinations for Outbound from " + OutboundManager.this.clusterId + " to " + clusterId; } 
+
+            @Override
             public synchronized boolean execute()
             {
                try
                {
                   if (logger.isTraceEnabled())
-                     logger.trace("Resetting Outbound Strategy for cluster " + clusterId + 
-                           " from " + OutboundManager.this.clusterId + " in " + this);
+                     logger.trace("Resetting Outbound Strategy for cluster " + clusterId + " from " + OutboundManager.this.clusterId);
 
                   Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
                   Collection<String> emptyShards = new ArrayList<String>();
@@ -863,13 +869,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          // in an attempt to wait until whatever node just created this directory gets around to setting the 
          // Destination. For now we will assume if the directory exists, then the node exists.
          int curRegisteredNodesCount = nodeDirs.size();
-//         int curRegisteredNodesCount = 0;
-//         for (String subdir : nodeDirs)
-//         {
-//            Destination dest = (Destination)session.getData(msutils.getClusterNodesDir() + "/" + subdir,null);
-//            if (dest != null)
-//               curRegisteredNodesCount++;
-//         }
          return curRegisteredNodesCount < minNodeCount ? minNodeCount : curRegisteredNodesCount;
       }
       

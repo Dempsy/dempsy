@@ -14,7 +14,7 @@ import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.container.MpContainer;
+import com.nokia.dempsy.container.Container;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.monitoring.StatsCollector;
@@ -273,7 +273,7 @@ public class TestUtils
       return getNode(dempsyIndex,contexts).clusterDefinition.getMessageProcessorPrototype();
    }
    
-   public static MpContainer getContainer(int dempsyIndex, ClassPathXmlApplicationContext[] contexts)
+   public static Container getContainer(int dempsyIndex, ClassPathXmlApplicationContext[] contexts)
    {
       return getNode(dempsyIndex,contexts).getMpContainer();
    }

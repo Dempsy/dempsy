@@ -16,7 +16,7 @@
     <constructor-arg type="int" value="1" />
   </bean>
 
-  <bean id="receiver" class="com.nokia.dempsy.messagetransport.util.QueuingReceiver" destroy-method="shuttingDown">
+  <bean id="receiver" class="com.nokia.dempsy.messagetransport.util.QueuingReceiver">
      <property name="queue" ref="receiveBlockingQueue" />
   </bean>
    

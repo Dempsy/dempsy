@@ -53,13 +53,10 @@ import com.nokia.dempsy.container.internal.InstanceWrapper;
 import com.nokia.dempsy.container.internal.LifecycleHelper;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
-import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.monitoring.StatsCollector;
-import com.nokia.dempsy.output.OutputInvoker;
 import com.nokia.dempsy.router.RoutingStrategy;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
-import com.nokia.dempsy.serialization.java.JavaSerializer;
 import com.nokia.dempsy.util.RunningEventSwitch;
 
 /**
@@ -69,7 +66,7 @@ import com.nokia.dempsy.util.RunningEventSwitch;
  *  The container is simple in that it does no thread management. When it's called 
  *  it assumes that the transport has provided the thread that's needed 
  */
-public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener
+public class MpContainer implements Container, ContainerTestAccess
 {
    private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -83,7 +80,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    private StatsCollector statCollector;
 
    // default instance optionally replaced via dependency injection
-   private Serializer<Object> serializer = new JavaSerializer<Object>();
+   private Serializer<Object> serializer = null;
 
    // this is used to retrieve message keys
    private AnnotatedMethodInvoker keyMethods = new AnnotatedMethodInvoker(MessageKey.class);
@@ -112,7 +109,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    //----------------------------------------------------------------------------
    //  Configuration
    //----------------------------------------------------------------------------
-
+   @Override
    public void setPrototype(Object prototype) throws ContainerException
    {
       this.prototype = new LifecycleHelper(prototype);
@@ -126,67 +123,8 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    @Override
    public void setInboundStrategy(RoutingStrategy.Inbound strategyInbound) { this.strategyInbound = strategyInbound; }
    
-   /**
-    * Run any methods annotated PreInitilze on the MessageProcessor prototype
-    * @param prototype reference to MessageProcessor prototype
-    */
-   private void preInitializePrototype(Object prototype) {
-      for (Method method: prototype.getClass().getMethods()) {
-         if (method.isAnnotationPresent(com.nokia.dempsy.annotations.Start.class)) {
-            // if the start method takes a ClusterId or ClusterDefinition then pass it.
-            Class<?>[] parameterTypes = method.getParameterTypes();
-            boolean takesClusterId = false;
-            if (parameterTypes != null && parameterTypes.length == 1)
-            {
-               if (ClusterId.class.isAssignableFrom(parameterTypes[0]))
-                  takesClusterId = true;
-               else
-               {
-                  logger.error("The method \"" + method.getName() + "\" on " + SafeString.objectDescription(prototype) + 
-                        " is annotated with the @" + Start.class.getSimpleName() + " annotation but doesn't have the correct signature. " + 
-                        "It needs to either take no parameters or take a single " + ClusterId.class.getSimpleName() + " parameter."); 
-                  
-                  return; // return without invoking start.
-               }
-            }
-            else if (parameterTypes != null && parameterTypes.length > 1)
-            {
-               logger.error("The method \"" + method.getName() + "\" on " + SafeString.objectDescription(prototype) + 
-                     " is annotated with the @" + Start.class.getSimpleName() + " annotation but doesn't have the correct signature. " + 
-                     "It needs to either take no parameters or take a single " + ClusterId.class.getSimpleName() + " parameter."); 
-               return; // return without invoking start.
-            }
-            try {
-               if (takesClusterId)
-                  method.invoke(prototype, clusterId);
-               else
-                  method.invoke(prototype);
-               break;  // Only allow one such method, which is checked during validation
-            }catch(Exception e) {
-               logger.error(MarkerFactory.getMarker("FATAL"), "can't run MP initializer " + method.getName(), e);
-            }
-         }
-      }
-   }
-
-
-   public Object getPrototype()
-   {
-      return prototype == null ? null : prototype.getPrototype();
-   }
-
-   public LifecycleHelper getLifecycleHelper() {
-      return prototype;
-   }
-
-   public Map<Object,InstanceWrapper> getInstances() {
-      return instances;
-   }
-
-   public void setDispatcher(Dispatcher dispatcher)
-   {
-      this.dispatcher = dispatcher;
-   }
+   @Override
+   public void setDispatcher(Dispatcher dispatcher) { this.dispatcher = dispatcher; }
    
    public void setExecutor(DempsyExecutor executor)
    {
@@ -200,21 +138,13 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
     * environments will likely want to export stats to a centralized
     * monitor like Graphite or Ganglia.
     */
-   public void setStatCollector(StatsCollector collector)
-   {
-      this.statCollector = collector;
-   }
+   @Override
+   public void setStatCollector(StatsCollector collector) { this.statCollector = collector; }
 
-   /**
-    * Set the serializer.  This can be injected to change the serialization
-    * scheme, but is optional.  The default serializer uses Java Serialization.
-    * 
-    * @param serializer
-    */
+   @Override
    public void setSerializer(Serializer<Object> serializer) { this.serializer = serializer; }
 
-   public Serializer<Object> getSerializer() { return this.serializer; }
-   
+   @Override
    public void setKeySource(KeySource<?> keySource) { this.keySource = keySource; }
 
 
@@ -271,20 +201,23 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
     *  {@inheritDoc}
     */
    @Override
-   public void shuttingDown()
+   public void transportShuttingDown()  { doShutdown(); }
+
+   @Override
+   public void shutdown() { doShutdown(); }      
+   
+   private void doShutdown()
    {
-      isRunning.set(false);
-      shutdown();
-      // we don't care about the transport shutting down (currently)
-   }
+      if (isRunning.getAndSet(false))
+      {
+         shutdown();
 
-   public void shutdown()
-   {      
-      if (evictionScheduler != null)
-         evictionScheduler.shutdownNow();
+         if (evictionScheduler != null)
+            evictionScheduler.shutdownNow();
 
-      // the following will close up any output executor that might be running
-      setConcurrency(-1);
+         // the following will close up any output executor that might be running
+         setConcurrency(-1);
+      }
    }
 
 
@@ -292,18 +225,11 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    // Monitoring and Management
    //----------------------------------------------------------------------------
 
-   /**
-    *  Returns the number of message processors controlled by this manager.
-    */
-   public int getProcessorCount()
-   {
-      return instances.size();
-   }
-   
    final RunningEventSwitch expand = new RunningEventSwitch(isRunning);
    final RunningEventSwitch contract = new RunningEventSwitch(isRunning);
    final Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
    
+   // This method is only called from an anonymous runnable and it's gated by the RunningEventSwitch expand.
    private void runExpandKeyspace()
    {
       List<Future<Object>> futures = new ArrayList<Future<Object>>();
@@ -428,25 +354,28 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
    //----------------------------------------------------------------------------
    //  Test Hooks
    //----------------------------------------------------------------------------
+   @Override
+   public Dispatcher getDispatcher() { return dispatcher; }
 
-   protected Dispatcher getDispatcher() { return dispatcher; }
+   @Override
+   public StatsCollector getStatsCollector() { return statCollector; }
 
-   protected StatsCollector getStatsCollector() { return statCollector; }
-
-   /**
-    *  Returns the Message Processor that is associated with a given key,
-    *  <code>null</code> if there is no such MP. Does <em>not</em> create
-    *  a new MP.
-    *  <p>
-    *  <em>This method exists for testing; don't do anything stupid</em>
-    */
-   protected Object getMessageProcessor(Object key)
+   @Override
+   public Object getMessageProcessor(Object key)
    {
       InstanceWrapper wrapper = instances.get(key);
       return (wrapper != null) ? wrapper.ecnatsnIteg() : null;
    }
 
+   @Override
+   public Serializer<Object> getSerializer() { return this.serializer; }
 
+   @Override
+   public Object getPrototype() { return prototype == null ? null : prototype.getPrototype(); }
+
+   @Override
+   public int getProcessorCount() { return instances.size(); }
+   
    //----------------------------------------------------------------------------
    //  Internals
    //----------------------------------------------------------------------------
@@ -493,7 +422,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                }
                else
                {
-                  invokeOperation(instance, Operation.handle, message);
+                  invokeOperation(instance, LifecycleHelper.Operation.handle, message);
                   messageDispatchSuccessful = true;
                }
             }
@@ -656,15 +585,18 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       }
    }
 
-   public void startEvictionThread(long evictionFrequency, TimeUnit timeUnit) {
-      if (0 == evictionFrequency || null == timeUnit) {
-         logger.warn("Eviction Thread cannot start with zero frequency or null TimeUnit {} {}", evictionFrequency, timeUnit);
+   @Override
+   public void setEvictionCheckInterval(long evictionFrequencyMillis) {
+      if (evictionFrequencyMillis <= 0) 
+      {
+         logger.warn("Eviction Thread cannot start with zero or negative timeout");
          return;
       }
 
-      if (prototype != null && prototype.isEvictableSupported()) {
+      if (prototype != null && prototype.isEvictableSupported()) 
+      {
          evictionScheduler = Executors.newSingleThreadScheduledExecutor();
-         evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, evictionFrequency, evictionFrequency, timeUnit);
+         evictionScheduler.scheduleWithFixedDelay(new Runnable(){ public void run(){ evict(); }}, evictionFrequencyMillis, evictionFrequencyMillis, TimeUnit.MILLISECONDS);
       }
    }
 
@@ -756,7 +688,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                      try
                      {
                         if (isRunning.get() && !wrapper.isEvicted()) 
-                           invokeOperation(instance, Operation.output, null); 
+                           invokeOperation(instance, LifecycleHelper.Operation.output, null); 
                      }
                      finally 
                      {
@@ -979,20 +911,18 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       }
    }
 
-   public enum Operation { handle, output };
-
    /**
     * helper method to invoke an operation (handle a message or run output) handling all of hte
     * exceptions and forwarding any results.
     */
-   private void invokeOperation(Object instance, Operation op, Object message)
+   private void invokeOperation(Object instance, LifecycleHelper.Operation op, Object message)
    {
       if (instance != null) // possibly passivated ...
       {
          try
          {
             statCollector.messageDispatched(message);
-            Object result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message,statCollector);
+            Object result = op == LifecycleHelper.Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message,statCollector);
             statCollector.messageProcessed(message);
             if (result != null)
             {
@@ -1002,7 +932,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
          catch(ContainerException e)
          {
             logger.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " + 
-                  SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + SafeString.objectDescription(message)) : ""),e);
+                  SafeString.valueOf(prototype) + (op == LifecycleHelper.Operation.handle ? (" with " + SafeString.objectDescription(message)) : ""),e);
             statCollector.messageFailed(false);
          }
          // this is an exception thrown as a result of the reflected call having an illegal argument.
@@ -1034,10 +964,52 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   " due to an unknown exception.", e);
             statCollector.messageFailed(false);
 
-            if (op == Operation.handle)
+            if (op == LifecycleHelper.Operation.handle)
                throw e;
          }
       }
    }
 
+   /**
+    * Run any methods annotated PreInitilze on the MessageProcessor prototype
+    * @param prototype reference to MessageProcessor prototype
+    */
+   private void preInitializePrototype(Object prototype) {
+      for (Method method: prototype.getClass().getMethods()) {
+         if (method.isAnnotationPresent(com.nokia.dempsy.annotations.Start.class)) {
+            // if the start method takes a ClusterId or ClusterDefinition then pass it.
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            boolean takesClusterId = false;
+            if (parameterTypes != null && parameterTypes.length == 1)
+            {
+               if (ClusterId.class.isAssignableFrom(parameterTypes[0]))
+                  takesClusterId = true;
+               else
+               {
+                  logger.error("The method \"" + method.getName() + "\" on " + SafeString.objectDescription(prototype) + 
+                        " is annotated with the @" + Start.class.getSimpleName() + " annotation but doesn't have the correct signature. " + 
+                        "It needs to either take no parameters or take a single " + ClusterId.class.getSimpleName() + " parameter."); 
+                  
+                  return; // return without invoking start.
+               }
+            }
+            else if (parameterTypes != null && parameterTypes.length > 1)
+            {
+               logger.error("The method \"" + method.getName() + "\" on " + SafeString.objectDescription(prototype) + 
+                     " is annotated with the @" + Start.class.getSimpleName() + " annotation but doesn't have the correct signature. " + 
+                     "It needs to either take no parameters or take a single " + ClusterId.class.getSimpleName() + " parameter."); 
+               return; // return without invoking start.
+            }
+            try {
+               if (takesClusterId)
+                  method.invoke(prototype, clusterId);
+               else
+                  method.invoke(prototype);
+               break;  // Only allow one such method, which is checked during validation
+            }catch(Exception e) {
+               logger.error(MarkerFactory.getMarker("FATAL"), "can't run MP initializer " + method.getName(), e);
+            }
+         }
+      }
+   }
 }

@@ -16,7 +16,6 @@
 
 package com.nokia.dempsy.output;
 
-import java.text.ParseException;
 import java.util.concurrent.TimeUnit;
 
 import org.quartz.CronScheduleBuilder;
@@ -102,7 +101,7 @@ public class OutputQuartzHelper {
       TriggerBuilder<Trigger> cronTtriggerBuilder = TriggerBuilder.newTrigger();
       cronTtriggerBuilder.withSchedule(cronScheduleBuilder);
       cronTrigger = cronTtriggerBuilder.build();
-    } catch (ParseException pe) {
+    } catch (Exception pe) {
       logger.error("Error occurred while builiding the cronTrigger : " + pe.getMessage(), pe);
     }
     return cronTrigger;

@@ -31,6 +31,7 @@ import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.container.Container;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
@@ -99,7 +100,7 @@ public class Dempsy
             protected ClusterDefinition clusterDefinition;
             
             Router router = null;
-            private MpContainer container = null;
+            private Container container = null;
             RoutingStrategy.Inbound strategyInbound = null;
             List<Class<?>> acceptedMessageClasses = null;
             Receiver receiver = null;
@@ -149,7 +150,7 @@ public class Dempsy
                   Destination thisDestination = null;
                   if (messageProcessorPrototype != null && acceptedMessageClasses != null && acceptedMessageClasses.size() > 0)
                   {
-                     receiver = transport.createInbound(executor);
+                     receiver = transport.createInbound(executor,currentClusterId.toString());
                      receiver.setListener(container);
                      receiver.start();
                      thisDestination = receiver.getDestination();
@@ -166,7 +167,8 @@ public class Dempsy
                         receiver.setStatsCollector(statsCollector);
                   }
                   
-                  senderFactory = transport.createOutbound(executor, statsCollector);
+                  String senderFactoryDescription = currentClusterId.toString() + (thisDestination == null ? "" : ("[" + thisDestination + "]")); 
+                  senderFactory = transport.createOutbound(executor, statsCollector,senderFactoryDescription);
                   router.setDefaultSenderFactory(senderFactory);
 
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();
@@ -193,7 +195,7 @@ public class Dempsy
                     }
                  }
                   
-                  container.startEvictionThread(Cluster.this.clusterDefinition.getEvictionFrequency(), Cluster.this.clusterDefinition.getEvictionTimeUnit());
+                  container.setEvictionCheckInterval(Cluster.this.clusterDefinition.getEvictionTimeUnit().toMillis(Cluster.this.clusterDefinition.getEvictionTimePeriod()));
                   
                }
                catch(RuntimeException e) { throw e; }
@@ -202,7 +204,7 @@ public class Dempsy
             
             public StatsCollector getStatsCollector() { return statsCollector; }
             
-            public MpContainer getMpContainer() { return container; }
+            public Container getMpContainer() { return container; }
             
             public Receiver getReceiver() { return receiver; }
 
@@ -312,17 +314,10 @@ public class Dempsy
             }
          }
          
-         List<Thread> toJoin = new ArrayList<Thread>(appClusters.size());
-         
          for (Cluster cluster : appClusters)
          {
             cluster.start();
             clusterStarted = true;
-         }
-         
-         for (Thread t : toJoin)
-         {
-            try { t.join(); } catch(InterruptedException e) { /* just continue */ }
          }
          
          if (failedStart != null)

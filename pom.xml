@@ -31,11 +31,10 @@
 
   <properties>
     <spring.version>3.0.6.RELEASE</spring.version>
-    <guice.version>3.0</guice.version>
     <metrics.version>2.0.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <mockito.version>1.9.0</mockito.version>
-    <quartz.version>2.0.1</quartz.version>
+    <quartz.version>2.1.6</quartz.version>
     <kryo.version>2.20</kryo.version>
   </properties>
 
@@ -103,11 +102,6 @@
         <artifactId>lib-dempsyspring</artifactId>
         <version>${project.version}</version>
       </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyguice</artifactId>
-        <version>${project.version}</version>
-      </dependency>
 
       <!-- Third party -->
       <dependency>
@@ -167,11 +161,6 @@
         <groupId>org.springframework</groupId>
         <artifactId>spring-context</artifactId>
         <version>${spring.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.inject</groupId>
-        <artifactId>guice</artifactId>
-        <version>${guice.version}</version>
       </dependency>
       <dependency>
         <groupId>com.yammer.metrics</groupId>

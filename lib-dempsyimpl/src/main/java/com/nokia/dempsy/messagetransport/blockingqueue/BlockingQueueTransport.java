@@ -38,7 +38,7 @@ public class BlockingQueueTransport implements Transport
    private OverflowHandler overflowHandler = null;
 
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector)
+   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String desc)
    {
       BlockingQueueSenderFactory ret = new BlockingQueueSenderFactory(statsCollector);
       if (overflowHandler != null)
@@ -47,7 +47,7 @@ public class BlockingQueueTransport implements Transport
    }
 
    @Override
-   public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
+   public Receiver createInbound(DempsyExecutor executor, String desc) throws MessageTransportException
    {
       BlockingQueueAdaptor ret = new BlockingQueueAdaptor(executor);
       ret.setQueue(getNewQueue());

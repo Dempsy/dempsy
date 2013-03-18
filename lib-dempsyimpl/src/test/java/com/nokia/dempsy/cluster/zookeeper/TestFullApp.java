@@ -48,6 +48,7 @@ import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServe
 import com.nokia.dempsy.config.ApplicationDefinition;
 import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.container.ContainerTestAccess;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.router.CurrentClusterCheck;
@@ -194,24 +195,16 @@ public class TestFullApp
          ZooKeeper killer = new ZooKeeper(System.getProperty("zk_connect"),5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, null);
          killer.close(); // tricks the server into expiring the other session
 
-//         // we should be getting failures now ... 
-//         // but it's possible that it can reconnect prior to actually seeing an error so if this 
-//         //   fails frequently we need to remove this test.
-//         assertTrue(poll(baseTimeoutMillis, app, new Condition()
-//         {
-//            @Override
-//            public boolean conditionMet(Object o)
-//            {
-//               return collector.getMessageFailedCount() > 1;
-//            }
-//         }));
+         // we should be getting failures now ... 
+         // but it's possible that it can reconnect prior to actually seeing an error so  
+         //   unfortunately we can't poll for it.
 
          //... and then recover.
 
          // get the MyMp prototype
          cluster = dempsy.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
          node = cluster.getNodes().get(0);
-         final MyMp prototype = (MyMp)node.getMpContainer().getPrototype();
+         final MyMp prototype = (MyMp)((ContainerTestAccess)node.getMpContainer()).getPrototype();
 
          // so let's see where we are
          final long interimMessageCount = prototype.myMpReceived.get();
@@ -352,7 +345,7 @@ public class TestFullApp
          // get the MyMp prototype
          cluster = dempsy2.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
          node = cluster.getNodes().get(0);
-         final MyMp prototype = (MyMp)node.getMpContainer().getPrototype();
+         final MyMp prototype = (MyMp)((ContainerTestAccess)node.getMpContainer()).getPrototype();
 
          // so let's see where we are
          final long interimMessageCount = prototype.myMpReceived.get();
@@ -545,7 +538,7 @@ public class TestFullApp
          // we are going to create another node of the MyMp via a test hack
          cluster = spare.dempsy.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
          node = cluster.getNodes().get(0);
-         final MyMp spareprototype = (MyMp)node.getMpContainer().getPrototype();
+         final MyMp spareprototype = (MyMp)((ContainerTestAccess)node.getMpContainer()).getPrototype();
 
          // If we're elastic then we will get data to the spare. So we need to test for that.
          if (elastic)
@@ -577,7 +570,7 @@ public class TestFullApp
          
          // now bring down the original
          DempsyHolder original = dempsys.get(spare.clusterid);
-         final MyMp originalprototype = (MyMp)original.dempsy.getCluster(spare.clusterid).getNodes().get(0).getMpContainer().getPrototype();
+         final MyMp originalprototype = (MyMp)((ContainerTestAccess)original.dempsy.getCluster(spare.clusterid).getNodes().get(0).getMpContainer()).getPrototype();
          final long originalNumMessages = originalprototype.myMpReceived.get();
          
          // makes sure the message count is still advancing

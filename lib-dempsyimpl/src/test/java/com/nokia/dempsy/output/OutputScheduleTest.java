@@ -33,7 +33,7 @@ public class OutputScheduleTest {
   
    
   }
-
+  
   /**
    * Test relative schedule.
    *
@@ -43,9 +43,16 @@ public class OutputScheduleTest {
   public void testRelativeSchedule() throws Exception {
     RelativeOutputSchedule relativeOutputSchedule = new RelativeOutputSchedule(1, TimeUnit.SECONDS);
     relativeOutputSchedule.setOutputInvoker(mpContainerMock);
-    relativeOutputSchedule.start();
-    Thread.sleep(1000);
-    verify(mpContainerMock, atLeast(1)).invokeOutput();
+    try
+    {
+       relativeOutputSchedule.start();
+       Thread.sleep(1000);
+       verify(mpContainerMock, atLeast(1)).invokeOutput();
+    }
+    finally
+    {
+       relativeOutputSchedule.stop();
+    }
   }
 
   /**
@@ -58,10 +65,17 @@ public class OutputScheduleTest {
     RelativeOutputSchedule relativeOutputSchedule = new RelativeOutputSchedule(1, TimeUnit.SECONDS);
     relativeOutputSchedule.setConcurrency(5);
     relativeOutputSchedule.setOutputInvoker(mpContainerMock);
-    relativeOutputSchedule.start();
-    Thread.sleep(1000);
-    verify(mpContainerMock, atLeast(1)).invokeOutput();
-    verify(mpContainerMock, atLeast(1)).setConcurrency(5);
+    try
+    {
+       relativeOutputSchedule.start();
+       Thread.sleep(1000);
+       verify(mpContainerMock, atLeast(1)).invokeOutput();
+       verify(mpContainerMock, atLeast(1)).setConcurrency(5);
+    }
+    finally
+    {
+       relativeOutputSchedule.stop();
+    }
   }
 
   /**
@@ -73,9 +87,16 @@ public class OutputScheduleTest {
   public void testCronSchedule() throws Exception {
     CronOutputSchedule cronOutputSchedule = new CronOutputSchedule("0/1 * * * * ?");
     cronOutputSchedule.setOutputInvoker(mpContainerMock);
-    cronOutputSchedule.start();
-    Thread.sleep(1000);
-    verify(mpContainerMock, atLeast(1)).invokeOutput();
+    try
+    {
+       cronOutputSchedule.start();
+       Thread.sleep(1000);
+       verify(mpContainerMock, atLeast(1)).invokeOutput();
+    }
+    finally
+    {
+       cronOutputSchedule.stop();
+    }
   }
   
   /**
@@ -88,10 +109,17 @@ public class OutputScheduleTest {
     CronOutputSchedule cronOutputSchedule = new CronOutputSchedule("0/1 * * * * ?");
     cronOutputSchedule.setConcurrency(5);
     cronOutputSchedule.setOutputInvoker(mpContainerMock);
-    cronOutputSchedule.start();
-    Thread.sleep(1000);
-    verify(mpContainerMock, atLeast(1)).invokeOutput();
-    verify(mpContainerMock, atLeast(1)).setConcurrency(5);
+    try
+    {
+       cronOutputSchedule.start();
+       Thread.sleep(1000);
+       verify(mpContainerMock, atLeast(1)).invokeOutput();
+       verify(mpContainerMock, atLeast(1)).setConcurrency(5);
+    }
+    finally
+    {
+       cronOutputSchedule.stop();
+    }
   }
 
 }

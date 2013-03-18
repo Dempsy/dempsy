@@ -20,181 +20,59 @@ import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MarkerFactory;
 
 import com.nokia.dempsy.messagetransport.MessageTransportException;
+import com.nokia.dempsy.messagetransport.util.ReceiverIndexedDestination;
+import com.nokia.dempsy.messagetransport.util.Server;
 
-public class TcpServer
+public class TcpServer extends Server
 {
    private static Logger logger = LoggerFactory.getLogger(TcpServer.class);
-   protected TcpDestination destination;
    
    private ServerSocket serverSocket;
-   private Thread serverThread;
-   private AtomicBoolean stopMe = new AtomicBoolean(false);
-   
-   private Set<ClientThread> clientThreads = new HashSet<ClientThread>();
-   
-   private Object eventLock = new Object();
-   private volatile boolean eventSignaled = false;
-   
    protected boolean useLocalhost = false;
    protected int port = -1;
    
-   public static final int maxReceivers = 256;
-   
-   protected TcpReceiver[] receivers = new TcpReceiver[maxReceivers];
-   protected int numReceivers = 0;
-   
-   protected synchronized void start() throws MessageTransportException
+   private final static class ClientHolder
    {
-      if (isStarted())
-         return;
+      private final Socket clientSocket;
+      private final DataInputStream dataInputStream;
       
-      // this sets the destination instance
-      getDestination();
-      
-      // we need to call bind here in case the getDestination didn't do it
-      //  (which it wont if the port is not ephemeral)
-      bind();
-      
-      // in case this is a restart, we want to reset the stopMe value.
-      stopMe.set(false);
-      
-      serverThread = new Thread(new Runnable()
+      private ClientHolder(Socket clientSocket) throws IOException
       {
-         @Override
-         public void run()
-         {
-            while (!stopMe.get())
-            {
-               try
-               {
-                  // Wait for an event one of the registered channels
-                  Socket clientSocket = serverSocket.accept();
-
-                  // at the point we're committed to adding a new ClientThread to the set.
-                  //  So we need to lock it.
-                  synchronized(clientThreads)
-                  {
-                     // unless we're done.
-                     if (!stopMe.get())
-                     {
-                        // This should come from a thread pool
-                        ClientThread clientThread = makeNewClientThread(clientSocket);
-                        Thread thread = new Thread(clientThread, "Client Handler for " + getClientDescription(clientSocket));
-                        thread.setDaemon(true);
-                        thread.start();
-
-                        clientThreads.add(clientThread);
-                     }
-                  }
-
-               }
-               // This can happen if I rip the socket out from underneath the accept call. 
-               // Because accept doesn't exit with a Thread.interrupt call so closing the server
-               // socket from another thread is the only way to make this happen.
-               catch (SocketException se)
-               {
-                  // however, if we didn't explicitly stop the server, then there's another problem
-                  if (!stopMe.get()) 
-                     logger.error("Socket error on the server managing " + destination, se);
-               }
-               catch (Throwable th)
-               {
-                  logger.error("Major error on the server managing " + destination, th);
-               }
-            }
-
-            // we're leaving so signal
-            synchronized(eventLock)
-            {
-               eventSignaled = true;
-               eventLock.notifyAll();
-            }
-         }
-      }, "Server for " + destination);
-      
-      serverThread.start();
-    }
+         this.clientSocket = clientSocket;
+         this.dataInputStream = new DataInputStream( new BufferedInputStream( clientSocket.getInputStream() ) );
+      }
+   }
    
-   protected synchronized void stop()
+   public TcpServer() { super(logger,true); }
+
+   @Override
+   protected final ClientHolder accept() throws IOException { 
+      return new ClientHolder(serverSocket.accept()); }
+   
+   @Override
+   protected final void closeServer()
    {
-      stopMe.set(true);
-      
-      if (serverThread != null)
-         serverThread.interrupt();
-      serverThread = null;
-      
       // this is a hack because the thread interrupt doesn't wake 
       // up an accept call
       closeQuietly(serverSocket);
       serverSocket = null;
-      
-      synchronized(clientThreads)
-      {
-         for (ClientThread ct : clientThreads)
-            ct.stop();
-         
-         clientThreads.clear();
-      }
-      
-      // now wait until the event is signaled
-      synchronized(eventLock)
-      {
-         if (!eventSignaled)
-         {
-            try { eventLock.wait(500); } catch(InterruptedException e) { }// wait for 1/2 second
-         }
-         
-         if (!eventSignaled)
-            logger.warn("Couldn't release the socket accept for " + destination);
-      }
-      
    }
    
-   protected synchronized TcpDestination register(TcpReceiver receiver) throws MessageTransportException
+   @Override
+   protected final TcpDestination getAndBindDestination() throws MessageTransportException
    {
-      TcpDestination nextDestination = makeNextDestination();
-      this.receivers[nextDestination.sequence] = receiver;
-      start();
-      numReceivers++;
-      return nextDestination;
-   }
-   
-   protected synchronized void unregister(TcpDestination destination)
-   {
-      numReceivers--;
-      if (numReceivers == 0)
-         stop();
+      TcpDestination destination = TcpDestination.createNewDestinationForThisHost(port, useLocalhost);
 
-      this.receivers[destination.sequence] = null;
-   }
-   
-   protected synchronized boolean isStarted()
-   {
-      return serverThread != null;
-   }
-   
-   protected synchronized TcpDestination getDestination() throws MessageTransportException
-   {
-      if (destination == null)
-         destination = TcpDestination.createNewDestinationForThisHost(port, useLocalhost);
-
-      if (destination.isEphemeral())
-         bind();
+      bind(destination);
       
       return destination;
    }
@@ -222,7 +100,7 @@ public class TcpServer
     */
    public void setPort(int port) { this.port = port; }
    
-   protected void bind() throws MessageTransportException
+   protected final void bind(TcpDestination destination) throws MessageTransportException
    {
       if (serverSocket == null || !serverSocket.isBound())
       {
@@ -242,155 +120,49 @@ public class TcpServer
       }
    }
    
-   private synchronized TcpDestination makeNextDestination() throws MessageTransportException
+   @Override
+   protected final ReceiverIndexedDestination makeDestination(ReceiverIndexedDestination modelDestination, int receiverIndex)
    {
-      // find the next open place for a receiver.
-      int receiverIndex = -1;
-      for (receiverIndex = 0; receiverIndex < maxReceivers; receiverIndex++)
-      {
-         if (receivers[receiverIndex] == null)
-            break;
-      }
-      
-      if (receiverIndex >= maxReceivers)
-         throw new MessageTransportException("Maximum number of receiver reached.");
-      
-      return new TcpDestination(getDestination(),receiverIndex);
+      return new TcpDestination((TcpDestination)modelDestination,receiverIndex);
    }
    
-   // protected to be overridden in tests
-   protected ClientThread makeNewClientThread(Socket clientSocket) throws IOException
+   @Override
+   protected final void closeClient(Object acceptReturn, boolean fromClientThread)
    {
-      return new ClientThread(clientSocket);
+      ClientHolder holder = (ClientHolder)acceptReturn;
+      IOUtils.closeQuietly(holder.dataInputStream);
+      closeQuietly(holder);
    }
    
-   protected class ClientThread implements Runnable
+   @Override
+   protected final void readNextMessage(Object acceptReturn, ReceivedMessage messageToFill) throws EOFException, IOException
    {
-      private Socket clientSocket;
-      private DataInputStream dataInputStream;
-      private Thread thisThread;
-      protected AtomicBoolean stopClient = new AtomicBoolean(false);
+      final ClientHolder h = (ClientHolder)acceptReturn;
+      final DataInputStream dataInputStream = h.dataInputStream;
+
+      messageToFill.receiverIndex = dataInputStream.read(); // read a single unsigned byte
+
+      int size = dataInputStream.readShort();
+      if (size == -1)
+         size = dataInputStream.readInt();
+      if (size < 0)
+         // assume we have a corrupt channel
+         throw new IOException("Read negative message size. Assuming a corrupt channel.");
       
-      protected ClientThread(Socket clientSocket) throws IOException
-      { 
-          this.clientSocket = clientSocket;
-          this.dataInputStream = new DataInputStream( new BufferedInputStream( clientSocket.getInputStream() ) );
-      }
+      // always create a new buffer since the old buffer will be on a queue
+      messageToFill.message = new byte[size];
       
-      @Override
-      public void run()
-      {
-         thisThread = Thread.currentThread();
-         InputStream inputStream = null;
-         Exception clientIsApparentlyGone = null;
-         
-         try
-         {
-            while (!stopMe.get() && !stopClient.get())
-            {
-               try
-               {
-                  int receiverToCall = -1;
-                  byte[] messageBytes = null;
-                  try
-                  {
-                     receiverToCall = dataInputStream.read(); // read a single unsigned byte
-                     int size = dataInputStream.readShort();
-                     if (size == -1)
-                        size = dataInputStream.readInt();
-                     if (size < 0)
-                        // assume we have a corrupt channel
-                        throw new IOException("Read negative message size. Assuming a corrupt channel.");
-                        
-                     messageBytes = new byte[ size ];
-                     dataInputStream.readFully( messageBytes );
-                  }
-                  // either a problem with the socket OR a thread interruption (InterruptedIOException)
-                  catch (EOFException eof)
-                  {
-                      clientIsApparentlyGone = eof;
-                      messageBytes = null; // no message if exception
-                  }
-                  catch (IOException ioe)
-                  {
-                      clientIsApparentlyGone = ioe;
-                      messageBytes = null; // no message if exception
-                  }
-
-                  if (messageBytes != null)
-                  {
-                     TcpReceiver receiver = receivers[receiverToCall];
-                     if (receiver == null)  // it's possible we're shutting down
-                     {
-                        logger.error("Message received for a mising receiver. Unless we're shutting down, this shouldn't happen.");
-                        stopClient.set(true);
-                     }
-                     else
-                        receiver.handleMessage(messageBytes);
-                  }
-                  else if (clientIsApparentlyGone == null)
-                  {
-                     if (logger.isDebugEnabled())
-                        logger.debug("Received a null message on destination " + destination);
-                     
-                     // if we read no bytes we should just consider ourselves lucky that we
-                     // escaped a blocking read.
-                     stopClient.set(true); // leave the loop.
-                  }
-
-                  if (clientIsApparentlyGone != null)
-                  {
-                     String logmessage = "Client " + getClientDescription(clientSocket) + 
-                     " has apparently disconnected from sending messages to " + 
-                     destination ;
-                     if (logger.isDebugEnabled())
-                        logger.debug(logmessage, clientIsApparentlyGone);
-                     // assume the client socket is dead.
-
-                     stopClient.set(true); // leave the loop.
-                     clientIsApparentlyGone = null;
-                  }
-               }
-               catch (Throwable th)
-               {
-                  logger.error(MarkerFactory.getMarker("FATAL"), "Completely unexpected error. This problem should be addressed because we should never make it here in the code.", th);
-                  stopClient.set(true); // leave the loop, close up.
-               }
-            } // end while loop
-         }
-         catch (Throwable ue)
-         {
-            logger.error("Completely unexpected error", ue);
-         }
-         finally
-         {
-            if (inputStream != null) IOUtils.closeQuietly(inputStream);
-            closeQuietly(clientSocket);
-
-            // remove me from the client list.
-            synchronized(clientThreads)
-            {
-               clientThreads.remove(this);
-            }
-         }
-      }
-      
-      public void stop()
-      {
-         stopClient.set(true);
-         if (thisThread != null)
-            thisThread.interrupt();
-         
-         // close this SOB
-         closeQuietly(clientSocket);
-      }
+      dataInputStream.readFully(messageToFill.message, 0, size);
+      messageToFill.messageSize = size;
    }
-   
-   private static String getClientDescription(Socket socket)
+
+   @Override
+   protected String getClientDescription(Object acceptReturn)
    {
+      ClientHolder h = (ClientHolder)acceptReturn;
       try
       {
-         return "(" + socket.getInetAddress().getHostAddress() + ":" + socket.getPort() + ")";
+         return "(" + h.clientSocket.getInetAddress().getHostAddress() + ":" + h.clientSocket.getPort() + ")";
       }
       catch (Throwable th)
       {
@@ -398,15 +170,16 @@ public class TcpServer
       }
    }
    
-   private void closeQuietly(Socket socket) 
+   private void closeQuietly(ClientHolder holder) 
    {
+      Socket socket = holder.clientSocket;
       if (socket != null)
       {
          try { socket.close(); } 
          catch (IOException ioe)
          {
             if (logger.isDebugEnabled())
-               logger.debug("close socket failed for " + destination, ioe); 
+               logger.debug("close socket failed for " + getClientDescription(holder), ioe); 
          }
       }
    }
@@ -419,7 +192,7 @@ public class TcpServer
          catch (IOException ioe)
          {
             if (logger.isDebugEnabled())
-               logger.debug("close socket failed for " + destination, ioe); 
+               logger.debug("close of server socket failed for " + getThisDestination(), ioe); 
          }
       }
    }
