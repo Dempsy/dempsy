@@ -8,7 +8,7 @@
 	<bean name="transport"
 		class="com.nokia.dempsy.messagetransport.tcp.TcpTransport" >
 		<property name="overflowHandler" >
-		  <bean class="com.nokia.dempsy.TestDempsy$OverflowHandler" />
+		  <bean class="com.nokia.dempsy.DempsyTestBase$OverflowHandler" />
 		</property>
     </bean>
 </beans>

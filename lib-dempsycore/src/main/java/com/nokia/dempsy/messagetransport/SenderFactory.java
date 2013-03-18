@@ -25,12 +25,20 @@ public interface SenderFactory
    public Sender getSender(Destination destination) throws MessageTransportException;
    
    /**
-    * stop() must be implemented such that it doesn't throw an exception no matter what
+    * <p>shutdown() must be implemented such that it doesn't throw an exception no matter what
     * but forces the stopping of any underlying resources that require stopping. Stop
-    * is expected to stop Senders that it created.
+    * is expected to stop Senders that it created.</p>
     * 
-    * NOTE: stop() must be idempotent.
+    * <p>Dempsy will call this method on shutdown of the container.</p>
+    * 
+    * <p>NOTE: shutdown() must be idempotent.</p>
     */
-   public void stop();
+   public void shutdown();
+   
+   /**
+    * Dempsy will invoke this method when the destination in question will no longer
+    * have messages sent to it. Any queued messages need appropriate disposition.
+    */
+   public void stopDestination(Destination destination);
    
 }

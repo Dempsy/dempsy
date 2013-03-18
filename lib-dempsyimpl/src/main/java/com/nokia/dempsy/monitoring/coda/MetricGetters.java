@@ -15,6 +15,7 @@ public interface MetricGetters
    long getMessagesSentCount();
    long getMessagesReceivedCount();
    double getPreInstantiationDuration();
+   long getPreInstantiationCount();
    double getOutputInvokeDuration();
    double getEvictionDuration();
    long getMessageProcessorsCreated();

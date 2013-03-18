@@ -80,7 +80,7 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    }
    
    @Override
-   public synchronized void stop()
+   public synchronized void shutdown()
    {
       synchronized(this)
       {

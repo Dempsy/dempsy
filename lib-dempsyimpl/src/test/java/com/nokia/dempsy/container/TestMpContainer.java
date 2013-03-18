@@ -615,6 +615,9 @@ public class TestMpContainer
       public FixedInbound set(Object... keys) { validKeys.set(new HashSet<Object>(Arrays.asList(keys))); return this; }
       
       public FixedInbound clear() { validKeys.set(new HashSet<Object>(Arrays.asList())); return this; }
+
+      @Override
+      public boolean isInitialized() { return true; }
    }
    
    static class FixedKeySource implements KeySource<String>

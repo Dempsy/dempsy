@@ -136,16 +136,8 @@ public class ClusterDefinition
       return this;
    }
 
-   protected ClusterDefinition setParentApplicationDefinition(ApplicationDefinition applicationDef) throws DempsyException
-   {
-      if (clusterName == null)
-         throw new DempsyException("You must set the 'clusterName' when configuring a dempsy cluster for the application: " + String.valueOf(applicationDef));
-      clusterId = new ClusterId(applicationDef.getApplicationName(),clusterName); 
-      parent = applicationDef;
-      return this;
-   }
-   
-   public ApplicationDefinition getParentApplicationDefinition() { return parent; }
+   public void setApplicationDefinition(ApplicationDefinition appDef) { parent = appDef; }
+   public ApplicationDefinition getApplicationDefinition() { return parent; }
    
    public Object getSerializer() { return serializer == null ? parent.getSerializer() : serializer; }
    public ClusterDefinition setSerializer(Object serializer) { this.serializer = serializer; return this; }
@@ -218,13 +210,16 @@ public class ClusterDefinition
                SafeString.valueOf(clusterName) + ". You need to initialize the parent ApplicationDefinition prior to validating");
       if (clusterName == null)
          throw new DempsyException("You must set the 'clusterName' when configuring a dempsy cluster for the application.");
+      
+      // set the clusterId. validate must be called prior to this being used.
+      clusterId = new ClusterId(parent.getApplicationName(),clusterName); 
+
       if (messageProcessorPrototype == null && adaptor == null)
          throw new DempsyException("A dempsy cluster must contain either an 'adaptor' or a message processor prototype. " +
                clusterId + " doesn't appear to be configure with either.");
       if (messageProcessorPrototype != null && adaptor != null)
          throw new DempsyException("A dempsy cluster must contain either an 'adaptor' or a message processor prototype but not both. " +
                clusterId + " appears to be configured with both.");
-
       
       if (messageProcessorPrototype != null)
       {

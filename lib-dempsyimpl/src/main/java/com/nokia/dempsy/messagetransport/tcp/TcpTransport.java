@@ -22,8 +22,10 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.nokia.dempsy.executor.DempsyExecutor;
+import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
@@ -39,17 +41,19 @@ public class TcpTransport implements Transport
    private boolean batchOutgoingMessages = false;
    private long socketWriteTimeoutMillis = 30000; 
    private long maxNumberOfQueuedOutbound = 10000;
+   private TcpServer server = new TcpServer();
+   private ConcurrentHashMap<Destination,TcpSenderConnection> connections = new ConcurrentHashMap<Destination, TcpSenderConnection>();
 
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector) throws MessageTransportException
    {
-      return new TcpSenderFactory(statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
+      return new TcpSenderFactory(connections,statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
    }
 
    @Override
    public Receiver createInbound(DempsyExecutor executor) throws MessageTransportException
    {
-      TcpReceiver receiver = new TcpReceiver(executor,failFast);
+      TcpReceiver receiver = new TcpReceiver(server,executor,failFast);
       receiver.setOverflowHandler(overflowHandler);
       return receiver;
    }

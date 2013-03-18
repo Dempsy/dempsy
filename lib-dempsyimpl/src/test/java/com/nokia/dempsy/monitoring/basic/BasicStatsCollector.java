@@ -43,6 +43,7 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    private final AtomicLong mpsDeleted = new AtomicLong();
    
    private final AtomicLong preInstantiationDuration = new AtomicLong();
+   private final AtomicLong preInstantiationCount = new AtomicLong();
    private final AtomicLong mpHandleMessageDuration = new AtomicLong();
    private final AtomicLong outputInvokeDuration = new AtomicLong();
    private final AtomicLong evictionPassDuration = new AtomicLong();
@@ -57,10 +58,20 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    {
       private long startTime = System.currentTimeMillis();
       private AtomicLong toIncrement;
+      private AtomicLong countToIncrement;
       
-      private BasicTimerContext(AtomicLong toIncrement) { this.toIncrement = toIncrement; }
+      private BasicTimerContext(AtomicLong toIncrement, AtomicLong countToIncrement)
+      {
+         this.toIncrement = toIncrement;
+         this.countToIncrement = countToIncrement;
+      }
       
-      public void stop() { toIncrement.addAndGet(System.currentTimeMillis() - startTime); }
+      public void stop()
+      {
+         toIncrement.addAndGet(System.currentTimeMillis() - startTime);
+         if (countToIncrement != null)
+            countToIncrement.incrementAndGet();
+      }
    }
    
    @Override
@@ -171,6 +182,8 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
       // no-op
 
    }
+   
+   public long getMessagesUnset() { return messagesUnsent.get(); }
 
    @Override
    public double getPreInstantiationDuration()
@@ -179,15 +192,21 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    }
    
    @Override
+   public long getPreInstantiationCount()
+   {
+      return preInstantiationCount.get();
+   }
+   
+   @Override
    public StatsCollector.TimerContext preInstantiationStarted()
    {
-      return new BasicTimerContext(preInstantiationDuration);
+      return new BasicTimerContext(preInstantiationDuration,preInstantiationCount);
    }
    
    @Override
    public StatsCollector.TimerContext handleMessageStarted()
    {
-      return new BasicTimerContext(mpHandleMessageDuration);
+      return new BasicTimerContext(mpHandleMessageDuration,null);
    }
    
    @Override
@@ -199,12 +218,12 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    @Override
    public StatsCollector.TimerContext outputInvokeStarted()
    {
-      return new BasicTimerContext(outputInvokeDuration);
+      return new BasicTimerContext(outputInvokeDuration,null);
    }
    
 	@Override
 	public StatsCollector.TimerContext evictionPassStarted() {
-	    return new BasicTimerContext(evictionPassDuration);
+	    return new BasicTimerContext(evictionPassDuration,null);
 	}
 
 	@Override

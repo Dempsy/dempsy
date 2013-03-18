@@ -1,8 +1,6 @@
 package com.nokia.dempsy;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import org.junit.Ignore;
 
@@ -13,7 +11,6 @@ import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.router.Router;
-import com.nokia.dempsy.router.RoutingStrategy;
 
 @Ignore
 public class TestUtils
@@ -63,14 +60,18 @@ public class TestUtils
       Dempsy.Application.Cluster.Node node = cluster.getNodes().get(0); // currently there is one node per cluster.
       return node.statsCollector;
    }
-   
-
 
    /**
-    * This allows tests to wait until a Dempsy application is completely up before
+    * <p>This allows tests to wait until a Dempsy application is completely up before
     * executing commands. Given the asynchronous nature of relationships between stages
     * of an application, often a test will need to wait until an entire application has
-    * been initialized.
+    * been initialized.</p>
+    * 
+    * <p>In the case of Dynamic Topology the Outbound's are not created until messages 
+    * are flowing through and therefore there is still a possibility that the Outbound's
+    * wont see this Dempsy instance immediately. Therefore, you cannot use this method
+    * and then expect this Dempsy to immediately be the destination for messages
+    * sent in some other part of the application.</p>
     */
    public static boolean waitForClustersToBeInitialized(long timeoutMillis, Dempsy dempsy) throws Throwable
    {
@@ -78,56 +79,25 @@ public class TestUtils
       if (!poll(timeoutMillis, dempsy,new Condition<Dempsy>() { @Override public boolean conditionMet(Dempsy dempsy) { return dempsy.isRunning(); } }))
          return false;
       
-      try
+      return poll(timeoutMillis, dempsy, new Condition<Dempsy>()
       {
-         final List<ClusterId> clusters = new ArrayList<ClusterId>();
-         List<Router> routers = new ArrayList<Router>();
-         
-         // find out all of the ClusterIds
-         for (Dempsy.Application app : dempsy.applications)
+         @Override
+         public boolean conditionMet(Dempsy dempsy)
          {
-            for (Dempsy.Application.Cluster cluster : app.appClusters)
+            for (Dempsy.Application app : dempsy.applications.values())
             {
-               if (!cluster.clusterDefinition.isRouteAdaptorType())
-                  clusters.add(new ClusterId(cluster.clusterDefinition.getClusterId()));
-               
-               List<Dempsy.Application.Cluster.Node> nodes = cluster.getNodes();
-               for (Dempsy.Application.Cluster.Node node : nodes)
-                  routers.add(node.retouRteg());
-            }
-         }
-         
-         // This is a bit of a guess here for testing purposes but we're going to assume that 
-         // we're initialized when each router except one (the last one wont have anywhere 
-         // to route messages to) has at least one initialized Outbound
-         boolean ret = poll(timeoutMillis, routers, new Condition<List<Router>>()
-         {
-            @Override
-            public boolean conditionMet(List<Router> routers)
-            {
-               int numInitializedRoutersNeeded = routers.size() - 1;
-               int numInitializedRouters = 0;
-               for (Router r : routers)
+               for (Dempsy.Application.Cluster cl : app.appClusters)
                {
-                  Set<RoutingStrategy.Outbound> outbounds  = r.dnuobtuOteg();
-                  for (RoutingStrategy.Outbound o : outbounds)
+                  for (Dempsy.Application.Cluster.Node cd : cl.getNodes())
                   {
-                     if (!o.completeInitialization())
+                     if (cd.strategyInbound != null && !cd.strategyInbound.isInitialized())
                         return false;
                   }
-                  if (outbounds != null && outbounds.size() > 0)
-                     numInitializedRouters++;
                }
-               return numInitializedRouters >= numInitializedRoutersNeeded;
             }
-         });
-         
-         return ret;
-      }
-      catch (ClusterInfoException e)
-      {
-         return false;
-      }
+            return true;
+         }
+      });
    }
    
    public static ClusterInfoSession getSession(Dempsy.Application.Cluster c)
@@ -141,4 +111,26 @@ public class TestUtils
       
       return node.router.getClusterSession();
    }
+   
+   public static Dempsy.Application.Cluster.Node getNode(Dempsy dempsy, String appName, String clusterName)
+   {
+      Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId(appName,clusterName));
+      return cluster.getNodes().get(0); // currently there is one node per cluster.
+   }
+   
+   public static Object getMp(Dempsy dempsy, String appName, String clusterName)
+   {
+      return getNode(dempsy,appName,clusterName).clusterDefinition.getMessageProcessorPrototype();
+   }
+
+   public static Adaptor getAdaptor(Dempsy dempsy, String appName, String clusterName)
+   {
+      return getNode(dempsy,appName,clusterName).clusterDefinition.getAdaptor();
+   }
+   
+   public static Router getRouter(Dempsy dempsy, String appName, String clusterName)
+   {
+      return getNode(dempsy,appName,clusterName).router;
+   }
+
 }
