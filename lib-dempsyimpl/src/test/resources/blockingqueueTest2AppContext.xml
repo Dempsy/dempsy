@@ -30,7 +30,7 @@
      <property name="queue" ref="receiveBlockingQueue" />
   </bean>
    
-  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="stop">
+  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="shutdown">
      <property name="queue" ref="transportBlockingQueue" />
      <property name="listener" ref="receiver" />
      <property name="overflowHandler" ref="testOverflowHandler" />
@@ -42,7 +42,7 @@
   
   <bean id="testOverflowHandler" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyOverflowHandler" />
   
-  <bean id="senderFactory" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueSenderFactory" destroy-method="stop" >
+  <bean id="senderFactory" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueSenderFactory" destroy-method="shutdown" >
     <constructor-arg ref="statsCollector" />
   </bean>
 </beans>

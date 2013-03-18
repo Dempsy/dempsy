@@ -70,7 +70,7 @@ public class ClusterId
     * 
     * @return: "/" + this.getApplicationName() + "/" + this.getMpClusterName()
     */
-   public String asPath() { return "/" + this.getApplicationName() + "/" + this.getMpClusterName(); }
+//   public String asPath() { return "/" + this.getApplicationName() + "/" + this.getMpClusterName(); }
    
    @Override
    public String toString()

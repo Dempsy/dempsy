@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.config.ClusterId;
+import com.nokia.dempsy.router.microshard.MicroShardUtils;
 
 public class TestZookeeperClusterImpl
 {
@@ -78,7 +79,7 @@ public class TestZookeeperClusterImpl
 
          try
          {
-            session.getSubdirs(new ClusterId("test","test").asPath(), null);
+            session.getSubdirs(new MicroShardUtils(new ClusterId("test","test")).getShardsDir(), null);
          }
          catch(Exception e)
          {

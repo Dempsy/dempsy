@@ -54,10 +54,15 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
 
    // ====================================================================
    // This section pertains to the management of the tree information
-   private Map<String,Entry> entries = new HashMap<String,Entry>();
-   {
-      entries.put("/", new Entry()); /// initially add the root.
+   private static Map<String,Entry> entries = new HashMap<String,Entry>();
+   static {
+      reset();
    }
+   
+   public static Map<String,Entry> getEntries() { return entries; }
+   
+   /// initially add the root. 
+   public static void reset() { entries.clear(); entries.put("/", new Entry()); }
 
    private static class Entry
    {
@@ -68,36 +73,57 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       private Map<String,AtomicLong> childSequences = new HashMap<String, AtomicLong>();
 
       private volatile boolean inProcess = false;
-      private volatile boolean recursionAttempt = false;
       private Lock processLock = new ReentrantLock();
+      
+      @Override
+      public String toString()
+      {
+         return children.toString() + " " + SafeString.valueOf(data.get());
+      }
+      
+      private Set<ClusterInfoWatcher> gatherWatchers(boolean node, boolean child)
+      {
+         synchronized(LocalClusterSessionFactory.class)
+         {
+            Set<ClusterInfoWatcher> twatchers = new HashSet<ClusterInfoWatcher>();
+            if (node)
+            {
+               twatchers.addAll(nodeWatchers);
+               nodeWatchers = new HashSet<ClusterInfoWatcher>();
+            }
+            if (child)
+            {
+               twatchers.addAll(childWatchers);
+               childWatchers = new HashSet<ClusterInfoWatcher>();
+            }
+            return twatchers;
+         }
+      }
+      
+      private Set<ClusterInfoWatcher> toCallQueue = new HashSet<ClusterInfoWatcher>();
       
       private void callWatchers(boolean node, boolean child)
       {
-         Set<ClusterInfoWatcher> twatchers = new HashSet<ClusterInfoWatcher>();
-         if (node)
-         {
-            twatchers.addAll(nodeWatchers);
-            nodeWatchers = new HashSet<ClusterInfoWatcher>();
-         }
-         if (child)
-         {
-            twatchers.addAll(childWatchers);
-            childWatchers = new HashSet<ClusterInfoWatcher>();
-         }
+         Set<ClusterInfoWatcher> twatchers = gatherWatchers(node,child);
          
          processLock.lock();
          try {
             if (inProcess)
             {
-               recursionAttempt = true;
+               toCallQueue.addAll(twatchers);
                return;
             }
 
             do
             {
-               recursionAttempt = false;
                inProcess = true;
-
+               
+               // remove everything in twatchers from the toCallQueue
+               // since we are about to call them all. If some end up back
+               // on here then when we're done the toCallQueue will not be empty
+               // and we'll run it again.
+               toCallQueue.removeAll(twatchers);
+               
                for(ClusterInfoWatcher watcher: twatchers)
                {
                   try
@@ -114,7 +140,12 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
                      processLock.lock();
                   }
                }
-            } while (recursionAttempt);
+               
+               // now we need to reset twatchers to any new toCallQueue
+               twatchers = new HashSet<ClusterInfoWatcher>();
+               twatchers.addAll(toCallQueue); // in case we run again
+               
+            } while (toCallQueue.size() > 0);
 
             inProcess = false;
          }
@@ -131,7 +162,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return f.getParent();
    }
    
-   private Entry get(String absolutePath, ClusterInfoWatcher watcher, boolean nodeWatch) throws ClusterInfoException.NoNodeException
+   private static Entry get(String absolutePath, ClusterInfoWatcher watcher, boolean nodeWatch) throws ClusterInfoException.NoNodeException
    {
       Entry ret;
       ret = entries.get(absolutePath);
@@ -147,20 +178,20 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return ret;
    }
    
-   private synchronized Object ogetData(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
+   private static synchronized Object ogetData(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
    {
       Entry e = get(path,watcher,true);
       return e.data.get();
    }
    
-   private synchronized void osetData(String path, Object data) throws ClusterInfoException
+   private static synchronized void osetData(String path, Object data) throws ClusterInfoException
    {
       Entry e = get(path,null,true);
       e.data.set(data);
       e.callWatchers(true,false);
    }
    
-   private synchronized boolean oexists(String path,ClusterInfoWatcher watcher)
+   private static synchronized boolean oexists(String path,ClusterInfoWatcher watcher)
    {
       Entry e = entries.get(path);
       if (e != null && watcher != null)
@@ -168,15 +199,15 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return e != null;
    }
    
-   private String omkdir(String path, DirMode mode) throws ClusterInfoException
+   private static String omkdir(String path, DirMode mode) throws ClusterInfoException
    {
       Entry parent = null;
       String pathToUse;
       
-      synchronized(this)
+      synchronized(LocalClusterSessionFactory.class)
       {
          if (oexists(path,null))
-            return path;
+            return null;
 
          String parentPath = parent(path);
 
@@ -197,7 +228,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
          }
 
          pathToUse = seq >= 0 ? (path + seq) : path;
-
+         
          entries.put(pathToUse, new Entry());
          // find the relative path
          int lastSlash = pathToUse.lastIndexOf('/');
@@ -209,14 +240,14 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       return pathToUse;
    }
    
-   private void ormdir(String path) throws ClusterInfoException {   ormdir(path,true);  }
+   private static void ormdir(String path) throws ClusterInfoException {   ormdir(path,true);  }
    
-   private void ormdir(String path, boolean notifyWatchers) throws ClusterInfoException
+   private static void ormdir(String path, boolean notifyWatchers) throws ClusterInfoException
    {
       Entry ths;
       Entry parent = null;
       
-      synchronized(this)
+      synchronized(LocalClusterSessionFactory.class)
       {
          ths = entries.get(path);
          if (ths == null)
@@ -238,7 +269,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
          ths.callWatchers(true, true);
    }
    
-   private synchronized Collection<String> ogetSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
+   private static synchronized Collection<String> ogetSubdirs(String path, ClusterInfoWatcher watcher) throws ClusterInfoException
    {
       Entry e = get(path,watcher,false);
       Collection<String>ret = new ArrayList<String>(e.children.size());
@@ -333,6 +364,18 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
             localEphemeralDirs.clear();
          }
          currentSessions.remove(this);
+         
+         synchronized(currentSessions)
+         {
+            if (currentSessions.size() == 0)
+            {
+               synchronized(LocalClusterSessionFactory.class)
+               {
+                  entries.clear();
+                  entries.put("/", new Entry()); /// initially add the root.
+               }
+            }
+         }
       }
       
       

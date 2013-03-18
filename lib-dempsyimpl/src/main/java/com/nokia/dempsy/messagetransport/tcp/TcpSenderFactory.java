@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
@@ -30,32 +31,36 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpSenderFactory implements SenderFactory
 {
-   private volatile boolean isStopped = false;
+   // referenced only while the monitor is held on senders
+   private boolean isStopped = false;
    protected StatsCollector statsCollector = null;
    private Map<Destination,TcpSender> senders = new HashMap<Destination, TcpSender>();
+   private ConcurrentHashMap<Destination,TcpSenderConnection> connections = null;
    
    protected long socketWriteTimeoutMillis;
    protected boolean batchOutgoingMessages;
    protected long maxNumberOfQueuedOutbound;
    
-   protected TcpSenderFactory(StatsCollector statsCollector, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
+   protected TcpSenderFactory(ConcurrentHashMap<Destination,TcpSenderConnection> connections, StatsCollector statsCollector,
+         long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
    {
       this.statsCollector = statsCollector;
       this.socketWriteTimeoutMillis = socketWriteTimeoutMillis;
       this.batchOutgoingMessages = batchOutgoingMessages;
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
+      this.connections = connections;
    }
 
    @Override
    public Sender getSender(Destination destination) throws MessageTransportException
    {
-      if (isStopped == true)
-         throw new MessageTransportException("getSender called for the destination " + SafeString.valueOf(destination) + 
-               " on a stopped " + SafeString.valueOfClass(this));
-      
       TcpSender sender;
       synchronized(senders)
       {
+         if (isStopped == true)
+            throw new MessageTransportException("getSender called for the destination " + SafeString.valueOf(destination) + 
+                  " on a stopped " + SafeString.valueOfClass(this));
+         
          sender = senders.get(destination);
          if (sender == null)
          {
@@ -67,12 +72,21 @@ public class TcpSenderFactory implements SenderFactory
    }
    
    @Override
-   public void stop() 
+   public void stopDestination(Destination destination)
    {
-      isStopped = true;
+      TcpSender sender;
+      synchronized (senders) { sender = senders.remove(destination); }
+      if (sender != null)
+         sender.stop();
+   }
+   
+   @Override
+   public void shutdown() 
+   {
       List<TcpSender> scol = new ArrayList<TcpSender>();
       synchronized(senders)
       {
+         isStopped = true;
          scol.addAll(senders.values());
          senders.clear();
       }
@@ -86,7 +100,11 @@ public class TcpSenderFactory implements SenderFactory
     */
    protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
    {
-      return new TcpSender( (TcpDestination)destination, statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages );
+      TcpDestination baseDestination = destination.baseDestination();
+      TcpSenderConnection tmpCon = new TcpSenderConnection(baseDestination,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
+      TcpSenderConnection connection = this.connections.putIfAbsent(baseDestination, tmpCon);
+      if (connection == null) connection = tmpCon;
+      return new TcpSender(connection, (TcpDestination)destination, statsCollector);
    }
 
 }

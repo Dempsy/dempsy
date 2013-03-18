@@ -261,7 +261,11 @@ public class TestDefaultSerializer
          public void preRegister(Kryo kryo)
          {
             kryo.setRegistrationRequired(true);
-            
+         }
+
+         @Override
+         public void postRegister(Kryo kryo)
+         {
             @SuppressWarnings("unchecked")
             FieldSerializer<MockClass> mockClassSer = (FieldSerializer<MockClass>)kryo.getSerializer(MockClass.class);
             mockClassSer.setFieldsCanBeNull(false);
@@ -269,11 +273,7 @@ public class TestDefaultSerializer
             FieldSerializer<Mock2> mock2Ser = (FieldSerializer<Mock2>)kryo.getSerializer(MockClass.class);
             mock2Ser.setFixedFieldTypes(true);
             mock2Ser.setFieldsCanBeNull(false);
-         }
 
-         @Override
-         public void postRegister(Kryo kryo)
-         {
             com.esotericsoftware.kryo.Registration reg = kryo.getRegistration(UUID.class);
             reg.setSerializer(uuidSerializer);
          }

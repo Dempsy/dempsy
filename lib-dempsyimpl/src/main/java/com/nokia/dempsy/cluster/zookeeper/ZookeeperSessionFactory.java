@@ -30,6 +30,9 @@ public class ZookeeperSessionFactory implements ClusterInfoSessionFactory
    private String connectString;
    private int sessionTimeout;
    
+   private boolean singletonSession = false;
+   private ZookeeperSession singleton = null;
+   
    public ZookeeperSessionFactory(String connectString, int sessionTimeout)
    {
       this.connectString = connectString;
@@ -44,7 +47,18 @@ public class ZookeeperSessionFactory implements ClusterInfoSessionFactory
       // create a new zookeeper instance
       try
       {
-         ret = new ZookeeperSession(connectString,sessionTimeout);
+         if (singletonSession)
+         {
+            synchronized(this)
+            {
+               if (singleton == null)
+                  singleton = new ZookeeperSession(connectString,sessionTimeout);
+            }
+            ret = singleton;
+         }
+         else
+            ret = new ZookeeperSession(connectString,sessionTimeout);
+         
       }
       catch (IOException ioe)
       {
@@ -55,6 +69,11 @@ public class ZookeeperSessionFactory implements ClusterInfoSessionFactory
       }
       
       return ret;
+   }
+   
+   public void setUseSingletonSession(boolean useSingletonSession)
+   {
+      singletonSession = useSingletonSession;
    }
    
 }

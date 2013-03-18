@@ -865,7 +865,7 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
 
    // This method MUST NOT THROW
    public void outputPass() {
-      if (!prototype.isOutputSupported())
+      if (!prototype.isOutputSupported() || !isRunning)
          return;
 
       // take a snapshot of the current container state.

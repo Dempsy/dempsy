@@ -68,9 +68,30 @@ public class Dempsy
       public class Cluster
       {
          /**
-          * A Node is essentially an {@link MpContainer} with all of the attending infrastructure.
+          * <p>A Node is essentially an {@link MpContainer} with all of the attending infrastructure.
           * Currently a Node is instantiated within the Dempsy orchestrator as a one to one with the
-          * {@link Cluster}.
+          * {@link Cluster}. The following things are important to keep in mind:</p>
+          * 
+          * <li>There is an {@link MpContainer} local to each Node</li>
+          * <li>There is a single {@link ClusterInfoSessionFactory} for all of the Node's in this 
+          * {@link Dempsy} instance.</li>
+          * <li>There is a unique call to the {@link ClusterInfoSessionFactory}'s createSession method
+          * for each Node. For zookeeper, this means there is a separate ZooKeeper client for each Node.
+          * This may change in the future.</li>
+          * <li>There is a single {@link Transport} instance for ALL Nodes in this Dempsy instance</li>
+          * <li>There is a separate call to the {@link Transport}'s createInbound for each Node in order
+          * to obtain the {@link Receiver}.</li>
+          * <li>By default, there is one executor for ALL Node's running in a Dempsy instance. This is 
+          * configurable by setting a separate instance per {@link ClusterDefinition} in the 
+          * {@link ApplicationDefinition}. This can be done using a factory in the DI injection 
+          * container configuration or using a prototype bean scope.</li>
+          * <li>There is an individual call to StatsCollectorFactory.createStatsCollector on the
+          * StatsCollectorFactory for each Node.</li>
+          * <li>There is a {@link Router} instance local to each Node</li>
+          * <li>The {@link RoutingStrategy} defaults to the same instance for ALL Node's but can be set
+          * on a per-Node bases using the {@link ClusterDefinition}.</li>
+          * <li>There is a unique call to the RoutingStrategy's createInbound to obtain a
+          * {@link RoutingStrategy.Inbound} instance for each Node.</li>
           */
          public class Node
          {
@@ -88,6 +109,9 @@ public class Dempsy
             @SuppressWarnings("unchecked")
             private void start() throws DempsyException
             {
+               if (logger.isTraceEnabled())
+                   logger.trace("Starting node for " + clusterDefinition.getClusterId());
+
                try
                {
                   DempsyExecutor executor = (DempsyExecutor)clusterDefinition.getExecutor(); // this can be null
@@ -95,8 +119,7 @@ public class Dempsy
                      executor.start();
                   ClusterInfoSession clusterSession = clusterSessionFactory.createSession();
                   ClusterId currentClusterId = clusterDefinition.getClusterId();
-                  router = new Router(clusterDefinition.getParentApplicationDefinition());
-                  router.setCurrentCluster(currentClusterId);
+                  router = new Router(clusterDefinition);
                   router.setClusterSession(clusterSession);
                   // get the executor if one is set
                   
@@ -148,7 +171,7 @@ public class Dempsy
                      strategyInbound = strategy.createInbound(clusterSession,currentClusterId,acceptedMessageClasses, thisDestination,container);
                   
                   // this can fail because of down cluster manager server ... but it should eventually recover.
-                  try { router.initialize(); }
+                  try { router.start(); }
                   catch (ClusterInfoException e)
                   {
                      logger.warn("Strategy failed to initialize. Continuing anyway. The cluster manager issue will be resolved automatically.",e);
@@ -177,9 +200,12 @@ public class Dempsy
 
             public void stop()
             {
+               if (logger.isTraceEnabled())
+                   logger.trace("Stopping node for " + clusterDefinition.getClusterId());
+
                if (receiver != null) 
                {
-                  try { receiver.stop(); receiver = null; }
+                  try { receiver.shutdown(); receiver = null; }
                   catch (Throwable th)
                   {
                      logger.error("Error stoping the reciever " + SafeString.objectDescription(receiver) + 
@@ -209,7 +235,6 @@ public class Dempsy
             // Only called from tests
             public Router retouRteg() { return router; }
 
-            
          } // end Node definition
          
          private List<Node> nodes = new ArrayList<Node>(1);
@@ -268,6 +293,9 @@ public class Dempsy
        */
       public boolean start() throws DempsyException
       {
+         if (logger.isTraceEnabled())
+             logger.trace("Starting application for " + applicationDefinition.getApplicationName());
+            
          failedStart = null;
          boolean clusterStarted = false;
          
@@ -334,6 +362,9 @@ public class Dempsy
       
       public void stop()
       {
+         if (logger.isTraceEnabled())
+             logger.trace("Stopping application for " + applicationDefinition.getApplicationName());
+
          // first stop all of the adaptor threads
          for(AdaptorThread adaptorThread : adaptorThreads)
             adaptorThread.stop();
@@ -382,7 +413,8 @@ public class Dempsy
    }
 
    private List<ApplicationDefinition> applicationDefinitions = null;
-   protected List<Application> applications = null;
+   private List<ClusterDefinition> clusterDefinitions = null;
+   protected Map<String,Application> applications = null;
    private CurrentClusterCheck clusterCheck = null;
    protected ClusterInfoSessionFactory clusterSessionFactory = null;
    private RoutingStrategy defaultRoutingStrategy = null;
@@ -408,16 +440,43 @@ public class Dempsy
       this.applicationDefinitions = applicationDefinitions;
    }
    
+   /**
+    * This is meant to be autowired by type.
+    */
+   public void setClusterDefinitions(List<ClusterDefinition> clusterDefinitions)
+   {
+      this.clusterDefinitions = clusterDefinitions;
+   }
+   
+   private Application setupApplicationAndDefinition(ApplicationDefinition appDef) throws DempsyException
+   {
+      Application app = new Application(appDef);
+      applications.put(appDef.getApplicationName(), app);
+
+      // set the default routing strategy if there isn't one already set.
+      if (appDef.getRoutingStrategy() == null)
+         appDef.setRoutingStrategy(defaultRoutingStrategy);
+
+      if (appDef.getSerializer() == null)
+         appDef.setSerializer(defaultSerializer);
+
+      if (appDef.getStatsCollectorFactory() == null)
+         appDef.setStatsCollectorFactory(defaultStatsCollectorFactory);
+
+      return app;
+   }
+   
    public synchronized void start() throws DempsyException
    {
       if (isRunning())
          throw new DempsyException("The Dempsy application " + applicationDefinitions + " has already been started." );
       
-      if (applicationDefinitions == null || applicationDefinitions.size() == 0)
+      if ((applicationDefinitions == null || applicationDefinitions.size() == 0) && 
+            (clusterDefinitions == null || clusterDefinitions.size() == 0))
          throw new DempsyException("Cannot start this application because there are no ApplicationDefinitions");
       
       if (clusterSessionFactory == null)
-         throw new DempsyException("Cannot start this application because there was no ClusterFactory implementaiton set.");
+         throw new DempsyException("Cannot start this application because there was no ClusterInfoSessionFactory implementaiton set.");
       
       if (clusterCheck == null)
          throw new DempsyException("Cannot start this application because there's no way to tell which cluster to start. Make sure the appropriate " + 
@@ -437,36 +496,65 @@ public class Dempsy
     
       try
       {
-         applications = new ArrayList<Application>(applicationDefinitions.size()); 
-         for(ApplicationDefinition appDef: this.applicationDefinitions)
+         applications = new HashMap<String,Application>();
+         
+         if (applicationDefinitions != null)
          {
-            appDef.initialize();
-            if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
+            for(ApplicationDefinition appDef: this.applicationDefinitions)
             {
-               Application app = new Application(appDef);
-
-               // set the default routing strategy if there isn't one already set.
-               if (appDef.getRoutingStrategy() == null)
-                  appDef.setRoutingStrategy(defaultRoutingStrategy);
-
-               if (appDef.getSerializer() == null)
-                  appDef.setSerializer(defaultSerializer);
-
-               if (appDef.getStatsCollectorFactory() == null)
-                  appDef.setStatsCollectorFactory(defaultStatsCollectorFactory);
-
-               applications.add(app);
+               Application app = applications.get(appDef.getApplicationName());
+               if (app == null)
+               {
+                  if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
+                     app = setupApplicationAndDefinition(appDef);
+               }
+               else
+                  throw new DempsyException("You cannot have two instances of an ApplicationDefinition for the same application. " +
+                        "You appear to have two different ApplicationDefinitions for " + SafeString.valueOf(appDef));
             }
          }
-
+         
+         if (clusterDefinitions != null)
+         {
+            for(ClusterDefinition clusterDef: this.clusterDefinitions)
+            {
+               ApplicationDefinition appDef = clusterDef.getApplicationDefinition();
+               if (appDef == null)
+                  throw new DempsyException("The dynamic cluster defnition " + SafeString.valueOf(clusterDef) + 
+                        " requires a reference to an ApplicationDefinition but none was provided." + 
+                        " Please make sure the ApplicationDefinition for this cluster.");
+               
+               appDef.addDynamicClusterDefinition(clusterDef);
+               
+               if (clusterCheck.isThisNodePartOfApplication(appDef.getApplicationName()))
+               {
+                  Application app = applications.get(appDef.getApplicationName());
+                  
+                  if (app == null)
+                     setupApplicationAndDefinition(appDef);
+                  else
+                  {
+                     // verify this is the exact same instance of the appDef
+                     if (app.applicationDefinition != appDef)
+                        throw new DempsyException("You cannot have two instances of an ApplicationDefinition for the same application. " +
+                              "You appear to have two different ApplicationDefinitions for " + SafeString.valueOf(appDef) + 
+                              ". One is referenced in the ClusterDefinition " + SafeString.valueOf(clusterDef));
+                  }
+                  
+               }
+            }
+         }
+         
+         for (Application app : applications.values())
+            app.applicationDefinition.initialize();
+         
          boolean clusterStarted = false;
-         for (Application app : applications)
+         for (Application app : applications.values())
             clusterStarted = app.start();
 
          if(!clusterStarted)
-         {
-            throw new DempsyException("Cannot start this application because cluster defination was not found.");
-         }
+            throw new DempsyException("Cannot start this application because cluster definition was not found.");
+
          // if we got to here we can assume we're started
          synchronized(isRunningEvent) { isRunning = true; }
       }
@@ -483,7 +571,7 @@ public class Dempsy
    {
       try
       {
-         for(Application app : applications)
+         for(Application app : applications.values())
             app.stop();
       }
       finally
@@ -539,6 +627,10 @@ public class Dempsy
     */
    public boolean waitToBeStopped(long timeInMillis) throws InterruptedException
    {
+      boolean traceEnabled = logger.isTraceEnabled();
+      if (traceEnabled)
+         logger.trace("Waiting for Dempsy to stop.");
+
       synchronized(isRunningEvent)
       {
          while (isRunning)
@@ -548,8 +640,13 @@ public class Dempsy
             else
                isRunningEvent.wait(timeInMillis);
          }
+
+         if (traceEnabled)
+            logger.trace("Dempsy is stopped.");
+
          return !isRunning();
       }
+
    }
    
    protected static List<Class<?>> getAcceptedMessages(ClusterDefinition clusterDef)

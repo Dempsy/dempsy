@@ -5,7 +5,7 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-   <bean name="adaptor" class="com.nokia.dempsy.TestDempsy$TestAdaptor" />
+   <bean name="adaptor" class="com.nokia.dempsy.DempsyTestBase$TestAdaptor" />
    
    <bean class="com.nokia.dempsy.config.ApplicationDefinition">
       <constructor-arg name="applicationName" value="test-app" />
@@ -18,7 +18,7 @@
             <bean class="com.nokia.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster1" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+                  <bean class="com.nokia.dempsy.DempsyTestBase$TestMp" />
                </property>
                <property name="outputExecuter">
                   <bean class="com.nokia.dempsy.output.RelativeOutputSchedule">
@@ -31,7 +31,7 @@
             <bean class="com.nokia.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster2" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+                  <bean class="com.nokia.dempsy.DempsyTestBase$TestMp" />
                </property>
                <property name="outputExecuter">
                   <bean class="com.nokia.dempsy.output.CronOutputSchedule">

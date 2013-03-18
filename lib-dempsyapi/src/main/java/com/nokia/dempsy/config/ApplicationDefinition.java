@@ -87,6 +87,7 @@ import com.nokia.dempsy.internal.util.SafeString;
 public class ApplicationDefinition
 {
    private List<ClusterDefinition> clusterDefinitions = new ArrayList<ClusterDefinition>();
+   private List<ClusterDefinition> dynamicClusterDefinitions = new ArrayList<ClusterDefinition>();
    private String applicationName = null;
    private boolean isInitialized = false;
    private Object serializer = null;
@@ -144,7 +145,15 @@ public class ApplicationDefinition
       isInitialized = false;
       return this;
    }
+
+   public ApplicationDefinition addDynamicClusterDefinition(ClusterDefinition... clusterDefinitions)
+   {
+      this.dynamicClusterDefinitions.addAll(Arrays.asList(clusterDefinitions));
+      isInitialized = false;
+      return this;
+   }
    
+
    /**
     * Get the currently overridden serializer for this {@link ApplicationDefinition}
     */
@@ -222,8 +231,14 @@ public class ApplicationDefinition
             if (clusterDef == null)
                throw new DempsyException("The application definition for \"" + applicationName + "\" has a null ClusterDefinition.");
 
-            clusterDef.setParentApplicationDefinition(this);
+            if (clusterDef.getApplicationDefinition() != null)
+               throw new DempsyException("Do not set the ApplicationDefinition on ClusterDefinitions that are already defined within an ApplicationDefinition as was done with " +
+                     SafeString.valueOf(clusterDef));
+            clusterDef.setApplicationDefinition(this);
          }
+         
+         // dump the dynamicClusterDefinitions into the clusterDef
+         clusterDefinitions.addAll(dynamicClusterDefinitions);
       
          isInitialized = true;
          validate();
@@ -258,18 +273,20 @@ public class ApplicationDefinition
          throw new DempsyException("The application \"" + SafeString.valueOf(applicationName) + "\" doesn't have any clusters defined.");
       
       Set<ClusterId> clusterNames = new HashSet<ClusterId>();
-         
+      
       for (ClusterDefinition clusterDef : clusterDefinitions)
       {
          if (clusterDef == null)
             throw new DempsyException("The application definition for \"" + applicationName + "\" has a null ClusterDefinition.");
          
+         // This needs to be done prior to accessing getClusterId since the validate actually sets the clusterId
+         // as a side effect. This should probably be moved to an initialize.
+         clusterDef.validate();
+
          if (clusterNames.contains(clusterDef.getClusterId()))
             throw new DempsyException("The application definition for \"" + applicationName + "\" has two cluster definitions with the name \"" + clusterDef.getClusterId().getMpClusterName() + "\"");
          
          clusterNames.add(clusterDef.getClusterId());
-         
-         clusterDef.validate();
       }
    }
    

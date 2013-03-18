@@ -77,6 +77,8 @@ public class FullApplication
       public int getValue() { return value; }
       
       public long getCount() { return count; }
+      
+      public void hitMe() { }
    }
 
    public class MyAdaptor implements Adaptor
@@ -85,6 +87,7 @@ public class FullApplication
       private Random random = new Random();
       private AtomicBoolean stop = new AtomicBoolean(false);
       private boolean isStopped = true;
+      private Thread runningThread = null;
       
       @Override
       public void setDispatcher(Dispatcher dispatcher){ this.dispatcher = dispatcher; }
@@ -101,6 +104,7 @@ public class FullApplication
          try
          {
             stop.set(false);
+            synchronized(this) { runningThread = Thread.currentThread(); }
             while (!stop.get())
                dispatcher.dispatch(new MyMessage(random.nextInt(maxValue)));
          }
@@ -108,6 +112,7 @@ public class FullApplication
          {
             synchronized(this)
             {
+               runningThread = null;
                isStopped = true;
                this.notifyAll();
             }
@@ -121,6 +126,9 @@ public class FullApplication
          
          synchronized(this)
          {
+            if (runningThread != null)
+               runningThread.interrupt();
+               
             while (!isStopped)
             {
                try { this.wait(); } catch (InterruptedException e) {e.printStackTrace(System.out);}
@@ -166,6 +174,9 @@ public class FullApplication
       {
          count[messageCount.getValue()] = messageCount.getCount();
          finalMessageCount.incrementAndGet();
+         messageCount.hitMe();
+//         if (messageCount.getClass().getSimpleName().indexOf("MyMessageCountChild") >= 0)
+//            System.out.println("Got One In Main!");
       }
       
       @Start
@@ -181,11 +192,16 @@ public class FullApplication
       }
    }
    
+   public ApplicationDefinition createBaseApplicationDefinition()
+   {
+      return new ApplicationDefinition(FullApplication.class.getSimpleName());
+   }
+   
    public ApplicationDefinition getTopology() throws DempsyException
    {
-      ApplicationDefinition ret = new ApplicationDefinition(FullApplication.class.getSimpleName()).
+      ApplicationDefinition ret = createBaseApplicationDefinition().
             add(new ClusterDefinition(MyAdaptor.class.getSimpleName()).setAdaptor(new MyAdaptor())).
-            add(new ClusterDefinition(MyMp.class.getSimpleName()).setMessageProcessorPrototype(new MyMp()).setOutputExecuter(new RelativeOutputSchedule(10, TimeUnit.MICROSECONDS))).
+            add(new ClusterDefinition(MyMp.class.getSimpleName()).setMessageProcessorPrototype(new MyMp()).setOutputExecuter(new RelativeOutputSchedule(100, TimeUnit.MILLISECONDS))).
             add(new ClusterDefinition(MyRankMp.class.getSimpleName()).setMessageProcessorPrototype(new MyRankMp()));
       
       return ret;

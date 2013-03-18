@@ -30,7 +30,7 @@
      <property name="queue" ref="receiveBlockingQueue" />
   </bean>
    
-  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="stop">
+  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="shutdown">
      <property name="queue" ref="transportBlockingQueue" />
      <property name="listener" ref="receiver" />
   </bean>

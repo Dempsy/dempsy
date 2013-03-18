@@ -324,6 +324,12 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    }
 
    @Override
+   public long getPreInstantiationCount()
+   {
+      return preInstantiationDuration.count();
+   }
+
+   @Override
    public StatsCollector.TimerContext handleMessageStarted()
    {
       return new CodaTimerContext(mpHandleMessageDuration.time());

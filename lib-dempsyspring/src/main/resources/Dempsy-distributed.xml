@@ -18,7 +18,7 @@
          </bean>
       </property>
       <property name="clusterCheck">
-         <bean class="com.nokia.dempsy.router.SpecificClusterCheck" >
+         <bean class="com.nokia.dempsy.router.RegExClusterCheck" >
             <constructor-arg>
                 <bean class="com.nokia.dempsy.config.ClusterId">
                     <constructor-arg index="0" value="${application}"/>
