@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.executor.DempsyExecutor;
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
@@ -115,7 +116,7 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
       {
          try
          {
-            byte[] val = destination.queue.take();
+            MessageBufferInput val = destination.queue.take();
             Listener curListener = listener.get();
             
             boolean messageSuccess = curListener == null ? false : curListener.onMessage(val, failFast);
@@ -171,9 +172,9 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    @Override
    public boolean getFailFast() { return failFast; }
 
-   public BlockingQueue<byte[]> getQueue() { return destination == null ? null : destination.queue; }
+   public BlockingQueue<MessageBufferInput> getQueue() { return destination == null ? null : destination.queue; }
 
-   public void setQueue(BlockingQueue<byte[]> queue) { this.destination = new BlockingQueueDestination(queue); }
+   public void setQueue(BlockingQueue<MessageBufferInput> queue) { this.destination = new BlockingQueueDestination(queue); }
    
    @Override
    public Destination getDestination() { return this.destination; }

@@ -49,6 +49,7 @@ import com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 import com.nokia.dempsy.util.Pair;
 
@@ -292,7 +293,7 @@ public class DempsyTestBase
    {
 
       @Override
-      public void overflow(byte[] messageBytes)
+      public void overflow(MessageBufferInput messageBytes)
       {
          logger.debug("Overflow:" + messageBytes);
       }

@@ -49,11 +49,12 @@ public class TcpTransport implements Transport
    private long maxNumberOfQueuedOutbound = 10000;
    private TcpServer server = new TcpServer();
    private Map<Destination,SenderConnection> connections = new HashMap<Destination, SenderConnection>();
+   private boolean blocking = false;
 
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String desc) throws MessageTransportException
    {
-      return new TcpSenderFactory(connections,statsCollector, maxNumberOfQueuedOutbound, 
+      return new TcpSenderFactory(connections,statsCollector, blocking, maxNumberOfQueuedOutbound, 
             socketWriteTimeoutMillis, batchOutgoingMessages);
    }
 
@@ -67,6 +68,7 @@ public class TcpTransport implements Transport
          defexecutor.setCoresFactor(1.0);
          defexecutor.setAdditionalThreads(1);
          defexecutor.setMaxNumberOfQueuedLimitedTasks(10000);
+         defexecutor.setBlocking(blocking);
          defexecutor.start();
          executor = defexecutor;
          receiverShouldStopExecutor = true;
@@ -120,6 +122,8 @@ public class TcpTransport implements Transport
    {
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
    }
+   
+   public void setBlocking(boolean blocking) { this.blocking = blocking; }
 
    public static InetAddress getFirstNonLocalhostInetAddress() throws SocketException
    {

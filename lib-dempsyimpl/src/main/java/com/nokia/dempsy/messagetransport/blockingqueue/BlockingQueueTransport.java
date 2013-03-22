@@ -20,6 +20,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import com.nokia.dempsy.executor.DempsyExecutor;
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
@@ -31,7 +32,7 @@ public class BlockingQueueTransport implements Transport
 {
    interface BlockingQueueFactory
    {
-      public BlockingQueue<byte[]> createBlockingQueue();
+      public BlockingQueue<MessageBufferInput> createBlockingQueue();
    }
    
    private BlockingQueueFactory queueSource = null;
@@ -62,8 +63,8 @@ public class BlockingQueueTransport implements Transport
       this.overflowHandler = overflowHandler;
    }
    
-   private BlockingQueue<byte[]> getNewQueue()
+   private BlockingQueue<MessageBufferInput> getNewQueue()
    {
-      return (queueSource == null) ? new LinkedBlockingQueue<byte[]>() : queueSource.createBlockingQueue();
+      return (queueSource == null) ? new LinkedBlockingQueue<MessageBufferInput>() : queueSource.createBlockingQueue();
    }
 }

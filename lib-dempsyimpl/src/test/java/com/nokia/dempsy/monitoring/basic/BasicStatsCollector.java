@@ -184,13 +184,13 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    }
 
    @Override
-   public void messageReceived(byte[] message)
+   public void messageReceived(int numberOfBytes)
    {
       messagesReceived.incrementAndGet();
    }
 
    @Override
-   public void messageSent(byte[] message)
+   public void messageSent(int numberOfBytes)
    {
       messagesSent.incrementAndGet();
    }

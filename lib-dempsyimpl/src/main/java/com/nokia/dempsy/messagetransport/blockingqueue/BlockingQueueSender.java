@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
@@ -32,7 +34,7 @@ import com.nokia.dempsy.monitoring.StatsCollector;
  */
 public class BlockingQueueSender implements Sender
 {
-   protected BlockingQueue<byte[]> queue;
+   protected BlockingQueue<MessageBufferInput> queue;
    protected OverflowHandler overflowHandler;
    
    protected AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -51,11 +53,11 @@ public class BlockingQueueSender implements Sender
    public void shuttingDown()
    {
       shutdown.set(true);
-      ArrayList<byte[]> messages= new ArrayList<byte[]>(queue.size());
+      ArrayList<MessageBufferInput> messages= new ArrayList<MessageBufferInput>(queue.size());
       queue.drainTo(messages);
       if (overflowHandler != null)
       {
-         for (byte[] message : messages)
+         for (MessageBufferInput message : messages)
             overflowHandler.overflow(message);
       }
    }
@@ -64,16 +66,17 @@ public class BlockingQueueSender implements Sender
     * Send a message into the BlockingQueueAdaptor.
     */
    @Override
-   public void send(byte[] messageBytes) throws MessageTransportException
+   public void send(MessageBufferOutput message) throws MessageTransportException
    {
       if (shutdown.get())
          throw new MessageTransportException("send called on shutdown queue.");
       
+      MessageBufferInput messageBytes = new MessageBufferInput(message.toByteArray());
       if (blocking)
       {
          while (true)
          {
-            try { queue.put(messageBytes); if (statsCollector != null) statsCollector.messageSent(messageBytes); break; }
+            try { queue.put(messageBytes); if (statsCollector != null) statsCollector.messageSent(messageBytes.available()); break; }
             catch (InterruptedException ie)
             {
                if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
@@ -93,7 +96,7 @@ public class BlockingQueueSender implements Sender
                throw new MessageTransportException("Failed to queue message due to capacity.");
          }
          else
-            if (statsCollector != null) statsCollector.messageSent(messageBytes);
+            if (statsCollector != null) statsCollector.messageSent(messageBytes.available());
       }
    }
    
@@ -103,7 +106,7 @@ public class BlockingQueueSender implements Sender
     * 
     * @param queue is the BlockingQueue implementation to use.
     */
-   public void setQueue(BlockingQueue<byte[]> queue){ this.queue = queue; }
+   public void setQueue(BlockingQueue<MessageBufferInput> queue){ this.queue = queue; }
    
    /**
     * This can be set optionally and will be used on the send side. 

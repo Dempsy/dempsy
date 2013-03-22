@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.MarkerFactory;
 
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 
 /**
@@ -70,8 +71,7 @@ public abstract class Server
    public static final class ReceivedMessage
    {
       public int receiverIndex;
-      public int messageSize;
-      public byte[] message;
+      public MessageBufferInput message;
    }
    
    /**
@@ -287,16 +287,25 @@ public abstract class Server
                      catch (EOFException eof)
                      {
                         clientIsApparentlyGone = eof;
-                        receivedMessage.messageSize = 0; // no message if exception
                      }
                      catch (IOException ioe)
                      {
                         clientIsApparentlyGone = ioe;
-                        receivedMessage.messageSize = 0; // no message if exception
                      }
 
-                     if (receivedMessage.messageSize != 0)
+                     if (clientIsApparentlyGone == null)
                      {
+                        final MessageBufferInput message = receivedMessage.message;
+                        if (message == null || message.available() == 0)
+                        {
+                           // There's no reason to print this message if the server is shutting down
+                           if (logger.isDebugEnabled() && !stopMe.get())
+                              logger.debug("Received a null message on destination " + destination);
+
+                           // if we read no bytes we should just consider ourselves lucky that we
+                           // escaped a blocking read.
+                           break; // leave the loop.
+                        }
                         ForwardedReceiver receiver = receivers[receiverToCall];
                         if (receiver == null)  // it's possible we're shutting down
                         {
@@ -305,20 +314,8 @@ public abstract class Server
                         }
                         else
                            receiver.handleMessage(receivedMessage.message);
-
                      }
-                     else if (clientIsApparentlyGone == null)
-                     {
-                        // There's no reason to print this message if the server is shutting down
-                        if (logger.isDebugEnabled() && !stopMe.get())
-                           logger.debug("Received a null message on destination " + destination);
-
-                        // if we read no bytes we should just consider ourselves lucky that we
-                        // escaped a blocking read.
-                        break; // leave the loop.
-                     }
-
-                     if (clientIsApparentlyGone != null)
+                     else
                      {
                         // we failed ... but maybe we're just shutting down.
                         // If not, log the message.

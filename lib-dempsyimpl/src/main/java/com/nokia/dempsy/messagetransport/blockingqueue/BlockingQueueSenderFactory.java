@@ -19,6 +19,7 @@ package com.nokia.dempsy.messagetransport.blockingqueue;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
@@ -66,5 +67,7 @@ public class BlockingQueueSenderFactory implements SenderFactory
       for (BlockingQueueSender sender : senders.values())
          sender.shuttingDown();
    }
+
+   @Override public MessageBufferOutput prepareMessage() { return new MessageBufferOutput(); }
 
 }

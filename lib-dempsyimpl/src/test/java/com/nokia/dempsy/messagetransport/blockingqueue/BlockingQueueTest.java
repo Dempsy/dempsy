@@ -23,6 +23,8 @@ import java.util.concurrent.BlockingQueue;
 import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
@@ -39,14 +41,14 @@ public class BlockingQueueTest
    
    public static class MyPojo
    {
-      public BlockingQueue<byte[]> receiver;
+      public BlockingQueue<MessageBufferInput> receiver;
       
-      public void setQueue(BlockingQueue<byte[]> receiver)
+      public void setQueue(BlockingQueue<MessageBufferInput> receiver)
       {
          this.receiver = receiver;
       }
       
-      public byte[] getMessage() throws Exception
+      public MessageBufferInput getMessage() throws Exception
       {
          return receiver.take();
       }
@@ -57,7 +59,7 @@ public class BlockingQueueTest
       public int overflowCalled = 0;
       
       @Override
-      public synchronized void overflow(byte[] messageBytes)
+      public synchronized void overflow(MessageBufferInput messageBytes)
       {
          overflowCalled++;
          notifyAll();
@@ -110,6 +112,14 @@ public class BlockingQueueTest
       destinationFactory = null;
    }
    
+   private static MessageBufferOutput makeMessageBuffer(byte[] data)
+   {
+      final MessageBufferOutput buffer = new MessageBufferOutput(0);
+      buffer.replace(data);
+      buffer.setPosition(data.length);
+      return buffer;
+   }
+
    /*
     * Test basic functionality for the BlockingQueue implementation
     * of Message Transport.  Verify that messages sent to the Sender
@@ -121,8 +131,8 @@ public class BlockingQueueTest
       try
       {
          setUp("/blockingqueueTestAppContext.xml");
-         sender.send("Hello".getBytes());
-         String message = new String(  pojo.getMessage() );
+         sender.send(makeMessageBuffer("Hello".getBytes()));
+         String message = new String(  pojo.getMessage().getBuffer() );
          assertEquals("Hello", message);
          assertEquals(0, overflowHandler.overflowCalled);
       }
@@ -147,30 +157,30 @@ public class BlockingQueueTest
          setUp("/overflowTestAppContext.xml");
          synchronized(overflowHandler) /// avoid a race condition
          {
-            sender.send("Hello".getBytes());
+            sender.send(makeMessageBuffer("Hello".getBytes()));
             overflowHandler.wait(500);
          }
          assertEquals(0,overflowHandler.overflowCalled);
          
          synchronized(overflowHandler) /// avoid a race condition
          {
-            sender.send("Hello again".getBytes());
+            sender.send(makeMessageBuffer("Hello again".getBytes()));
             overflowHandler.wait(500);
          }
          assertEquals(0,overflowHandler.overflowCalled);
          synchronized(overflowHandler) /// avoid a race condition
          {
-            sender.send("Hello I must be going.".getBytes());
+            sender.send(makeMessageBuffer("Hello I must be going.".getBytes()));
             overflowHandler.wait(500);
          }
          assertEquals(0,overflowHandler.overflowCalled);
          synchronized(overflowHandler) /// avoid a race condition
          {
-            sender.send("Hello I must be going again.".getBytes());
+            sender.send(makeMessageBuffer("Hello I must be going again.".getBytes()));
             overflowHandler.wait(500);
          }
          assertEquals(1,overflowHandler.overflowCalled);
-         sender.send("Hello again I must be going again.".getBytes());
+         sender.send(makeMessageBuffer("Hello again I must be going again.".getBytes()));
       }
       finally
       {
@@ -194,19 +204,19 @@ public class BlockingQueueTest
          setUp("/overflowTest2AppContext.xml");
          synchronized(overflowHandler) /// avoid a race condition
          {
-            sender.send("Hello".getBytes());
+            sender.send(makeMessageBuffer("Hello".getBytes()));
             overflowHandler.wait(500);
          }
          assertEquals(0,overflowHandler.overflowCalled);
          synchronized(overflowHandler) /// avoid a race condition
          {
-            sender.send("Hello again".getBytes());
+            sender.send(makeMessageBuffer("Hello again".getBytes()));
             overflowHandler.wait(500);
          }
          assertEquals(1,overflowHandler.overflowCalled);
          synchronized(overflowHandler) /// avoid a race condition
          {
-            sender.send("Hello I must be going.".getBytes());
+            sender.send(makeMessageBuffer("Hello I must be going.".getBytes()));
             overflowHandler.wait(500);
          }
          assertEquals(2,overflowHandler.overflowCalled);
@@ -225,8 +235,8 @@ public class BlockingQueueTest
          setUp2("/blockingqueueTest2AppContext.xml");
          Destination destination = destinationFactory.getDestination();
          Sender lsender = senderFactory.getSender(destination);
-         lsender.send("Hello".getBytes());
-         String message = new String( pojo.getMessage() );
+         lsender.send(makeMessageBuffer("Hello".getBytes()));
+         String message = new String( pojo.getMessage().getBuffer() );
          assertEquals("Hello", message);
          assertEquals(0, overflowHandler.overflowCalled);
       }

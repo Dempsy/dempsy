@@ -16,6 +16,8 @@
 
 package com.nokia.dempsy.messagetransport;
 
+import com.nokia.dempsy.message.MessageBufferInput;
+
 
 /**
  * Some transports allow a callback when trying to send a message overflows.
@@ -30,5 +32,5 @@ public interface OverflowHandler
     * 
     * @param messageBytes - the message that was attempted to be sent.
     */
-   public void overflow(byte[] messageBytes);
+   public void overflow(MessageBufferInput messageBytes);
 }

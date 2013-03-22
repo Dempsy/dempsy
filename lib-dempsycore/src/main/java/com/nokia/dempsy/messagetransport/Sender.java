@@ -16,19 +16,21 @@
 
 package com.nokia.dempsy.messagetransport;
 
+import com.nokia.dempsy.message.MessageBufferOutput;
+
 /**
  * A simple interface to send messages to a messaging server destination.
  */
 public interface Sender
 {
    /**
-    * Sends the message. The implementor needs to take special handle exceptions from the
-    * underlying system correctly. The user of the <em>Sender</em> should not be
+    * Sends the message. The implementor needs to take special care to handle exceptions 
+    * from the underlying system correctly. The user of the <em>Sender</em> should not be
     * required to release the sender and reaquire it. The Sender should do that work.
     * 
     * @param messageBytes The serialized message to send
     * @throws MessageTransportException indicates that the message wasn't sent.
     */
-   public void send(byte[] messageBytes) throws MessageTransportException;
+   public void send(MessageBufferOutput message) throws MessageTransportException;
    
 }

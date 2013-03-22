@@ -30,6 +30,8 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    private boolean unlimited = false;
    private boolean blocking = false;
    
+   private int highWaterMark = 0;
+   
    public DefaultDempsyExecutor() { executorCount = executorCountSequence.getAndIncrement(); }
    
    /**
@@ -149,6 +151,8 @@ public class DefaultDempsyExecutor implements DempsyExecutor
    {
       return numLimited.intValue();
    }
+   
+   public int getHighWaterMark() { return highWaterMark; }
 
    
    public boolean isRunning() { 
@@ -156,13 +160,21 @@ public class DefaultDempsyExecutor implements DempsyExecutor
          !(executor.isShutdown() || executor.isTerminated()); }
    
    @Override
-   public <V> Future<V> submit(Callable<V> r) { return executor.submit(r); }
+   public <V> Future<V> submit(Callable<V> r) 
+   {
+      final int curSize = executor.getQueue().size();
+      if (highWaterMark < curSize) highWaterMark = curSize;
+      return executor.submit(r);
+   }
 
    @Override
    public <V> Future<V> submitLimited(final Rejectable<V> r)
    {
       if (unlimited) return submit(r);
       
+      final int curSize = executor.getQueue().size();
+      if (highWaterMark < curSize) highWaterMark = curSize;
+
       Callable<V> task = new Callable<V>()
       {
          private Rejectable<V> o = r;

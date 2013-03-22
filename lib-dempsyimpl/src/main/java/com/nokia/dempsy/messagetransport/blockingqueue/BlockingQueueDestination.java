@@ -18,13 +18,14 @@ package com.nokia.dempsy.messagetransport.blockingqueue;
 
 import java.util.concurrent.BlockingQueue;
 
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.Destination;
 
 public class BlockingQueueDestination implements Destination
 {
-   protected BlockingQueue<byte[]> queue = null;
+   protected BlockingQueue<MessageBufferInput> queue = null;
    
-   public BlockingQueueDestination(BlockingQueue<byte[]> queue) { this.queue = queue; }
+   public BlockingQueueDestination(BlockingQueue<MessageBufferInput> queue) { this.queue = queue; }
    
    @Override
    public int hashCode() { return queue.hashCode(); }

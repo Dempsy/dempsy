@@ -16,6 +16,8 @@
 
 package com.nokia.dempsy.messagetransport;
 
+import com.nokia.dempsy.message.MessageBufferInput;
+
 
 /**
  * <p>This is the core abstraction for receiving messages. The client side of
@@ -39,7 +41,7 @@ public interface Listener
     * @param messageBytes The message bytes received
     * @throws MessageTransportException
     */
-   public boolean onMessage(byte[] messageBytes, boolean failFast) throws MessageTransportException;
+   public boolean onMessage(MessageBufferInput message, boolean failFast) throws MessageTransportException;
    
    /**
     * The transport implementation is responsible for letting the MessageTransportListener
