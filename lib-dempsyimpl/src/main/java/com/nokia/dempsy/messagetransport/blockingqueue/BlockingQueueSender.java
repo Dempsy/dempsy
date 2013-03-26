@@ -16,14 +16,12 @@
 
 package com.nokia.dempsy.messagetransport.blockingqueue;
 
-import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
@@ -35,7 +33,6 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 public class BlockingQueueSender implements Sender
 {
    protected BlockingQueue<MessageBufferInput> queue;
-   protected OverflowHandler overflowHandler;
    
    protected AtomicBoolean shutdown = new AtomicBoolean(false);
 
@@ -53,13 +50,6 @@ public class BlockingQueueSender implements Sender
    public void shuttingDown()
    {
       shutdown.set(true);
-      ArrayList<MessageBufferInput> messages= new ArrayList<MessageBufferInput>(queue.size());
-      queue.drainTo(messages);
-      if (overflowHandler != null)
-      {
-         for (MessageBufferInput message : messages)
-            overflowHandler.overflow(message);
-      }
    }
 
    /**
@@ -88,13 +78,7 @@ public class BlockingQueueSender implements Sender
       else
       {
          if (! queue.offer(messageBytes))
-         {
             if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
-            if (overflowHandler != null)
-               overflowHandler.overflow(messageBytes);
-            else
-               throw new MessageTransportException("Failed to queue message due to capacity.");
-         }
          else
             if (statsCollector != null) statsCollector.messageSent(messageBytes.available());
       }
@@ -107,12 +91,6 @@ public class BlockingQueueSender implements Sender
     * @param queue is the BlockingQueue implementation to use.
     */
    public void setQueue(BlockingQueue<MessageBufferInput> queue){ this.queue = queue; }
-   
-   /**
-    * This can be set optionally and will be used on the send side. 
-    * @param overflowHandler
-    */
-   public void setOverflowHandler(OverflowHandler overflowHandler){ this.overflowHandler = overflowHandler; }
    
    /**
     * <p>blocking is 'true' be default (after all this is a <b>Blocking</b>Queue 

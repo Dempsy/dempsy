@@ -26,7 +26,6 @@ import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
@@ -43,7 +42,6 @@ public class ForwardedReceiver implements Receiver
    private String destinationString = "";
 
    private Listener messageTransportListener;
-   private OverflowHandler overflowHandler = null;
    private boolean failFast;
    
    protected StatsCollector statsCollector;
@@ -72,10 +70,6 @@ public class ForwardedReceiver implements Receiver
       
       getDestination();
       
-      // check to see that the overflowHandler and the failFast setting are consistent.
-      if (!failFast && overflowHandler != null)
-         logger.warn("TcpReceiver/TcpTransport is configured with an OverflowHandler that will never be used because it's also configured to NOT 'fail fast' so it will always block waiting for messages to be processed.");
-      
       setPendingGague();
       
       isStarted.set(true);
@@ -97,9 +91,7 @@ public class ForwardedReceiver implements Receiver
                @Override
                public Object call() throws Exception
                {
-                  boolean messageSuccess = messageTransportListener.onMessage( message, failFast );
-                  if (overflowHandler != null && !messageSuccess)
-                     overflowHandler.overflow(message);
+                  /*boolean messageSuccess = */messageTransportListener.onMessage( message, failFast );
                   return null;
                }
 
@@ -122,8 +114,6 @@ public class ForwardedReceiver implements Receiver
          }
       }
    }
-   
-   public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; }
    
    public synchronized void shutdown()
    {

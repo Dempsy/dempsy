@@ -28,7 +28,6 @@ import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
@@ -148,12 +147,6 @@ public class PassthroughTransport implements Transport
       };
    }
 
-   @Override
-   public void setOverflowHandler(OverflowHandler overflowHandler)
-   {
-      throw new UnsupportedOperationException();
-   }
-   
    /**
     * <p>Failfast is set to true by default. This means that if the Mp is busy 
     * that is the target for the sent message it busy, it will simply dicard

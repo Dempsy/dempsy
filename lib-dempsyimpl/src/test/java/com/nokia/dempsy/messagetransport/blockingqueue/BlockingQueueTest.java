@@ -26,7 +26,6 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 
@@ -37,7 +36,6 @@ public class BlockingQueueTest
    private SenderFactory senderFactory;
    private BlockingQueueAdaptor destinationFactory;
    private MyPojo pojo;
-   private MyOverflowHandler overflowHandler;
    
    public static class MyPojo
    {
@@ -54,19 +52,6 @@ public class BlockingQueueTest
       }
    }
    
-   public static class MyOverflowHandler implements OverflowHandler
-   {
-      public int overflowCalled = 0;
-      
-      @Override
-      public synchronized void overflow(MessageBufferInput messageBytes)
-      {
-         overflowCalled++;
-         notifyAll();
-      }
-      
-   }
-   
    public void setUp(String applicationContextFilename) throws Exception
    {
 
@@ -77,7 +62,6 @@ public class BlockingQueueTest
       sender = lsender;
       
       pojo = (MyPojo)ctx.getBean("testPojo");
-      overflowHandler = (MyOverflowHandler)ctx.getBean("testOverflowHandler");
    }
 
    public void setUp2(String applicationContextFilename) throws Exception
@@ -90,7 +74,6 @@ public class BlockingQueueTest
       destinationFactory = (BlockingQueueAdaptor)ctx.getBean("adaptor");
       
       pojo = (MyPojo)ctx.getBean("testPojo");
-      overflowHandler = (MyOverflowHandler)ctx.getBean("testOverflowHandler");
    }
 
 
@@ -106,7 +89,6 @@ public class BlockingQueueTest
          ctx = null;
       }
       pojo = null;
-      overflowHandler = null;
       sender = null;
       senderFactory = null;
       destinationFactory = null;
@@ -134,7 +116,6 @@ public class BlockingQueueTest
          sender.send(makeMessageBuffer("Hello".getBytes()));
          String message = new String(  pojo.getMessage().getBuffer() );
          assertEquals("Hello", message);
-         assertEquals(0, overflowHandler.overflowCalled);
       }
       finally
       {
@@ -143,90 +124,6 @@ public class BlockingQueueTest
       }
    }
 
-   /**
-    * Test a non-blocking Transport without an overflow handler
-    * on the transport.  Should call overflow handler once
-    * queue is full.
-    * @throws Throwable
-    */
-   @Test
-   public void testNonBlockingQueueOverflow() throws Throwable
-   {
-      try
-      {
-         setUp("/overflowTestAppContext.xml");
-         synchronized(overflowHandler) /// avoid a race condition
-         {
-            sender.send(makeMessageBuffer("Hello".getBytes()));
-            overflowHandler.wait(500);
-         }
-         assertEquals(0,overflowHandler.overflowCalled);
-         
-         synchronized(overflowHandler) /// avoid a race condition
-         {
-            sender.send(makeMessageBuffer("Hello again".getBytes()));
-            overflowHandler.wait(500);
-         }
-         assertEquals(0,overflowHandler.overflowCalled);
-         synchronized(overflowHandler) /// avoid a race condition
-         {
-            sender.send(makeMessageBuffer("Hello I must be going.".getBytes()));
-            overflowHandler.wait(500);
-         }
-         assertEquals(0,overflowHandler.overflowCalled);
-         synchronized(overflowHandler) /// avoid a race condition
-         {
-            sender.send(makeMessageBuffer("Hello I must be going again.".getBytes()));
-            overflowHandler.wait(500);
-         }
-         assertEquals(1,overflowHandler.overflowCalled);
-         sender.send(makeMessageBuffer("Hello again I must be going again.".getBytes()));
-      }
-      finally
-      {
-         tearDown();
-      }
-   }
-
-   /**
-    * Test overflow for a blocking Transport around a queue with depth one.
-    * While the transport will not call the, and does not even have a , overflow handler,
-    * every message will call the overflow handler on the receiver since the queue is
-    * always full.
-    * 
-    * @throws Throwable
-    */
-   @Test
-   public void testBlockingQueueOverflow() throws Throwable
-   {
-      try
-      {
-         setUp("/overflowTest2AppContext.xml");
-         synchronized(overflowHandler) /// avoid a race condition
-         {
-            sender.send(makeMessageBuffer("Hello".getBytes()));
-            overflowHandler.wait(500);
-         }
-         assertEquals(0,overflowHandler.overflowCalled);
-         synchronized(overflowHandler) /// avoid a race condition
-         {
-            sender.send(makeMessageBuffer("Hello again".getBytes()));
-            overflowHandler.wait(500);
-         }
-         assertEquals(1,overflowHandler.overflowCalled);
-         synchronized(overflowHandler) /// avoid a race condition
-         {
-            sender.send(makeMessageBuffer("Hello I must be going.".getBytes()));
-            overflowHandler.wait(500);
-         }
-         assertEquals(2,overflowHandler.overflowCalled);
-      }
-      finally
-      {
-         tearDown();
-      }
-   }
-   
    @Test
    public void testBlockingQueueUsingDestination() throws Exception
    {
@@ -238,7 +135,6 @@ public class BlockingQueueTest
          lsender.send(makeMessageBuffer("Hello".getBytes()));
          String message = new String( pojo.getMessage().getBuffer() );
          assertEquals("Hello", message);
-         assertEquals(0, overflowHandler.overflowCalled);
       }
       finally
       {

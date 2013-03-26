@@ -30,6 +30,7 @@ public interface Sender
     * 
     * @param messageBytes The serialized message to send
     * @throws MessageTransportException indicates that the message wasn't sent.
+    * @return a message sequence number used for asynchronous acknowledgment
     */
    public void send(MessageBufferOutput message) throws MessageTransportException;
    
