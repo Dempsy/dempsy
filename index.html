@@ -60,6 +60,24 @@
           </div>
 <p>Welcome to the Dempsy project - a framework for the easy implementation of stream-based real-time fully-distributed elastic analytics processing applications.</p>
 
+<h2>Features</h2>
+
+<p>If you're already familiar with real-time stream based BigData engines, the following list of features will distinguish Dempsy from the others:</p>
+
+<p>
+<li><em>Fine grained "actor model":</em> Dempsy provides for the fine grained distribution and lifecycle management of (potentially) millions of "actors" (<em>message processors</em> in Dempsy parlance) across a large cluster of machines allowing developers to write code that concentrates on handling individual data points in a stream without any concern for concurrency.</li>
+
+<li><em>Inversion of control programming paradigm:</em> Dempsy allows developers to construct these large-scale processing applications decoupled from all infrastructure concerns providing a means for simple and testable POJO implementations.</li>
+
+<li><em>Dynamic Topology Autoconfiguration:</em> Dempsy doesn't require the prior definition of a topology for the stream processing. Not only does it dynamically discover the topology, but an application's topology can morph at runtime. Therefore, there's no complicated topology defining DSL or configuration necessary.</li>
+
+<li><em>Integrates with available IAAS and PAAS tools:</em> Dempsy doesn't pretend to be an application server or a batch processing system and therefore the provisioning, deployment and management of nodes in an application are provided by cloud management tools already part of your DevOps infrastructure. It fully integrates with various monitoring solutions including: <a href="http://www.oracle.com/technetwork/java/javase/tech/javamanagement-140525.html">JMX</a>, <a href="http://graphite.wikidot.com/">Graphite</a>, and <a href="http://ganglia.sourceforge.net/">Ganglia</a>.</li>
+
+<li><em>Fully elastic:</em> Expanding Dempsy's cooperation with existing IAAS/PAAS tools, <em>elasticity</em> allows for the dynamic provisioning and deprovisioning of nodes of the application at runtime. This allows for optimizing the use of computational resources over time (<em>Currently available in the trunk revision</em>).</li>
+
+<li><em>Reliable/guaranteed message delivery:</em> Dempsy provides for a simple means of handling reliable message processing providing <em>at-least once</em> message handling (<em>coming in April, 2013</em>).</li>
+</p>
+
 <h2>Documentation</h2>
 
 <p>See the <a href="https://github.com/Dempsy/Dempsy/wiki/User-Guide">Dempsy User Guide</a>.</p>
