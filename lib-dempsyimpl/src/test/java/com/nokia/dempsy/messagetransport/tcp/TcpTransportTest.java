@@ -41,6 +41,8 @@ import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.TestUtils;
 import com.nokia.dempsy.executor.DefaultDempsyExecutor;
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
@@ -122,6 +124,13 @@ public class TcpTransportTest
       defexecutor.start();
       return defexecutor;
    }
+   
+   private static MessageBufferOutput makeMessageBuffer(SenderFactory factory, byte[] data)
+   {
+      final MessageBufferOutput buffer = factory.prepareMessage();
+      try { buffer.write(data); } catch (IOException ioe) { throw new RuntimeException(ioe); }
+      return buffer;
+   }
 //-------------------------------------------------------------------------------------
 // multirun tests.
 //-------------------------------------------------------------------------------------
@@ -163,7 +172,7 @@ public class TcpTransportTest
                   adaptor.setListener(new Listener()
                   {
                      @Override public void transportShuttingDown() { }
-                     @Override public boolean onMessage(byte[] messageBytes, boolean failFast) { messageCount.incrementAndGet(); return true; }
+                     @Override public boolean onMessage(MessageBufferInput messageBytes, boolean failFast) { messageCount.incrementAndGet(); return true; }
                   });
                   factory = makeSenderFactory(false,statsCollector); // distruptible sender factory
 
@@ -178,6 +187,7 @@ public class TcpTransportTest
                   // send a message
                   final Sender sender = factory.getSender(destination);
                   final byte[] message = "Hello".getBytes();
+                  final MessageBufferOutput buffer = makeMessageBuffer(factory,message);
                   final AtomicBoolean failed = new AtomicBoolean(false);
 
                   for (int i = 0; i < numThreads; i++)
@@ -189,7 +199,7 @@ public class TcpTransportTest
                            try
                            {
                               for (int i = 0; i < numMessagesPerThread && keepGoing.get(); i++)
-                                 sender.send(message);
+                                 sender.send(buffer);
                            }
                            catch(Throwable e)
                            {
@@ -284,7 +294,7 @@ public class TcpTransportTest
 
                // send a message
                Sender sender = factory.getSender(destination);
-               sender.send("Hello".getBytes());
+               sender.send(makeMessageBuffer(factory,"Hello".getBytes()));
                
                // wait for it to be received.
                for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
@@ -350,7 +360,7 @@ public class TcpTransportTest
          {
             SenderFactory factory = null;
             ForwardedReceiver adaptor = null;
-            final byte[] message = new byte[1024 * 8];
+            final byte[] msg = new byte[1024 * 8];
             BasicStatsCollector statsCollector = new BasicStatsCollector();
             try
             {
@@ -362,6 +372,7 @@ public class TcpTransportTest
                final StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
                factory = makeSenderFactory(false,statsCollector);
+               final MessageBufferOutput message = makeMessageBuffer(factory,msg);
 
                if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
                if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
@@ -389,13 +400,14 @@ public class TcpTransportTest
                Thread.sleep(100);
 
                Long numMessagesReceived = receiver.numMessages.get();
+               final SenderFactory f = factory;
                assertTrue(TestUtils.poll(baseTimeoutMillis, numMessagesReceived, new TestUtils.Condition<Long>()
                {
                   @Override
                   public boolean conditionMet(Long o) throws Throwable
                   {
                      // this should eventually fail
-                     sender.send("Hello".getBytes()); // this should work
+                     sender.send(makeMessageBuffer(f,"Hello".getBytes())); // this should work
                      return receiver.numMessages.get() > o.longValue();
                   }
                }));
@@ -443,9 +455,9 @@ public class TcpTransportTest
          adaptor.setListener( new Listener()
          {
             @Override
-            public boolean onMessage( byte[] messageBytes, boolean failfast ) throws MessageTransportException
+            public boolean onMessage(MessageBufferInput messageBytes, boolean failfast ) throws MessageTransportException
             {
-               receivedByteArrayMessage = messageBytes;
+               receivedByteArrayMessage = messageBytes.readByteArray();
                receiveLargeMessageLatch.countDown();
                return true;
             }
@@ -469,9 +481,10 @@ public class TcpTransportTest
          senderFactory = makeSenderFactory(false,null);
 
          int size = 1024*1024*10;
-         byte[] tosend = new byte[size];
+         byte[] msg = new byte[size];
          for (int i = 0; i < size; i++)
-            tosend[i] = (byte)i;
+            msg[i] = (byte)i;
+         MessageBufferOutput tosend = makeMessageBuffer(senderFactory,msg);
 
          ForwardingSender sender = (ForwardingSender)senderFactory.getSender( destination );
          ((TcpSenderConnection)sender.getConnection()).setTimeoutMillis(100000); // extend the timeout because of the larger messages
@@ -479,7 +492,7 @@ public class TcpTransportTest
 
          assertTrue(receiveLargeMessageLatch.await(1,TimeUnit.MINUTES));
 
-         assertArrayEquals( tosend, receivedByteArrayMessage );
+         assertArrayEquals( msg, receivedByteArrayMessage );
       }
       finally
       {
@@ -728,6 +741,8 @@ public class TcpTransportTest
 
                //===========================================
                // Now check to see that we recieved everything we expected.
+               if (numThreads != receiver.receivedStringMessages.size())
+                  System.out.println("" + receiver.receivedStringMessages);
                assertEquals(numThreads,receiver.receivedStringMessages.size());
                for (int i = 0; i < numThreads; i++)
                   assertTrue(receiver.receivedStringMessages.contains("Hello from " + i));
@@ -758,7 +773,7 @@ public class TcpTransportTest
          {
             SenderFactory factory = null;
             ForwardedReceiver adaptor = null;
-            final byte[] message = new byte[1024 * 8];
+            final byte[] msg = new byte[1024 * 8];
             BasicStatsCollector statsCollector = new BasicStatsCollector();
             try
             {
@@ -770,6 +785,7 @@ public class TcpTransportTest
                final StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
                factory = makeSenderFactory(false,statsCollector);
+               final MessageBufferOutput message = makeMessageBuffer(factory,msg);
 
                if (port > 0) ((TcpServer)adaptor.getServer()).setPort(port);
                if (localhost) ((TcpServer)adaptor.getServer()).setUseLocalhost(localhost);
@@ -821,12 +837,13 @@ public class TcpTransportTest
 //                     statsCollector.getMessagesNotSentCount() < backup);
 
                Long numMessagesReceived = receiver.numMessages.get();
+               final SenderFactory f = factory;
                assertTrue(TestUtils.poll(baseTimeoutMillis, numMessagesReceived, new TestUtils.Condition<Long>()
                {
                   @Override
                   public boolean conditionMet(Long o) throws Throwable
                   {
-                     sender.send("Hello".getBytes()); // this should work
+                     sender.send(makeMessageBuffer(f,"Hello".getBytes())); // this should work
                      return receiver.numMessages.get() > o.longValue();
                   }
                }));
@@ -878,13 +895,14 @@ public class TcpTransportTest
       @Override
       public void run()
       {
+         final MessageBufferOutput message = makeMessageBuffer(senderFactory,("Hello from " + threadInstance).getBytes());
          boolean justGetOut = false;
          while(keepGoing.get() && !justGetOut)
          {
             try
             {
                Sender sender = senderFactory.getSender(destination);
-               sender.send( ("Hello from " + threadInstance).getBytes());
+               sender.send( message );
                sentMessageCount.incrementAndGet();
             }
             catch(MessageTransportException e)
@@ -918,7 +936,7 @@ public class TcpTransportTest
       public StringListener(Object latch) { this.latch = latch; }
       
       @Override
-      public boolean onMessage(byte[] messageBytes, boolean failfast ) throws MessageTransportException
+      public boolean onMessage(MessageBufferInput messageBytes, boolean failfast ) throws MessageTransportException
       {
          try
          {
@@ -932,7 +950,7 @@ public class TcpTransportTest
             }
             synchronized(this)
             {
-               receivedStringMessages.add( new String( messageBytes ) );
+               receivedStringMessages.add(new String(messageBytes.readByteArray()));
             }
             numMessages.incrementAndGet();
             if (throwThisOnce.get() != null)
@@ -999,11 +1017,12 @@ public class TcpTransportTest
    private ForwardingSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector)
    {
       return disruptible ? 
-            new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,-1,10000,false){
+            new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,false,-1,10000,false){
          protected ForwardingSender makeTcpSender(ReceiverIndexedDestination destination) throws MessageTransportException
          {
             TcpSenderConnection connection = 
-                  new TcpSenderConnection((TcpDestination)makeBaseDestination(destination), maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessages)
+                  new TcpSenderConnection((TcpDestination)makeBaseDestination(destination), this, false,
+                        maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessages)
             {
                boolean onceOnly = onlyOnce;
                boolean didItOnceAlready = false;
@@ -1028,7 +1047,7 @@ public class TcpTransportTest
             
             return new ForwardingSender(connection,(TcpDestination)destination,statsCollector,null);
          }
-      } : new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,-1,10000,false);
+      } : new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,false,-1,10000,false);
    }
    
    @Test
@@ -1071,7 +1090,7 @@ public class TcpTransportTest
                // send as many messages as there are threads.
                
                for (int i = 0; i < (((DefaultDempsyExecutor)adaptor.getExecutor()).getMaxNumberOfQueuedLimitedTasks() + adaptor.getExecutor().getNumThreads()); i++)
-                  sender.send("Hello".getBytes());
+                  sender.send(makeMessageBuffer(factory,"Hello".getBytes()));
                
                // wait until all Listeners are in and all threads enqueued
                assertTrue(TestUtils.poll(baseTimeoutMillis, receiver, new TestUtils.Condition<StringListener>() 
@@ -1084,13 +1103,13 @@ public class TcpTransportTest
                
                // we are going to poll but we are going to keep adding to the queu of tasks. So we add 2, let one go, 
                //  until we start seeing rejects. 
-
+               final SenderFactory f = factory;
                assertTrue(TestUtils.poll(baseTimeoutMillis, statsCollector, 
                      new TestUtils.Condition<BasicStatsCollector>() { 
                   @Override public boolean conditionMet(BasicStatsCollector o) throws Throwable
                   {
-                     sender.send("Hello".getBytes());
-                     sender.send("Hello".getBytes());
+                     sender.send(makeMessageBuffer(f,"Hello".getBytes()));
+                     sender.send(makeMessageBuffer(f,"Hello".getBytes()));
                      
                      synchronized(latch)
                      {

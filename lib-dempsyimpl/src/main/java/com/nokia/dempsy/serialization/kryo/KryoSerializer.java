@@ -28,6 +28,8 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 
@@ -41,9 +43,13 @@ public class KryoSerializer<T> implements Serializer<T>
    private static Logger logger = LoggerFactory.getLogger(KryoSerializer.class);
    private static class KryoHolder
    {
+      private static final byte[] park = new byte[0];
       public Kryo kryo = new Kryo();
-      public Output output = new Output(1024, 1024*1024*1024);
+      public Output output = new Output();
       public Input input = new Input();
+      
+      public void clearOutput() { output.setBuffer(park,Integer.MAX_VALUE); }
+      public void clearInput() { input.setBuffer(park); }
    }
    // need an object pool of Kryo instances since Kryo is not thread safe
    private ConcurrentLinkedQueue<KryoHolder> kryopool = new ConcurrentLinkedQueue<KryoHolder>();
@@ -99,15 +105,21 @@ public class KryoSerializer<T> implements Serializer<T>
    }
 
    @Override
-   public byte[] serialize(T object) throws SerializationException 
+   public void serialize(T object, MessageBufferOutput buffer) throws SerializationException 
    {
       KryoHolder k = null;
       try
       {
          k = getKryoHolder();
-         k.output.clear();
-         k.kryo.writeClassAndObject(k.output, object);
-         return k.output.toBytes();
+         final Output output = k.output;
+         // this will allow kryo to grow the buffer as needed.
+         output.setBuffer(buffer.getBuffer(),Integer.MAX_VALUE);
+         output.setPosition(buffer.getPosition()); // set the position to where we already are.
+         k.kryo.writeClassAndObject(output, object);
+         // if we resized then we need to adjust the message buffer
+         if (output.getBuffer() != buffer.getBuffer())
+            buffer.replace(output.getBuffer());
+         buffer.setPosition(output.position());
       }
       catch (KryoException ke)
       {
@@ -121,20 +133,26 @@ public class KryoSerializer<T> implements Serializer<T>
       finally
       {
          if (k != null)
+         {
+            k.clearOutput();
             kryopool.offer(k);
+         }
       }
    }
    
    @SuppressWarnings("unchecked")
    @Override
-   public T deserialize(byte[] data) throws SerializationException 
+   public T deserialize(MessageBufferInput data) throws SerializationException 
    {
       KryoHolder k = null;
       try
       {
          k = getKryoHolder();
-         k.input.setBuffer(data);
-         return (T)(k.kryo.readClassAndObject(k.input));  
+         final Input input = k.input;
+         input.setBuffer(data.getBuffer(),data.getPosition(),data.getLimit());
+         T ret = (T)(k.kryo.readClassAndObject(input));
+         data.setPosition(input.position()); // forward to where Kryo finished.
+         return ret;
       }
       catch (KryoException ke)
       {
@@ -147,7 +165,10 @@ public class KryoSerializer<T> implements Serializer<T>
       finally
       {
          if (k != null)
+         {
+            k.clearInput();
             kryopool.offer(k);
+         }
       }
    }
    

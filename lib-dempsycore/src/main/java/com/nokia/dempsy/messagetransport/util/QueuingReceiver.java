@@ -21,6 +21,7 @@ import java.util.concurrent.BlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 
@@ -42,7 +43,7 @@ import com.nokia.dempsy.messagetransport.MessageTransportException;
 public class QueuingReceiver implements Listener
 {
    private static Logger logger = LoggerFactory.getLogger(QueuingReceiver.class);
-   private BlockingQueue<byte[]> queue;
+   private BlockingQueue<MessageBufferInput> queue;
 
    /**
     * The queue that the MessageTransportQueuingReceiver puts messages on and a client
@@ -50,7 +51,7 @@ public class QueuingReceiver implements Listener
     * 
     * @param queue is the BlockingQueue to be used.
     */
-   public void setQueue(BlockingQueue<byte[]> queue)
+   public void setQueue(BlockingQueue<MessageBufferInput> queue)
    {
       this.queue = queue;
    }
@@ -62,7 +63,7 @@ public class QueuingReceiver implements Listener
     * @return the BlockingQueue that messages are being pushed to, and for the client
     * to pull from.
     */
-   public BlockingQueue<byte[]> getQueue()
+   public BlockingQueue<MessageBufferInput> getQueue()
    {
       return this.queue;
    }
@@ -75,7 +76,7 @@ public class QueuingReceiver implements Listener
     * room in the queue.
     */
    @Override
-   public boolean onMessage(byte[] messageBytes, boolean failFast) throws MessageTransportException
+   public boolean onMessage(MessageBufferInput messageBytes, boolean failFast) throws MessageTransportException
    {
       if (failFast)
          return queue.offer(messageBytes);

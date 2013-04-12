@@ -28,6 +28,7 @@ import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.util.ReceiverIndexedDestination;
 import com.nokia.dempsy.messagetransport.util.Server;
@@ -140,20 +141,21 @@ public class TcpServer extends Server
       final ClientHolder h = (ClientHolder)acceptReturn;
       final DataInputStream dataInputStream = h.dataInputStream;
 
-      messageToFill.receiverIndex = dataInputStream.read(); // read a single unsigned byte
-
       int size = dataInputStream.readShort();
       if (size == -1)
          size = dataInputStream.readInt();
-      if (size < 0)
+      if (size < 1) // we expect at least '1' for the receiverIndex
          // assume we have a corrupt channel
          throw new IOException("Read negative message size. Assuming a corrupt channel.");
       
       // always create a new buffer since the old buffer will be on a queue
-      messageToFill.message = new byte[size];
+      final byte[] rawMessage = new byte[size];
+      dataInputStream.readFully(rawMessage, 0, size);
       
-      dataInputStream.readFully(messageToFill.message, 0, size);
-      messageToFill.messageSize = size;
+      @SuppressWarnings("resource") // mb has no real close.
+      final MessageBufferInput mb = new MessageBufferInput(rawMessage);
+      messageToFill.message = mb;
+      messageToFill.receiverIndex = mb.read();
    }
 
    @Override

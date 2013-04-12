@@ -30,11 +30,8 @@
    <property name="queue" ref="receiveBlockingQueue" />
   </bean>
   
-  <bean id="testOverflowHandler" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyOverflowHandler" />
-  
   <bean id="sender" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueSender" destroy-method="shuttingDown">
      <constructor-arg ref="statsCollector" />
      <property name="queue" ref="transportBlockingQueue" />
-     <property name="overflowHandler" ref="testOverflowHandler" />
   </bean>
 </beans>

@@ -53,10 +53,13 @@ import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.mocks.ContainerTestMessage;
 import com.nokia.dempsy.container.mocks.OutputMessage;
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.router.RoutingStrategy;
+import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 
@@ -72,9 +75,27 @@ public class TestMpContainer
 //----------------------------------------------------------------------------
 
    private MpContainer container;
-   private BlockingQueue<Object> inputQueue;
-   private BlockingQueue<Object> outputQueue;
-   private Serializer<Object> serializer = new JavaSerializer<Object>();
+   private BlockingQueue<MessageBufferInput> inputQueue;
+   private BlockingQueue<MessageBufferInput> outputQueue;
+   
+   private static class SerializerWrapper
+   {
+      Serializer<Object> ser;
+      SerializerWrapper(Serializer<Object> ser) { this.ser = ser; }
+      
+      public MessageBufferInput serialize(Object o) throws SerializationException
+      {
+         MessageBufferOutput buf = new MessageBufferOutput();
+         ser.serialize(o,buf);
+         return new MessageBufferInput(buf.toByteArray());
+      }
+      
+      public Object deserialize(MessageBufferInput msg) throws SerializationException 
+      {
+         return ser.deserialize(msg);
+      }
+   }
+   private SerializerWrapper serializer = new SerializerWrapper(new JavaSerializer<Object>());
 
    private ClassPathXmlApplicationContext context;
    private long baseTimeoutMillis = 2000;
@@ -93,7 +114,9 @@ public class TestMpContainer
          this.lastDispatched = message;
          try
          {
-            sender.send(serializer.serialize(message));
+            MessageBufferOutput buffer = new MessageBufferOutput();
+            serializer.serialize(message,buffer);
+            sender.send(buffer);
          }
          catch(Exception e)
          {
@@ -129,8 +152,8 @@ public class TestMpContainer
          @Override public boolean isInitialized() { return true; }
       });
       assertNotNull(container.getSerializer());
-      inputQueue = (BlockingQueue<Object>)context.getBean("inputQueue");
-      outputQueue = (BlockingQueue<Object>)context.getBean("outputQueue");
+      inputQueue = (BlockingQueue<MessageBufferInput>)context.getBean("inputQueue");
+      outputQueue = (BlockingQueue<MessageBufferInput>)context.getBean("outputQueue");
    }
 
 
@@ -289,8 +312,8 @@ public class TestMpContainer
       assertTrue("queue is empty", outputQueue.isEmpty());
 
       container.outputPass();
-      OutputMessage out1 = (OutputMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
-      OutputMessage out2 = (OutputMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
+      OutputMessage out1 = (OutputMessage)serializer.deserialize(outputQueue.poll(1000, TimeUnit.MILLISECONDS));
+      OutputMessage out2 = (OutputMessage)serializer.deserialize(outputQueue.poll(1000, TimeUnit.MILLISECONDS));
 
       assertTrue("messages received", (out1 != null) && (out2 != null));
       assertEquals("no more messages in queue", 0, outputQueue.size());
@@ -306,7 +329,7 @@ public class TestMpContainer
    @Test
    public void testOutputInvoker() throws Exception {
      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
-        ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
+        ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize(outputQueue.poll(1000, TimeUnit.MILLISECONDS));
         assertTrue("messages received", (out1 != null) );
 
         assertEquals("number of MP instances", 1, container.getProcessorCount());
@@ -333,7 +356,7 @@ public class TestMpContainer
 
       container.outputPass();
       for (int i = 0; i < numInstances; i++)
-         assertNotNull(serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS)));
+         assertNotNull(serializer.deserialize(outputQueue.poll(1000, TimeUnit.MILLISECONDS)));
 
       assertEquals("no more messages in queue", 0, outputQueue.size());
    }

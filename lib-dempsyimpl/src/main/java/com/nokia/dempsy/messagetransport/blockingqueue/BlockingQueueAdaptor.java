@@ -24,10 +24,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.executor.DempsyExecutor;
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
@@ -50,9 +50,7 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    private AtomicReference<Listener> listener = new AtomicReference<Listener>();
    private AtomicBoolean shutdown = new AtomicBoolean(false);
    private BlockingQueueDestination destination = null;
-   private OverflowHandler overflowHandler = null;
    private boolean failFast = false; // this has been the default - since it's equivalent to there being no overflowHandler
-   private boolean explicitFailFast = false;
    
    protected BlockingQueueAdaptor(DempsyExecutor executor) { }
    
@@ -75,10 +73,6 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    @Override
    public synchronized void start() throws MessageTransportException
    {
-      // check to see that the overflowHandler and the failFast setting are consistent.
-      if (!failFast && overflowHandler != null)
-         logger.warn("BlockingQueueAdaptor is configured with an OverflowHandler that will never be used because it's also configured to NOT 'fail fast' so it will always block waiting for messages to be processed.");
-
       running = name == null ? new Thread(this) : new Thread(this,name);
       running.setDaemon(true);
       running.start();
@@ -115,12 +109,12 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
       {
          try
          {
-            byte[] val = destination.queue.take();
+            MessageBufferInput val = destination.queue.take();
             Listener curListener = listener.get();
             
-            boolean messageSuccess = curListener == null ? false : curListener.onMessage(val, failFast);
-            if (overflowHandler != null && !messageSuccess)
-               overflowHandler.overflow(val);
+//            boolean messageSuccess = curListener == null ? false : curListener.onMessage(val, failFast);
+            if (curListener != null)
+               curListener.onMessage(val, failFast);
          }
          catch (InterruptedException ie)
          {
@@ -156,24 +150,14 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    @Override
    public void setListener(Listener listener){ this.listener.set(listener);  }
    
-   /**
-    * When an overflow handler is set the Adaptor indicates that a 'failFast' should happen
-    * and any failed message deliveries end up passed to the overflow handler.
-    */
-   public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; if (!explicitFailFast) failFast = (handler != null); }
-   
-   public void setFailFast(boolean failFast) 
-   {
-      explicitFailFast = true; 
-      this.failFast = failFast; 
-   }
+   public void setFailFast(boolean failFast){ this.failFast = failFast; }
    
    @Override
    public boolean getFailFast() { return failFast; }
 
-   public BlockingQueue<byte[]> getQueue() { return destination == null ? null : destination.queue; }
+   public BlockingQueue<MessageBufferInput> getQueue() { return destination == null ? null : destination.queue; }
 
-   public void setQueue(BlockingQueue<byte[]> queue) { this.destination = new BlockingQueueDestination(queue); }
+   public void setQueue(BlockingQueue<MessageBufferInput> queue) { this.destination = new BlockingQueueDestination(queue); }
    
    @Override
    public Destination getDestination() { return this.destination; }

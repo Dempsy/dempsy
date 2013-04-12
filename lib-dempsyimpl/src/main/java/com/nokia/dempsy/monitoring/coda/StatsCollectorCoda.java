@@ -186,9 +186,9 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    }
 
    @Override
-   public void messageReceived(byte[] message) {
+   public void messageReceived(int length) {
       messagesReceived.mark();
-      bytesReceived.mark(message.length);
+      bytesReceived.mark(length);
    }
 
    @Override
@@ -224,9 +224,9 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    }
 
    @Override
-   public void messageSent(byte[] message) {
+   public void messageSent(int length) {
       messagesSent.mark();
-      bytesSent.mark(message.length);
+      bytesSent.mark(length);
    }
 
    @Override

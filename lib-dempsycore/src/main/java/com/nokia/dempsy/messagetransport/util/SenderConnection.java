@@ -3,6 +3,7 @@ package com.nokia.dempsy.messagetransport.util;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,8 +46,9 @@ public abstract class SenderConnection implements Runnable
    private final AtomicBoolean isSenderRunning = new AtomicBoolean(false);
    private final AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
    private final String clientDescription;
-   private final BlockingQueue<Enqueued> sendingQueue = new LinkedBlockingQueue<Enqueued>();
-   
+   private final BlockingQueue<Enqueued> sendingQueue;
+   protected final ForwardingSenderFactory sourceFactory;
+
    private Thread senderThread = null;
 
    private long maxNumberOfQueuedMessages;
@@ -55,12 +57,16 @@ public abstract class SenderConnection implements Runnable
    
    public final BlockingQueue<Enqueued> getQ() { return sendingQueue; }
    
-   protected SenderConnection(String clientDescription, long maxNumberOfQueuedOutgoing, boolean batchOutgoingMessages, Logger logger)
+   protected SenderConnection(String clientDescription, ForwardingSenderFactory factory,
+         boolean blocking, long maxNumberOfQueuedOutgoing, boolean batchOutgoingMessages, 
+         Logger logger)
    {
       this.batchOutgoingMessages = batchOutgoingMessages;
       this.maxNumberOfQueuedMessages = maxNumberOfQueuedOutgoing;
       this.logger = logger;
       this.clientDescription = clientDescription;
+      this.sourceFactory = factory;
+      this.sendingQueue = blocking ? new ArrayBlockingQueue<Enqueued>((int)maxNumberOfQueuedOutgoing) : new LinkedBlockingQueue<Enqueued>();
    }
 
    public synchronized void start(Sender sender)
@@ -203,6 +209,10 @@ public abstract class SenderConnection implements Runnable
             {
                if (message != null) message.messageNotSent();
                logger.error("Unknown exception thrown while trying to send a message to " + clientDescription,th);
+            }
+            finally
+            {
+               sourceFactory.returnMessageBufferOutput(message.message);
             }
          }
       }

@@ -16,26 +16,25 @@
 
 package com.nokia.dempsy.serialization.java;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 
 public class JavaSerializer<T> implements Serializer<T> {
 
    @Override
-   public T deserialize(byte[] data) throws SerializationException 
+   public T deserialize(final MessageBufferInput data) throws SerializationException 
    {
-      ByteArrayInputStream bis = new ByteArrayInputStream(data);
       InputStream in;
       try
       {
-         in = new ObjectInputStream(bis);
+         in = new ObjectInputStream(data);
          @SuppressWarnings("unchecked")
          T readObject = (T) ((ObjectInputStream)in).readObject();
          return readObject;
@@ -45,20 +44,16 @@ public class JavaSerializer<T> implements Serializer<T> {
    }
 
    @Override
-   public byte[] serialize(T object) throws SerializationException 
+   public void serialize(T object, MessageBufferOutput buffer) throws SerializationException 
    {
-      ByteArrayOutputStream bos = new ByteArrayOutputStream();
       ObjectOutputStream out;
       try
       {
-         out = new ObjectOutputStream(bos);
+         out = new ObjectOutputStream(buffer);
          out.writeObject(object); // no need to reset the stream since we're tossing it.
          out.flush();
       }
       catch(IOException e) { throw new SerializationException(e); }
-
-      byte[] data = bos.toByteArray();
-      return data;
    }
 
 }

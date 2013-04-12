@@ -16,6 +16,8 @@
 
 package com.nokia.dempsy.messagetransport;
 
+import com.nokia.dempsy.message.MessageBufferOutput;
+
 /**
  * Abstraction to create multiple sender based on destination.
  */
@@ -40,5 +42,10 @@ public interface SenderFactory
     * have messages sent to it. Any queued messages need appropriate disposition.
     */
    public void stopDestination(Destination destination);
+   
+   /**
+    * This method will provide the place to put the message that's going to be sent.
+    */
+   public MessageBufferOutput prepareMessage();
    
 }

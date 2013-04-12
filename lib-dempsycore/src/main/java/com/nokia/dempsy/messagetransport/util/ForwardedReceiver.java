@@ -22,9 +22,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.executor.DempsyExecutor;
+import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
@@ -41,7 +42,6 @@ public class ForwardedReceiver implements Receiver
    private String destinationString = "";
 
    private Listener messageTransportListener;
-   private OverflowHandler overflowHandler = null;
    private boolean failFast;
    
    protected StatsCollector statsCollector;
@@ -70,10 +70,6 @@ public class ForwardedReceiver implements Receiver
       
       getDestination();
       
-      // check to see that the overflowHandler and the failFast setting are consistent.
-      if (!failFast && overflowHandler != null)
-         logger.warn("TcpReceiver/TcpTransport is configured with an OverflowHandler that will never be used because it's also configured to NOT 'fail fast' so it will always block waiting for messages to be processed.");
-      
       setPendingGague();
       
       isStarted.set(true);
@@ -82,23 +78,20 @@ public class ForwardedReceiver implements Receiver
    @Override
    public boolean getFailFast() { return failFast; }
    
-   protected void handleMessage(byte[] messageBytes)
+   protected void handleMessage(final MessageBufferInput msg)
    {
       if ( messageTransportListener != null)
       {
          try
          {
-            final byte[] pass = messageBytes;
             executor.submitLimited(new DempsyExecutor.Rejectable<Object>()
             {
-               byte[] message = pass;
+               MessageBufferInput message = msg;
 
                @Override
                public Object call() throws Exception
                {
-                  boolean messageSuccess = messageTransportListener.onMessage( message, failFast );
-                  if (overflowHandler != null && !messageSuccess)
-                     overflowHandler.overflow(message);
+                  /*boolean messageSuccess = */messageTransportListener.onMessage( message, failFast );
                   return null;
                }
 
@@ -110,22 +103,17 @@ public class ForwardedReceiver implements Receiver
                }
             });
             
-//            if (logger.isTraceEnabled())
-//               logger.error(destinationString + " has " + executor.getNumberPending() + " pending messages.");
-
          }
          catch (Throwable se)
          {
             String messageAsString;
-            try { messageAsString = (messageBytes == null ? "null" : messageBytes.toString()); } catch (Throwable th) { messageAsString = "(failed to convert message to a string)"; }
+            try { messageAsString = (msg == null ? "null" : msg.getBuffer().toString()); } catch (Throwable th) { messageAsString = "(failed to convert message to a string)"; }
             logger.error("Unexpected listener exception on adaptor for " + destinationString +
-                  " trying to process a message of type " + messageBytes.getClass().getSimpleName() + " with a value of " +
-                  messageAsString + " using listener " + messageTransportListener.getClass().getSimpleName(), se);
+                  " trying to process a message of with a value of " +  messageAsString + " using listener " + 
+                  SafeString.valueOfClass(messageTransportListener.getClass().getSimpleName()), se);
          }
       }
    }
-   
-   public void setOverflowHandler(OverflowHandler handler) { this.overflowHandler = handler; }
    
    public synchronized void shutdown()
    {

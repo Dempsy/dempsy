@@ -16,6 +16,9 @@
 
 package com.nokia.dempsy.serialization;
 
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
+
 /**
  * <p>In order to support pluggable serialization, Dempsy (the container
  * and the distributor) can be configured with a serialization 
@@ -31,7 +34,7 @@ package com.nokia.dempsy.serialization;
  */
 public interface Serializer<T> 
 {
-   byte[] serialize(T object) throws SerializationException;
+   void serialize(T object, MessageBufferOutput os) throws SerializationException;
    
-   T deserialize(byte[] data) throws SerializationException;
+   T deserialize(MessageBufferInput data) throws SerializationException;
 }

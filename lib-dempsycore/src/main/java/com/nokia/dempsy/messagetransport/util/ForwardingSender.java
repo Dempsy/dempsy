@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.monitoring.StatsCollector;
@@ -38,14 +39,19 @@ public class ForwardingSender implements Sender
    protected final StatsCollector statsCollector;
    protected final SenderConnection connection;
    protected final String thisNodeDescription;
-
-   public ForwardingSender(SenderConnection connection, ReceiverIndexedDestination destination, 
+   
+   public ForwardingSender(SenderConnection connection, ReceiverIndexedDestination destination,
          StatsCollector statsCollector, String desc) throws MessageTransportException
    {
-      this.thisNodeDescription = desc == null ? ("sender #" + sequence.getAndIncrement()) : desc;
+      this.thisNodeDescription = desc;
       this.connection = connection;
       this.destination = destination;
       this.statsCollector = statsCollector;
+      init();
+   }
+   
+   protected void init()
+   {
       if (this.statsCollector != null)
       {
          this.statsCollector.setMessagesOutPendingGauge(new StatsCollector.Gauge()
@@ -67,28 +73,31 @@ public class ForwardingSender implements Sender
    
    public final class Enqueued
    {
-      public byte[] messageBytes;
+      public final MessageBufferOutput message;
+      public final int numBytes;
       
-      public Enqueued(byte[] messageBytes) { this.messageBytes = messageBytes; }
+      public Enqueued(MessageBufferOutput message) { this.message = message; this.numBytes = message.getPosition(); }
       
-      public final void messageNotSent() { if (statsCollector != null) statsCollector.messageNotSent(messageBytes); }
-      public final void messageSent() { if (statsCollector != null) statsCollector.messageSent(messageBytes); }
+      public final void messageNotSent() { if (statsCollector != null) statsCollector.messageNotSent(message.getBuffer()); }
+      public final void messageSent() { if (statsCollector != null) statsCollector.messageSent(numBytes); }
       public final int getReceiverIndex() { return destination.getReceiverIndex(); }
    }
    
    @Override
-   public void send(byte[] messageBytes) throws MessageTransportException
+   public void send(MessageBufferOutput buffer) throws MessageTransportException
    {
-      try { connection.getQ().put(new Enqueued(messageBytes)); }
+      try { connection.getQ().put(new Enqueued(buffer)); }
       catch (InterruptedException e)
       {
-         if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+         if (statsCollector != null) statsCollector.messageNotSent(buffer.getBuffer());
          throw new MessageTransportException("Failed to enqueue message to " + destination + ".",e);
       }
    }
    
    @Override
-   public String toString() { return "Sending from " + thisNodeDescription + " to " + destination; }
+   public String toString() { return "Sending from " + 
+         (thisNodeDescription == null ? ("sender #" + sequence.getAndIncrement()) : thisNodeDescription)
+         + " to " + destination; }
    
    public void stop() { connection.stop(this); }
    

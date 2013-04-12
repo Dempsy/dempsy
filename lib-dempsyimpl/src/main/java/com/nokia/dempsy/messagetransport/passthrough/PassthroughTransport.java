@@ -23,10 +23,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.nokia.dempsy.Adaptor;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
@@ -79,6 +80,8 @@ public class PassthroughTransport implements Transport
          {
             ((PassthroughSender)(((PassthroughDestination)destination).sender)).isRunning = false;
          }
+
+         @Override public MessageBufferOutput prepareMessage() { return new MessageBufferOutput(); }
       };
    }
    
@@ -91,8 +94,9 @@ public class PassthroughTransport implements Transport
       private PassthroughSender(List<Listener> listeners) { this.listeners = listeners; }
 
       @Override
-      public void send(byte[] messageBytes) throws MessageTransportException
+      public void send(MessageBufferOutput message) throws MessageTransportException
       {
+         MessageBufferInput messageBytes = new MessageBufferInput(message.getBuffer(),0,message.getPosition());
          if (!isRunning)
          {
             if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
@@ -101,7 +105,7 @@ public class PassthroughTransport implements Transport
          
          for (Listener listener : listeners)
          {
-            if (statsCollector != null) statsCollector.messageSent(messageBytes);
+            if (statsCollector != null) statsCollector.messageSent(messageBytes.available());
             listener.onMessage(messageBytes, failFast);
          }
       }
@@ -143,12 +147,6 @@ public class PassthroughTransport implements Transport
       };
    }
 
-   @Override
-   public void setOverflowHandler(OverflowHandler overflowHandler)
-   {
-      throw new UnsupportedOperationException();
-   }
-   
    /**
     * <p>Failfast is set to true by default. This means that if the Mp is busy 
     * that is the target for the sent message it busy, it will simply dicard

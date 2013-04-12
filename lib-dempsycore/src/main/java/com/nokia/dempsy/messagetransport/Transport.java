@@ -55,11 +55,4 @@ public interface Transport
     */
    public Receiver createInbound(DempsyExecutor executor, String thisNodeDescription) throws MessageTransportException;
    
-   /**
-    * If the implementation supports overflow handling then calling this
-    * method will ensure that the provided instance is added to each newly
-    * created SenderFactory and/or Receiver. If it's not supported it will
-    * throw an exception.
-    */
-   public void setOverflowHandler(OverflowHandler overflowHandler);
 }

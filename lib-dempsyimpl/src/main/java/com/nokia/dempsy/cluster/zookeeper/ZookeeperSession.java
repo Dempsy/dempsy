@@ -42,6 +42,8 @@ import com.nokia.dempsy.cluster.ClusterInfoWatcher;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
 import com.nokia.dempsy.util.AutoDisposeSingleThreadScheduler;
@@ -141,7 +143,7 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
                      cur.getData(path, wp, null);
 
             if (ret != null && ret.length > 0)
-               return serializer.deserialize(ret);
+               return serializer.deserialize(new MessageBufferInput(ret));
             return null;
          }
       });
@@ -155,12 +157,12 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          @Override
          public Object call(ZooKeeper cur, String path, WatcherProxy watcher, Object info) throws KeeperException, InterruptedException, SerializationException
          {
-            byte[] buf = null;
+            MessageBufferOutput buf = new MessageBufferOutput(128);
             if (info != null)
                // Serialize to a byte array
-               buf = serializer.serialize(info);
+               serializer.serialize(info,buf);
 
-            zkref.get().setData(path, buf, -1);
+            zkref.get().setData(path, buf.getBuffer(), -1);
             return null;
          }
       });
@@ -520,12 +522,12 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
 
       @SuppressWarnings("unchecked")
       @Override
-      public TS deserialize(byte[] data) throws SerializationException
+      public TS deserialize(MessageBufferInput data) throws SerializationException
       {
          ArrayList<TS> info = null;
          if(data != null)
          {
-            String jsonData = new String(data);
+            String jsonData = new String(data.getBuffer());
             try
             {
                info = objectMapper.readValue(jsonData, ArrayList.class);
@@ -539,16 +541,15 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       }
 
       @Override
-      public byte[] serialize(TS data) throws SerializationException 
+      public void serialize(TS data, MessageBufferOutput buf) throws SerializationException 
       {
-         String jsonData = null;
          if(data != null)
          {
             ArrayList<TS> arr = new ArrayList<TS>();
             arr.add(data);
             try
             {
-               jsonData = objectMapper.writeValueAsString(arr);
+               objectMapper.writeValue(buf,arr);
             }
             catch(Exception e)
             {
@@ -556,7 +557,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
                      SafeString.valueOfClass(data) + " with information "+SafeString.valueOf(data), e);
             }
          }
-         return (jsonData != null)?jsonData.getBytes():null;
       }
       
    }

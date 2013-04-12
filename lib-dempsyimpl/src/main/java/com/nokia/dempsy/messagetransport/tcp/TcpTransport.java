@@ -29,19 +29,17 @@ import com.nokia.dempsy.executor.DefaultDempsyExecutor;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
+import com.nokia.dempsy.messagetransport.util.ForwardedReceiver;
 import com.nokia.dempsy.messagetransport.util.ForwardingSender;
 import com.nokia.dempsy.messagetransport.util.ForwardingSenderFactory;
 import com.nokia.dempsy.messagetransport.util.SenderConnection;
-import com.nokia.dempsy.messagetransport.util.ForwardedReceiver;
 import com.nokia.dempsy.monitoring.StatsCollector;
 
 public class TcpTransport implements Transport
 {
-   private OverflowHandler overflowHandler = null;
    private boolean failFast = false;
    
    private boolean batchOutgoingMessages = false;
@@ -49,11 +47,12 @@ public class TcpTransport implements Transport
    private long maxNumberOfQueuedOutbound = 10000;
    private TcpServer server = new TcpServer();
    private Map<Destination,SenderConnection> connections = new HashMap<Destination, SenderConnection>();
+   private boolean blocking = false;
 
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String desc) throws MessageTransportException
    {
-      return new TcpSenderFactory(connections,statsCollector, maxNumberOfQueuedOutbound, 
+      return new TcpSenderFactory(connections,statsCollector, blocking, maxNumberOfQueuedOutbound, 
             socketWriteTimeoutMillis, batchOutgoingMessages);
    }
 
@@ -67,22 +66,15 @@ public class TcpTransport implements Transport
          defexecutor.setCoresFactor(1.0);
          defexecutor.setAdditionalThreads(1);
          defexecutor.setMaxNumberOfQueuedLimitedTasks(10000);
+         defexecutor.setBlocking(blocking);
          defexecutor.start();
          executor = defexecutor;
          receiverShouldStopExecutor = true;
       }
       
-      ForwardedReceiver receiver = new ForwardedReceiver(server,executor,failFast, receiverShouldStopExecutor);
-      receiver.setOverflowHandler(overflowHandler);
-      return receiver;
+      return new ForwardedReceiver(server,executor,failFast, receiverShouldStopExecutor);
    }
 
-   @Override
-   public void setOverflowHandler(OverflowHandler overflowHandler)
-   {
-      this.overflowHandler = overflowHandler;
-   }
-   
    public void setFailFast(boolean failFast) { this.failFast = failFast; }
    
    /**
@@ -120,6 +112,8 @@ public class TcpTransport implements Transport
    {
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
    }
+   
+   public void setBlocking(boolean blocking) { this.blocking = blocking; }
 
    public static InetAddress getFirstNonLocalhostInetAddress() throws SocketException
    {
