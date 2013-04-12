@@ -36,7 +36,7 @@ public interface StatsCollector {
    /**
     *  The dispatcher calls this method in its <code>onMessage</code> handler.
     */
-   void messageReceived(byte[] message);
+   void messageReceived(int numBytes);
 
    /**
     * MPContainer calls this method when before invoking an MP's 
@@ -60,7 +60,7 @@ public interface StatsCollector {
    /**
     * Dispatcher calls this method when emitting a message
     */
-   void messageSent(byte[] message);
+   void messageSent(int numBytes);
 
    /**
     * Dispatcher calls this method when it fails to dispatch

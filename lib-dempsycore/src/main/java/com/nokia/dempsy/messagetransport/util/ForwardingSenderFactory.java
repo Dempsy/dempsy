@@ -20,11 +20,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
@@ -41,6 +43,7 @@ public abstract class ForwardingSenderFactory implements SenderFactory
    private final Map<Destination,SenderConnection> connections;
    private final Map<Destination,ForwardingSender> senders = new HashMap<Destination, ForwardingSender>();
    private final String thisNodeDescription;
+   protected final ConcurrentLinkedQueue<MessageBufferOutput> pool = new ConcurrentLinkedQueue<MessageBufferOutput>();
    
    protected ForwardingSenderFactory(Map<Destination,SenderConnection> connections, StatsCollector statsCollector, String thisNodeDescription)
    {
@@ -115,5 +118,21 @@ public abstract class ForwardingSenderFactory implements SenderFactory
          logger.trace(toString() + ", making Sender for " + destination);
       return new ForwardingSender(connection, destination, statsCollector,thisNodeDescription);
    }
+   
+   @Override
+   public MessageBufferOutput prepareMessage()
+   {
+//      final MessageBufferOutput ret = pool.poll();
+//      if (ret == null)
+//      {
+         final MessageBufferOutput tret = new MessageBufferOutput(32);
+         tret.setPosition(1);
+         return tret;
+//      }
+//      ret.setPosition(1); // reserve 1 byte for the receiver index.
+//      return ret;
+   }
+   
+   protected void returnMessageBufferOutput(MessageBufferOutput ret) { /*ret.reset(); pool.offer(ret);*/ }
 
 }

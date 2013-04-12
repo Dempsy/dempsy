@@ -28,21 +28,21 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.Dispatcher;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.config.ClusterId;
-import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.container.mocks.MockInputMessage;
 import com.nokia.dempsy.container.mocks.MockOutputMessage;
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
@@ -134,8 +134,10 @@ public class TestMpContainerLoadHandling
       {
          try
          {
-            Serializer<Object> serializer = new JavaSerializer<Object>();
-            byte[] data = serializer.serialize(message);
+            final Serializer<Object> serializer = new JavaSerializer<Object>();
+            final MessageBufferOutput mb = new MessageBufferOutput();
+            serializer.serialize(message,mb);
+            final MessageBufferInput data = new MessageBufferInput(mb.toByteArray());
             mpc.onMessage(data,!block); // onmessage is "failfast" which is !block
          }
          catch(SerializationException e)

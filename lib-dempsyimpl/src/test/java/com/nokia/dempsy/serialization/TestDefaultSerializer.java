@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,6 +37,8 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.DefaultSerializers.LongSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.nokia.dempsy.TestUtils;
+import com.nokia.dempsy.message.MessageBufferInput;
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.serialization.java.JavaSerializer;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 import com.nokia.dempsy.serialization.kryo.KryoSerializer;
@@ -71,8 +74,13 @@ public class TestDefaultSerializer
             new KryoSerializer<MockClass>(new Registration(MockClass.class.getName(),10));
       runSerializer(ser2);
       
-      byte[] d1 = ser1.serialize(o1);
-      byte[] d2 = ser2.serialize(o1);
+      MessageBufferOutput mb = new MessageBufferOutput();
+      
+      ser1.serialize(o1,mb);
+      byte[] d1 = Arrays.copyOf(mb.getBuffer(),mb.getPosition());
+      mb.reset();
+      ser2.serialize(o1,mb);
+      byte[] d2 = Arrays.copyOf(mb.getBuffer(),mb.getPosition());
       assertTrue(d2.length < d1.length);
    }
    
@@ -90,15 +98,20 @@ public class TestDefaultSerializer
       KryoSerializer<MockClass> ser1 = new KryoSerializer<MockClass>();
       KryoSerializer<MockClass> ser2 = new KryoSerializer<MockClass>();
       ser2.setKryoRegistrationRequired(true);
-      byte[] data = ser1.serialize(new MockClass());
+      MessageBufferOutput mb = new MessageBufferOutput();
+      ser1.serialize(new MockClass(),mb);
+      
+      MessageBufferInput data = new MessageBufferInput(mb.getBuffer());
       ser2.deserialize(data);
    }
 
    private void runSerializer(Serializer<MockClass> serializer) throws Throwable
    {
-      byte[] data = serializer.serialize(o1);
+      MessageBufferOutput mb = new MessageBufferOutput();
+      serializer.serialize(o1,mb);
+      byte[] data = mb.getBuffer();
       assertNotNull(data);
-      MockClass o2 = serializer.deserialize(data);
+      MockClass o2 = serializer.deserialize(new MessageBufferInput(data));
       assertNotNull(o2);
       assertEquals(o1, o2);
    }
@@ -160,8 +173,10 @@ public class TestDefaultSerializer
    {
       KryoSerializer<Object> ser = new KryoSerializer<Object>();
       Mock2 o = new Mock2(1, new MockClass(2, "Hello"));
-      byte[] data = ser.serialize(o);
-      Mock2 o2 = (Mock2)ser.deserialize(data);
+      MessageBufferOutput mb = new MessageBufferOutput();
+      ser.serialize(o,mb);
+      byte[] data = mb.getBuffer();
+      Mock2 o2 = (Mock2)ser.deserialize(new MessageBufferInput(data));
       assertEquals(1,o2.getInt());
       assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
    }
@@ -211,12 +226,22 @@ public class TestDefaultSerializer
       KryoSerializer<Object> ser = new KryoSerializer<Object>(defaultMock3Optimizer);
       
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
-      byte[] data = ser.serialize(o);
-      Mock2 o2 = (Mock2)ser.deserialize(data);
+      MessageBufferOutput mb = new MessageBufferOutput();
+      ser.serialize(o,mb);
+      byte[] data = mb.getBuffer();
+      Mock2 o2 = (Mock2)ser.deserialize(new MessageBufferInput(data));
       assertEquals(1,o2.getInt());
       assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
       assertTrue(o2 instanceof Mock3);
       assertEquals(1,((Mock3)o2).myI);
+   }
+   
+   @SuppressWarnings({"rawtypes","unchecked"})
+   private static byte[] serialize(Serializer ser, Object m) throws SerializationException
+   {
+      MessageBufferOutput mb = new MessageBufferOutput();
+      ser.serialize(m, mb);
+      return Arrays.copyOf(mb.getBuffer(),mb.getPosition());
    }
       
    @Test
@@ -228,21 +253,21 @@ public class TestDefaultSerializer
       KryoSerializer<Object> serRR = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName(),10),new Registration(Mock3.class.getName(), 11));
       KryoSerializer<Object> serRROb = new KryoSerializer<Object>(defaultMock3Optimizer,new Registration(MockClass.class.getName()),new Registration(Mock3.class.getName()),new Registration(UUID.class.getName()));
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
-      byte[] data = ser.serialize(o);
-      byte[] dataJ = serJ.serialize(o);
-      byte[] dataR = serR.serialize(o);
-      byte[] dataRR = serRR.serialize(o);
-      byte[] dataRROb = serRROb.serialize(o);
+      byte[] data = serialize(ser,o);
+      byte[] dataJ = serialize(serJ,o);
+      byte[] dataR = serialize(serR,o);
+      byte[] dataRR = serialize(serRR,o);
+      byte[] dataRROb = serialize(serRROb,o);
       assertTrue(dataJ.length > data.length);
       assertTrue(dataR.length < data.length);
       assertTrue(dataRR.length < dataR.length);
       assertTrue(dataRROb.length == dataRR.length);
-      Mock2 o2 = (Mock2)ser.deserialize(data);
+      Mock2 o2 = (Mock2)ser.deserialize(new MessageBufferInput(data));
       assertEquals(1,o2.getInt());
       assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
       assertTrue(o2 instanceof Mock3);
       assertEquals(1,((Mock3)o2).myI);
-      serRROb.deserialize(dataRROb);
+      serRROb.deserialize(new MessageBufferInput(dataRROb));
    }
    
    @Test
@@ -280,25 +305,25 @@ public class TestDefaultSerializer
       });
       
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
-      byte[] data = ser.serialize(o);
-      byte[] dataJ = serJ.serialize(o);
-      byte[] dataR = serR.serialize(o);
-      byte[] dataRR = serRR.serialize(o);
-      byte[] dataRROb = serRROb.serialize(o);
-      byte[] dataRRO = serRRO.serialize(o);
+      byte[] data = serialize(ser,o);
+      byte[] dataJ = serialize(serJ,o);
+      byte[] dataR = serialize(serR,o);
+      byte[] dataRR = serialize(serRR,o);
+      byte[] dataRROb = serialize(serRROb,o);
+      byte[] dataRRO = serialize(serRRO,o);
       assertTrue(dataJ.length > data.length);
       assertTrue(dataR.length < data.length);
       assertTrue(dataRR.length < dataR.length);
       assertTrue(dataRROb.length == dataRR.length);
       assertTrue(dataRRO.length <= dataRR.length);
-      Mock2 o2 = (Mock2)ser.deserialize(data);
+      Mock2 o2 = (Mock2)ser.deserialize(new MessageBufferInput(data));
       assertEquals(1,o2.getInt());
       assertEquals(new MockClass(2, "Hello"),o2.getMockClass());
       assertTrue(o2 instanceof Mock3);
       assertEquals(1,((Mock3)o2).myI);
-      assertEquals(o,serR.deserialize(dataR));
-      assertEquals(o,serRR.deserialize(dataRR));
-      assertEquals(o,serRRO.deserialize(dataRRO));
+      assertEquals(o,serR.deserialize(new MessageBufferInput(dataR)));
+      assertEquals(o,serRR.deserialize(new MessageBufferInput(dataRR)));
+      assertEquals(o,serRRO.deserialize(new MessageBufferInput(dataRRO)));
    }
    
    @Test
@@ -313,9 +338,9 @@ public class TestDefaultSerializer
          else
             mess.add(new Mock2(i,new MockClass(-i,"Hello:" + i)));
       }
-      byte[] data = ser.serialize(mess);
+      byte[] data = serialize(ser,mess);
       @SuppressWarnings("unchecked")
-      List<Mock2> des = (List<Mock2>)ser.deserialize(data);
+      List<Mock2> des = (List<Mock2>)ser.deserialize(new MessageBufferInput(data));
       assertEquals(mess,des);
    }
    
@@ -359,8 +384,8 @@ public class TestDefaultSerializer
                      while (!done.get())
                      {
                         MockClass o = new MockClass(index, "Hello:" + index);
-                        byte[] data = ser.serialize(o);
-                        MockClass dser = ser.deserialize(data);
+                        byte[] data = serialize(ser,o);
+                        MockClass dser = ser.deserialize(new MessageBufferInput(data));
                         assertEquals(o,dser);
                         counts[index].incrementAndGet();
                      }
@@ -455,8 +480,8 @@ public class TestDefaultSerializer
    {
       Mock4 o = new Mock4(MockEnum.BOTH);
       KryoSerializer<Mock4> ser = new KryoSerializer<Mock4>(new Registration(Mock4.class.getName()), new Registration(MockEnum.class.getName()));
-      byte[] data = ser.serialize(o);
-      Mock4 dser = ser.deserialize(data);
+      byte[] data = serialize(ser,o);
+      Mock4 dser = ser.deserialize(new MessageBufferInput(data));
       assertTrue(o.get() == dser.get());
       assertEquals(o.get().toString(),dser.get().toString());
    }

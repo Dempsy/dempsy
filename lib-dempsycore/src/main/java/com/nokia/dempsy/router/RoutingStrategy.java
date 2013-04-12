@@ -27,7 +27,6 @@ import com.nokia.dempsy.config.ClusterDefinition;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.router.RoutingStrategy.Inbound.KeyspaceResponsibilityChangeListener;
-import com.nokia.dempsy.util.Pair;
 
 /**
  * <p>A {@link RoutingStrategy} is responsible for determining how to find the appropriate
@@ -81,12 +80,10 @@ public interface RoutingStrategy
        * @param messageKey is the message key for the message to be routed
        * @param message is the message to be routed.
        * @return a transport Destination indicating the unique node in the downstream cluster 
-       * that the message should go to. The {@link Pair} can optionally contain a second value which 
-       * includes metadata for the message information. If non-null this metadata will be 
-       * serialized along with the message itself and provided to the Inbound.
+       * that the message should go to.
        * @throws DempsyException when something distasteful happens.
        */
-      public Pair<Destination,Object> selectDestinationForMessage(Object messageKey, Object message) throws DempsyException;
+      public Destination selectDestinationForMessage(Object messageKey, Object message) throws DempsyException;
       
       /**
        * The {@link Outbound} is responsible for providing the {@link ClusterId} for which it is the 
@@ -96,7 +93,7 @@ public interface RoutingStrategy
       
       /**
        * Since Outbound initialization can take place asynchronously, this method should be implemented
-       * to return true when the outbound's first successful initialization is complete. It's used to
+       * to return true when the outbound's first successful initialization is complete. It's used
        * in tests to make sure that an application is completely initialized before proceeding.
        */
       public boolean completeInitialization();

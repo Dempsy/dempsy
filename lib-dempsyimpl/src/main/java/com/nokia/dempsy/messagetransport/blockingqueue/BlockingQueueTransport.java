@@ -20,8 +20,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import com.nokia.dempsy.executor.DempsyExecutor;
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
@@ -31,19 +31,15 @@ public class BlockingQueueTransport implements Transport
 {
    interface BlockingQueueFactory
    {
-      public BlockingQueue<byte[]> createBlockingQueue();
+      public BlockingQueue<MessageBufferInput> createBlockingQueue();
    }
    
    private BlockingQueueFactory queueSource = null;
-   private OverflowHandler overflowHandler = null;
 
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String desc)
    {
-      BlockingQueueSenderFactory ret = new BlockingQueueSenderFactory(statsCollector);
-      if (overflowHandler != null)
-         ret.setOverflowHandler(overflowHandler);
-      return ret;
+      return new BlockingQueueSenderFactory(statsCollector);
    }
 
    @Override
@@ -51,19 +47,11 @@ public class BlockingQueueTransport implements Transport
    {
       BlockingQueueAdaptor ret = new BlockingQueueAdaptor(executor);
       ret.setQueue(getNewQueue());
-      if (overflowHandler != null)
-         ret.setOverflowHandler(overflowHandler);
       return ret;
    }
    
-   @Override
-   public void setOverflowHandler(OverflowHandler overflowHandler)
+   private BlockingQueue<MessageBufferInput> getNewQueue()
    {
-      this.overflowHandler = overflowHandler;
-   }
-   
-   private BlockingQueue<byte[]> getNewQueue()
-   {
-      return (queueSource == null) ? new LinkedBlockingQueue<byte[]>() : queueSource.createBlockingQueue();
+      return (queueSource == null) ? new LinkedBlockingQueue<MessageBufferInput>() : queueSource.createBlockingQueue();
    }
 }

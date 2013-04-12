@@ -19,9 +19,9 @@ package com.nokia.dempsy.messagetransport.blockingqueue;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
-import com.nokia.dempsy.messagetransport.OverflowHandler;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.monitoring.StatsCollector;
@@ -29,12 +29,9 @@ import com.nokia.dempsy.monitoring.StatsCollector;
 public class BlockingQueueSenderFactory implements SenderFactory
 {
    private Map<Destination,BlockingQueueSender> senders = new HashMap<Destination,BlockingQueueSender>();
-   private OverflowHandler overflowHandler = null;
    private StatsCollector statsCollector;
    
    public BlockingQueueSenderFactory(StatsCollector statsCollector) { this.statsCollector = statsCollector; }
-   
-   public void setOverflowHandler(OverflowHandler overflowHandler) { this.overflowHandler = overflowHandler; }
    
    @Override
    public synchronized Sender getSender(Destination destination) throws MessageTransportException
@@ -44,8 +41,6 @@ public class BlockingQueueSenderFactory implements SenderFactory
       {
          blockingQueueSender = new BlockingQueueSender(statsCollector);
          blockingQueueSender.setQueue(((BlockingQueueDestination)destination).queue);
-         if (overflowHandler != null)
-            blockingQueueSender.setOverflowHandler(overflowHandler);
          senders.put(destination, blockingQueueSender);
       }
       
@@ -66,5 +61,7 @@ public class BlockingQueueSenderFactory implements SenderFactory
       for (BlockingQueueSender sender : senders.values())
          sender.shuttingDown();
    }
+
+   @Override public MessageBufferOutput prepareMessage() { return new MessageBufferOutput(); }
 
 }

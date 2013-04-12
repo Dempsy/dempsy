@@ -11,8 +11,10 @@ import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nokia.dempsy.message.MessageBufferOutput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.util.ForwardingSender.Enqueued;
+import com.nokia.dempsy.messagetransport.util.ForwardingSenderFactory;
 import com.nokia.dempsy.messagetransport.util.SenderConnection;
 import com.nokia.dempsy.util.SocketTimeout;
 
@@ -31,10 +33,11 @@ public class TcpSenderConnection extends SenderConnection implements Runnable
    private Socket socket = null;
    protected TcpDestination destination;
    
-   protected TcpSenderConnection(TcpDestination baseDestination, long maxNumberOfQueuedOutgoing, 
-         long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
+   protected TcpSenderConnection(final TcpDestination baseDestination, 
+         final ForwardingSenderFactory factory,final boolean blocking, final long maxNumberOfQueuedOutgoing, 
+         final long socketWriteTimeoutMillis, final boolean batchOutgoingMessages)
    {
-      super(baseDestination.toString(), maxNumberOfQueuedOutgoing, batchOutgoingMessages, logger);
+      super(baseDestination.toString(), factory, blocking, maxNumberOfQueuedOutgoing, batchOutgoingMessages, logger);
       this.timeoutMillis = socketWriteTimeoutMillis;
       this.destination = baseDestination;
    }
@@ -51,23 +54,29 @@ public class TcpSenderConnection extends SenderConnection implements Runnable
    public void setTimeoutMillis(long timeoutMillis) { this.timeoutMillis = timeoutMillis; }
 
    @Override
-   protected void doSend(final Enqueued message, final boolean batch) throws IOException, InterruptedException, MessageTransportException
+   protected void doSend(final Enqueued enqueued, final boolean batch) throws IOException, InterruptedException, MessageTransportException
    {
       
       DataOutputStream localDataOutputStream = getDataOutputStream();
 
-      int size = message.messageBytes.length;
-      if (size > Short.MAX_VALUE)
-         size = -1;
+      final MessageBufferOutput message = enqueued.message;
+      final int size = message.getPosition();
+      final boolean intSize = size > Short.MAX_VALUE;
+      final byte[] messageBytes = message.getBuffer();
       socketTimeout.begin();
-      
       try
       {
-         localDataOutputStream.write(message.getReceiverIndex());
-         localDataOutputStream.writeShort( size );
-         if (size == -1)
-            localDataOutputStream.writeInt(message.messageBytes.length);
-         localDataOutputStream.write( message.messageBytes );
+         // See the TcpSenderFactory.prepareMessage where this byte is reserved
+         messageBytes[0] = (byte)(enqueued.getReceiverIndex());
+         if (intSize)
+         {
+            localDataOutputStream.writeShort(-1);
+            localDataOutputStream.writeInt(size);
+         }
+         else
+            localDataOutputStream.writeShort( size );
+
+         localDataOutputStream.write(messageBytes,0,message.getPosition());
          if (!batch)
             localDataOutputStream.flush(); // flush individual message
       }

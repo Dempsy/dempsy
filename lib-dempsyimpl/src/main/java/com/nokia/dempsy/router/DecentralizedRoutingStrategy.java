@@ -43,7 +43,6 @@ import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.router.microshard.MicroShardUtils;
 import com.nokia.dempsy.util.AutoDisposeSingleThreadScheduler;
-import com.nokia.dempsy.util.Pair;
 import com.nokia.dempsy.util.PersistentTask;
 
 /**
@@ -363,7 +362,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          public ClusterId getClusterId() { return clusterId; }
 
          @Override
-         public Pair<Destination,Object> selectDestinationForMessage(Object messageKey, Object message) throws DempsyException
+         public Destination selectDestinationForMessage(Object messageKey, Object message) throws DempsyException
          {
             Destination[] destinationArr = destinations.get();
             if (destinationArr == null)
@@ -372,11 +371,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             final int length = destinationArr.length;
             if (length == 0)
                return null;
-            int calculatedModValue = Math.abs(messageKey.hashCode()%length);
-            
-            // TODO: Make this faster by storing the Pairs in the destinationArr rather
-            // than the destinations
-            return new Pair<Destination,Object>(destinationArr[calculatedModValue],new ShardInfo(calculatedModValue));
+            return destinationArr[Math.abs(messageKey.hashCode()%length)];
          }
 
          @Override
@@ -847,7 +842,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       {
          return destinationsAcquired.contains(Math.abs(messageKey.hashCode()%defaultTotalShards));
       }
-      
+
       public int getNumShardsCovered() { return destinationsAcquired.size(); }
       
       private final boolean doIOwnThisShard(Integer shard, Map<Integer,DefaultRouterShardInfo> shardNumbersToShards)
@@ -1019,7 +1014,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   logger.error("There is a problem with the shards taken by the cluster manager for the cluster " + 
                         clusterId + ". Shard " + shardInfo.getShardIndex() +
                         " from " + SafeString.objectDescription(shardInfo.getDestination()) + 
-                        " thinks the total number of shards for this cluster it " + shardInfo.getTotalAddress() +
+                        " thinks the total number of shards for this cluster is " + shardInfo.getTotalAddress() +
                         " but a former shard said the total was " + totalAddressCounts);
             }
             else

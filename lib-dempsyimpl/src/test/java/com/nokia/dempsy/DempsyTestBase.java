@@ -58,7 +58,7 @@ public class DempsyTestBase
     * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in 
     * every runAllCombinations call. This can make tests run for a loooooong time.
     */
-   public static boolean hardcore = false;
+   public static boolean hardcore = true;
    public static String profile = null;
 
    protected static Logger logger;
@@ -70,7 +70,7 @@ public class DempsyTestBase
    public static String[][] transports = new String[][] {
       { "testDempsy/Transport-PassthroughActx.xml","testDempsy/Transport-PassthroughBlockingActx.xml" }, 
       { "testDempsy/Transport-BlockingQueueActx.xml" }, 
-      { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
+      { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
 
    public static String[] serializers = new String[]
@@ -286,17 +286,6 @@ public class DempsyTestBase
          outputCount.incrementAndGet();
          outputLatch.countDown();
       }
-   }
-
-   public static class OverflowHandler implements com.nokia.dempsy.messagetransport.OverflowHandler
-   {
-
-      @Override
-      public void overflow(byte[] messageBytes)
-      {
-         logger.debug("Overflow:" + messageBytes);
-      }
-
    }
 
    public static class TestAdaptor implements Adaptor

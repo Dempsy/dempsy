@@ -13,14 +13,16 @@ public class TcpSenderFactory extends ForwardingSenderFactory
    protected final long socketWriteTimeoutMillis;
    protected final boolean batchOutgoingMessages;
    protected final long maxNumberOfQueuedOutbound;
+   protected final boolean blocking;
    
    public TcpSenderFactory(Map<Destination,SenderConnection> connections, StatsCollector statsCollector,
-         long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
+         boolean blocking, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
    {
       super(connections,statsCollector,null);
       this.socketWriteTimeoutMillis = socketWriteTimeoutMillis;
       this.batchOutgoingMessages = batchOutgoingMessages;
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
+      this.blocking = blocking;
    }
 
    @Override
@@ -32,7 +34,8 @@ public class TcpSenderFactory extends ForwardingSenderFactory
    @Override
    protected SenderConnection makeNewSenderConnection(ReceiverIndexedDestination baseDestination)
    {
-      return new TcpSenderConnection((TcpDestination)baseDestination,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
+      return new TcpSenderConnection((TcpDestination)baseDestination, this, blocking, 
+            maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
    }
 
 }

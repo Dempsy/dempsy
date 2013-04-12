@@ -53,6 +53,7 @@ import com.nokia.dempsy.container.internal.InstanceWrapper;
 import com.nokia.dempsy.container.internal.LifecycleHelper;
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.router.RoutingStrategy;
 import com.nokia.dempsy.serialization.SerializationException;
@@ -162,13 +163,13 @@ public class MpContainer implements Container, ContainerTestAccess
     *  @return true, to acknowledge the message.
     */
    @Override
-   public boolean onMessage(byte[] data, boolean fastfail)
+   public boolean onMessage(MessageBufferInput data, boolean fastfail)
    {
       Object message = null;
       try
       {
          message = serializer.deserialize(data);
-         statCollector.messageReceived(data);
+         statCollector.messageReceived(data.available());
          return dispatch(message,!fastfail);
       }
       catch(SerializationException e2)
@@ -454,11 +455,11 @@ public class MpContainer implements Container, ContainerTestAccess
          throw new ContainerException("the container for " + clusterId + " has a prototype " + SafeString.valueOf(prototype) + 
                " that does not handle messages of class " + SafeString.valueOfClass(message));
 
-      Object key = getKeyFromMessage(message);
-      if (!strategyInbound.doesMessageKeyBelongToNode(key))
-         throw new ContainerException("Key " + SafeString.objectDescription(key) + " doesn't belong to this node.");
+//      final Object key = getKeyFromMessage(message);
+//      if (!strategyInbound.doesMessageKeyBelongToNode(key))
+//         throw new ContainerException("Key " + SafeString.objectDescription(key) + " doesn't belong to this node.");
       
-      InstanceWrapper wrapper = getInstanceForKey(key);
+      InstanceWrapper wrapper = getInstanceForKey(getKeyFromMessage(message));
       return wrapper;
    }
 
@@ -811,12 +812,12 @@ public class MpContainer implements Container, ContainerTestAccess
     * @throws IllegalAccessException 
     * @throws InvocationTargetException 
     */
-   public InstanceWrapper getInstanceForKey(Object key) throws ContainerException
+   public InstanceWrapper getInstanceForKey(final Object key) throws ContainerException
    {
       // common case has "no" contention
-      InstanceWrapper wrapper = instances.get(key);
-      if(wrapper != null)
-         return wrapper;
+      final InstanceWrapper wrapperCheck = instances.get(key);
+      if(wrapperCheck != null)
+         return wrapperCheck;
       
       // otherwise we will be working to get one.
       Boolean tmplock = new Boolean(true);
@@ -827,7 +828,7 @@ public class MpContainer implements Container, ContainerTestAccess
       // otherwise we'll do an atomic check-and-update
       synchronized (lock)
       {
-         wrapper = instances.get(key); // double checked lock?????
+         InstanceWrapper wrapper = instances.get(key); // double checked lock?????
          if (wrapper != null)
             return wrapper;
 
