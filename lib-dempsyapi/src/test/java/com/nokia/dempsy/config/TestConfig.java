@@ -323,19 +323,15 @@ public class TestConfig
       @MessageProcessor
       class mp 
       {
-         @SuppressWarnings("unused")
          @MessageHandler
          public void handle(GoodMessage string) {}
          
-         @SuppressWarnings("unused")
          @Start
          public void startMethod() {}
          
-         @SuppressWarnings("unused")
          @Evictable
          public boolean evict2(){return false;}
 
-         @SuppressWarnings("unused")
          @Evictable
          public boolean evict1(){return false;}
          
@@ -355,15 +351,12 @@ public class TestConfig
       @MessageProcessor
       class mp 
       {
-         @SuppressWarnings("unused")
          @MessageHandler
          public void handle(GoodMessage string) {}
          
-         @SuppressWarnings("unused")
          @Start
          public void startMethod() {}
          
-         @SuppressWarnings("unused")
          @Evictable
          public void evict1(){ }
          
@@ -383,15 +376,12 @@ public class TestConfig
       @MessageProcessor
       class mp 
       {
-         @SuppressWarnings("unused")
          @MessageHandler
          public void handle(GoodMessage string) {}
          
-         @SuppressWarnings("unused")
          @Start
          public void startMethod() {}
          
-         @SuppressWarnings("unused")
          @Evictable
          public Object evict1(){ return null; }
          
@@ -411,15 +401,12 @@ public class TestConfig
       @MessageProcessor
       class mp 
       {
-         @SuppressWarnings("unused")
          @MessageHandler
          public void handle(GoodMessage string) {}
          
-         @SuppressWarnings("unused")
          @Start
          public void startMethod() {}
          
-         @SuppressWarnings("unused")
          @Evictable
          public boolean evict1(Object arg){ return false; }
          

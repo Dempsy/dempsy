@@ -128,7 +128,6 @@ public class LifeCycleHelperTest
       Assert.assertNull(ret);
    }
 
-   @SuppressWarnings("unused")
    @MessageProcessor
    private class TestMp implements Cloneable
    {
@@ -155,7 +154,6 @@ public class LifeCycleHelperTest
       public boolean ispassivateCalled(){ return this.passivateCalled;}
    }
 
-   @SuppressWarnings("unused")
    @MessageProcessor
    private class TestMpEmptyActivate implements Cloneable
    {
@@ -181,7 +179,6 @@ public class LifeCycleHelperTest
       public boolean ispassivateCalled(){ return this.passivateCalled;}
    }
    
-   @SuppressWarnings("unused")
    @MessageProcessor
    private class TestMpOnlyKey implements Cloneable
    {
@@ -207,7 +204,6 @@ public class LifeCycleHelperTest
       public boolean ispassivateCalled(){ return this.passivateCalled;}
    }
 
-   @SuppressWarnings("unused")
    @MessageProcessor
    private class TestMpExtraParameters implements Cloneable
    {
@@ -234,7 +230,6 @@ public class LifeCycleHelperTest
       public boolean ispassivateCalled(){ return this.passivateCalled;}
    }
 
-   @SuppressWarnings("unused")
    @MessageProcessor
    private class TestMpExtraParametersChangedOrder implements Cloneable
    {
@@ -260,7 +255,6 @@ public class LifeCycleHelperTest
       public boolean ispassivateCalled(){ return this.passivateCalled;}
    }
 
-   @SuppressWarnings(value="unused")
    @MessageProcessor
    private class TestMpNoActivation implements Cloneable
    {
@@ -298,7 +292,6 @@ public class LifeCycleHelperTest
       
    }
 
-   @SuppressWarnings(value="unused")
    @MessageProcessor
    private class TestMpNoKey implements Cloneable
    {
