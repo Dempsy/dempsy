@@ -112,7 +112,7 @@ public class TestZookeeperClusterResilience
                   try
                   {
                      if (session.getSubdirs(clusterId.asPath(), this).size() == 0)
-                        session.mkdir(clusterId.asPath() + "/slot1",DirMode.EPHEMERAL);
+                        session.mkdir(clusterId.asPath() + "/slot1",null,DirMode.EPHEMERAL);
                      called.set(true);
                   }
                   catch(ClusterInfoException.NoNodeException e)
@@ -204,7 +204,7 @@ public class TestZookeeperClusterResilience
                   try
                   {
                      if (session.getSubdirs(clusterId.asPath(), this).size() == 0)
-                        session.mkdir(clusterId.asPath() + "/slot1",DirMode.EPHEMERAL);
+                        session.mkdir(clusterId.asPath() + "/slot1",null,DirMode.EPHEMERAL);
                      called.set(true);
                   }
                   catch(ClusterInfoException.NoNodeException e)
@@ -314,8 +314,7 @@ public class TestZookeeperClusterResilience
          session.getSubdirs(clusterId.asPath(), callback);
          
          ZooKeeper origZk = session.zkref.get();
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(origZk);
-         killer.close(); // tricks the server into expiring the other session
+         ZookeeperTestServer.forceSessionExpiration(origZk);
          
          // wait for the callback
          assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new Condition<TestWatcher>() {
@@ -340,7 +339,7 @@ public class TestZookeeperClusterResilience
          for (long endTime = System.currentTimeMillis() + baseTimeoutMillis; endTime > System.currentTimeMillis() && gotCorrectError;)
          {
             Thread.sleep(1);
-            try { session.mkdir(clusterId.asPath() + "/join-1", DirMode.EPHEMERAL); gotCorrectError = false; } catch (ClusterInfoException e) {  }
+            try { session.mkdir(clusterId.asPath() + "/join-1", null, DirMode.EPHEMERAL); gotCorrectError = false; } catch (ClusterInfoException e) {  }
          }
          
          assertFalse(gotCorrectError);
@@ -367,6 +366,8 @@ public class TestZookeeperClusterResilience
          server = new ZookeeperTestServer();
          server.start();
 
+         // the createExpireSessionClient actually results in a Disconnected/SyncConnected rotating events.
+         // ... so we need to filter those out since it will result in a callback.
          session =  new ZookeeperSession("127.0.0.1:" + port,5000);
 
          final ClusterId clusterId = new ClusterId(appname,"testSessionExpired");
@@ -378,10 +379,10 @@ public class TestZookeeperClusterResilience
             {
                try
                {
+                  called.set(true);
                   logger.trace("process called on TestWatcher.");
                   session.exists(clusterId.asPath(), this);
                   session.getSubdirs(clusterId.asPath(), this);
-                  called.set(true);
                }
                catch (ClusterInfoException cie)
                {
@@ -392,20 +393,32 @@ public class TestZookeeperClusterResilience
          };
          
          // now see if the cluster works.
-         callback.process();
+         callback.process(); // this registers the session with the callback as the Watcher
          
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(session.zkref.get());
-         
-         // the above actually results in a SyncConnected event ... so we need to filter that out since it will result in a callback.
-         assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
-
          // now reset the condition
          callback.called.set(false);
          
-         killer.close(); // tricks the server into expiring the other session
-         
-         // and eventually a callback
+         ZookeeperTestServer.forceSessionExpiration(session.zkref.get());
+
+         // we should see the session expiration in a callback
          assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
+         
+         // and eventually a reconnect
+         assertTrue(poll(5000,callback,new Condition<TestWatcher>() 
+         {  
+            @Override public boolean conditionMet(TestWatcher o) 
+            {
+               try
+               {
+                  o.process();
+                  return true;
+               }
+               catch (Throwable th)
+               {
+                  return false;
+               }
+            } 
+         }));
          
          createClusterLevel(clusterId,session);
          assertTrue(session.exists(clusterId.asPath(), callback));
@@ -507,8 +520,7 @@ public class TestZookeeperClusterResilience
 
          logger.trace("Killing zookeeper");
          ZooKeeper origZk = session.zkref.get();
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(origZk);
-         killer.close(); // tricks the server into expiring the other session
+         ZookeeperTestServer.forceSessionExpiration(origZk);
          logger.trace("Killed zookeeper");
          
          // wait for the current session to go invalid
@@ -539,9 +551,13 @@ public class TestZookeeperClusterResilience
          if (session != null)
             session.stop();
          
-         for (int i = 0; i < 3; i++)
+         for (int i = 0; i < dempsy.length; i++)
             if (dempsy[i] != null)
                dempsy[i].stop();
+         
+         for (int i = 0; i < dempsy.length; i++)
+            if (dempsy[i] != null)
+               assertTrue(dempsy[i].waitToBeStopped(baseTimeoutMillis));
       }
    }
 
@@ -589,12 +605,10 @@ public class TestZookeeperClusterResilience
          
          callback.process();
          
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(session.zkref.get());
-         
          // force the ioexception to happen
          forceIOException.set(true);
          
-         killer.close(); // tricks the server into expiring the other session
+         ZookeeperTestServer.forceSessionExpiration(session.zkref.get());
          
          // now in the background it should be retrying but hosed.
          assertTrue(forceIOExceptionLatch.await(baseTimeoutMillis * 3, TimeUnit.MILLISECONDS));
@@ -604,7 +618,7 @@ public class TestZookeeperClusterResilience
          {
             @Override
             public boolean conditionMet(ClusterId o) throws Throwable {
-               try { session.mkdir(o.asPath() + "/join-1", DirMode.EPHEMERAL); return false; } catch (ClusterInfoException e) { return true; }
+               try { session.mkdir(o.asPath() + "/join-1", null, DirMode.EPHEMERAL); return false; } catch (ClusterInfoException e) { return true; }
             }
          }));
          
@@ -621,7 +635,7 @@ public class TestZookeeperClusterResilience
          {
             @Override
             public boolean conditionMet(ClusterId o) throws Throwable {
-               try { TestUtils.createClusterLevel(o, session); session.mkdir(o.asPath() + "/join-1", DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) { return false; }
+               try { TestUtils.createClusterLevel(o, session); session.mkdir(o.asPath() + "/join-1", null, DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) { return false; }
             }
          }));
          
@@ -633,7 +647,7 @@ public class TestZookeeperClusterResilience
          {
             @Override
             public boolean conditionMet(ClusterId o) throws Throwable {
-               try { session.mkdir(o.asPath() + "/join-1", DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) { }
+               try { session.mkdir(o.asPath() + "/join-1", null, DirMode.EPHEMERAL); return true; } catch (ClusterInfoException e) { }
                return false;
             }
          }));

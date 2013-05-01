@@ -95,8 +95,14 @@ public class BlockingQueueAdaptor implements Runnable, Receiver
    {
       synchronized(this)
       {
-         // this is done in case start() wasn't used to start this thread.
-         running = Thread.currentThread();
+         if (running == null)
+            // this is done in case start() wasn't used to start this thread.
+            running = Thread.currentThread();
+         else if (running != Thread.currentThread())
+         {
+            logger.error(BlockingQueueAdaptor.class.getSimpleName() + " was started in a Runnable more than once. Exiting the additional thread.");
+            return;
+         }
       }
       
       while (!shutdown.get())

@@ -22,9 +22,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -47,11 +44,15 @@ import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.internal.util.SafeString;
 import com.nokia.dempsy.serialization.SerializationException;
 import com.nokia.dempsy.serialization.Serializer;
+import com.nokia.dempsy.util.AutoDisposeSingleThreadScheduler;
+import com.nokia.dempsy.util.Pair;
 
 public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
 {
-   private static Logger logger = LoggerFactory.getLogger(ZookeeperSession.class);
+   private static final Logger logger = LoggerFactory.getLogger(ZookeeperSession.class);
    
+   private static final byte[] zeroByteArray = new byte[0];
+
    //=======================================================================
    // Manage the mapping between DirMode and ZooKeeper's CreateMode.
    //=======================================================================
@@ -86,16 +87,20 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       ZooKeeper newZk = makeZooKeeperClient(connectString,sessionTimeout);
       if (newZk != null) setNewZookeeper(newZk);
    }
-
+   
    @Override
-   public String mkdir(String path, DirMode mode) throws ClusterInfoException
+   public String mkdir(String path, Object data, DirMode mode) throws ClusterInfoException
    {
-      return (String)callZookeeper("mkdir", path, null, mode, new ZookeeperCall()
+      return (String)callZookeeper("mkdir", path, null, new Pair<DirMode,Object>(mode,data), new ZookeeperCall()
       {
          @Override
-         public Object call(ZooKeeper cur, String path, WatcherProxy watcher, Object userdata) throws KeeperException, InterruptedException, SerializationException
+         public Object call(ZooKeeper cur, String path, WatcherProxy watcher, Object ud) throws KeeperException, InterruptedException, SerializationException
          {
-            return cur.create(path, new byte[0], Ids.OPEN_ACL_UNSAFE, from(((DirMode)userdata)));
+            @SuppressWarnings("unchecked")
+            final Pair<DirMode,Object> userdata = (Pair<DirMode,Object>)ud;
+            final Object info = userdata.getSecond();
+
+            return cur.create(path, (info == null ? zeroByteArray : serializer.serialize(info)), Ids.OPEN_ACL_UNSAFE, from(userdata.getFirst()));
          }
       });
    }
@@ -228,7 +233,7 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
    {
       private ClusterInfoWatcher watcher;
       
-      private WatcherProxy(ClusterInfoWatcher watcher)
+      public WatcherProxy(ClusterInfoWatcher watcher)
       {
          this.watcher = watcher;
       }
@@ -311,8 +316,10 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          catch(KeeperException.NodeExistsException e)
          {         
 
-            if(logger.isDebugEnabled())
-               logger.debug("Failed call to " + name + " at " + path);
+            if(logger.isTraceEnabled())
+               logger.trace("Failed call to " + name + " at " + path + " because the node already exists.",e);
+            else if(logger.isDebugEnabled())
+               logger.debug("Failed call to " + name + " at " + path + " because the node already exists.");
             return null; // this is only thrown from mkdir and so if the Node Exists
                          //   we simply want to return a null String 
          }
@@ -338,8 +345,8 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       throw new ClusterInfoException(name + " called on stopped ZookeeperSession.");
    }
    
-   private ScheduledExecutorService scheduler = null;
-   private volatile ScheduledFuture<?> beingReset = null;
+   private final AutoDisposeSingleThreadScheduler scheduler = new AutoDisposeSingleThreadScheduler("Zookeeper Session Reset");
+   private volatile AutoDisposeSingleThreadScheduler.Cancelable beingReset = null;
    
    private synchronized void resetZookeeper(final ZooKeeper failedZooKeeper)
    {
@@ -354,9 +361,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          //   and if we're not already working on beingReset
          if (tmpZkRef != null && tmpZkRef.get() == failedZooKeeper && (beingReset == null || beingReset.isDone()))
          {
-            if (scheduler == null)
-               scheduler = Executors.newScheduledThreadPool(1);
-            
             Runnable runnable = new Runnable()
             {
                ZooKeeper failedInstance = failedZooKeeper;
@@ -417,9 +421,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
                         {
                            setNewZookeeper(newZk);
                            beingReset = null;
-                           if (scheduler != null)
-                              scheduler.shutdown();
-                           scheduler = null;
                         }
 
                         // now notify the watchers
@@ -487,16 +488,6 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
       {
          beingReset = null;
          logger.error("resetZookeeper failed for attempted reset to " + connectString,re);
-         try
-         {
-            if (scheduler != null)
-               scheduler.shutdownNow();
-         }
-         catch (Throwable th)
-         {
-            logger.error("Failed to shut down ScheduledExecutorService. This may result in a thread leak.",th);
-         }
-         scheduler = null;
       }
       
    }
@@ -574,7 +565,7 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          }
          return (jsonData != null)?jsonData.getBytes():null;
       }
-
+      
    }
 
 }

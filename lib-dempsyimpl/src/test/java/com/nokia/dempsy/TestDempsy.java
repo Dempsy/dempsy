@@ -18,6 +18,7 @@ package com.nokia.dempsy;
 
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -56,15 +57,20 @@ import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
+import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
+import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.executor.DefaultDempsyExecutor;
+import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiverAccess;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
+import com.nokia.dempsy.router.DecentralizedRoutingStrategy.DefaultRouterSlotInfo;
 import com.nokia.dempsy.serialization.kryo.KryoOptimizer;
 
 public class TestDempsy
@@ -81,14 +87,20 @@ public class TestDempsy
    String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
    
    String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
+//   String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-LocalActx.xml" };
    String[][] transports = new String[][] {
          { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
          { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
+//   String[][] transports = new String[][] {
+//         { "testDempsy/Transport-PassthroughBlockingActx.xml" }
+//   };
    
    String[] serializers = new String[]
          { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml", "testDempsy/Serializer-KryoOptimizedActx.xml" };
+//   String[] serializers = new String[]
+//         { "testDempsy/Serializer-KryoActx.xml" };
    
    // bad combinations.
    List<ClusterId> badCombos = Arrays.asList(new ClusterId[] {
@@ -124,8 +136,11 @@ public class TestDempsy
       KeySourceImpl.disruptSession = false;
       KeySourceImpl.infinite = false;
       KeySourceImpl.pause = new CountDownLatch(0);
+      KeySourceImpl.maxcount = 2;
       TestMp.currentOutputCount = 10;
       TestMp.activateCheckedException = false;
+      System.setProperty("min_nodes_for_cluster", "1");
+      System.setProperty("total_slots_for_cluster", "20");
    }
    
    public static class TestMessage implements Serializable
@@ -283,6 +298,7 @@ public class TestDempsy
       public static volatile boolean infinite = false;
       public static volatile CountDownLatch pause = new CountDownLatch(0);
       public static volatile KSIterable lastCreated = null;
+      public static volatile int maxcount = 2;
       
       public void setDempsy(Dempsy dempsy) { this.dempsy = dempsy; }
       
@@ -306,7 +322,7 @@ public class TestDempsy
                long count = 0;
 
                @Override
-               public boolean hasNext() { if (count >= 1) kickClusterInfoMgr(); return m_infinite ? true : (count < 2);  }
+               public boolean hasNext() { if (count >= 1) kickClusterInfoMgr(); return m_infinite ? true : (count < maxcount);  }
 
                @Override
                public String next() { try { m_pause.await(); } catch (InterruptedException ie) {} count++; return (lastKey = "test" + count);}
@@ -596,6 +612,115 @@ public class TestDempsy
          public void check(ApplicationContext context) throws Throwable { }
          
          public String toString() { return "testStartupShutdown"; }
+
+      });
+
+   }
+   
+   @Test
+   public void testForkedFailure() throws Throwable
+   {
+      runAllCombinations("SimpleMultistageApplicationActx.xml", new Checker()
+      {
+         @Override
+         public void check(ApplicationContext context) throws Throwable
+         {
+            final AtomicBoolean stopIt = new AtomicBoolean(false);
+            final AtomicBoolean failed = new AtomicBoolean(false);
+            final AtomicBoolean stopped = new AtomicBoolean(false);
+            
+            try
+            {
+               // start things and verify that the init method was called
+               Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+
+               final TestAdaptor adaptor = (TestAdaptor) getAdaptor(dempsy, "test-app","test-cluster0");
+               assertNotNull(adaptor);
+
+               Thread adaptorThread = new Thread(new Runnable()
+               {
+                  @Override
+                  public void run()
+                  {
+                     try
+                     {
+                        long i = 0;
+                        while (!stopIt.get())
+                        {
+                           adaptor.pushMessage(new TestMessage("" + i));
+                           i++;
+                           Thread.sleep(10);
+                        }
+                     }
+                     catch (Throwable th)
+                     {
+                        failed.set(true);
+                     }
+                     finally
+                     {
+                        stopped.set(true);
+                     }
+                  }
+               }, "testForkedFailure-Adaptor Thread ");
+               adaptorThread.start();
+               
+               TestMp[] mps = new TestMp[3];
+               DisruptibleSession[] sessions = new DisruptibleSession[3];
+               
+
+               for (int i = 0; i < mps.length; i++)
+               {
+                  String cluster = "test-cluster" + (i + 1);
+                  mps[i] = (TestMp) getMp(dempsy,"test-app",cluster);
+                  sessions[i] = (DisruptibleSession)(dempsy.getCluster(new ClusterId("test-app", cluster)).getNodes().get(0).retouRteg().getClusterSession());
+                  assertEquals(1, mps[i].startCalls.get());
+               }
+
+               for (int i = 0; i < mps.length; i++)
+               {
+                  for (int j = 0; j < mps.length; j++)
+                  {
+                     if (i != j)
+                        assertTrue(mps[i] != mps[j]);
+                  }
+               }
+               
+               // now check to see that data is going to all 3.
+               for (int i = 0; i < mps.length; i++)
+               {
+                  assertTrue(poll(baseTimeoutMillis, mps[i], new Condition<TestMp>() { public boolean conditionMet(TestMp o)
+                  {
+                     return o.handleCalls.get() > 0;
+                  }}));
+               }
+
+               int curPos = 0;
+               for (int j = 0; j < 3; j++)
+               {
+                  // now kill a cluster or 2 (or 3)
+                  for (int k = 0; k <= j; k++)
+                     sessions[curPos++ % sessions.length].disrupt();
+
+                  for (int i = 0; i < mps.length; i++)
+                  {
+                     final long curCalls = mps[i].handleCalls.get();
+                     assertTrue(poll(baseTimeoutMillis, mps[i], new Condition<TestMp>() { public boolean conditionMet(TestMp o)
+                     {
+                        return o.handleCalls.get() > curCalls;
+                     }}));
+                  }
+               }               
+            }
+            finally
+            {
+               stopIt.set(true);
+               assertFalse(failed.get());
+               
+               assertTrue(poll(baseTimeoutMillis, stopped, new Condition<AtomicBoolean>() { public boolean conditionMet(AtomicBoolean o) { return o.get(); }}));
+            }
+         }
+         
+         public String toString() { return "testForkedFailure"; }
 
       });
 
@@ -1034,5 +1159,238 @@ public class TestDempsy
       TestMp.activateCheckedException = false;
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
    }   
+   
+   public static class JunkDestination implements Destination {}
 
+   @Test
+   public void testExpandingAndContractingKeySpace() throws Throwable
+   {
+      KeySourceImpl.maxcount = 100000;
+      System.setProperty("min_nodes_for_cluster", "1");
+      System.setProperty("total_slots_for_cluster", "1");
+
+      Checker checker = new Checker()   
+      {
+         @Override
+         public void check(ApplicationContext context) throws Throwable
+         {
+            // start things and verify that the init method was called
+            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+            final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
+                
+            // verify we haven't called it again, not that there's really
+            // a way to given the code
+            assertEquals(1, mp.startCalls.get());
+            
+            // make sure that there are no Mps
+            MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
+
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  {  return 100000 == sc.getMessageProcessorCount(); } }));
+            
+            // now push the cluster into backup node.
+            ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
+            assertNotNull(originalSession);
+            ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+            
+            // get the current slot data to use as a template
+            final String slotPath = clusterId.asPath() + "/" + String.valueOf(0);
+            final DefaultRouterSlotInfo newSlot = (DefaultRouterSlotInfo)originalSession.getData(slotPath, null);
+            assertNotNull(newSlot);
+            
+            //-------------------------------------------------------------------------
+            // start a thread that continuously tries to grab the slot until it gets it.
+            final AtomicBoolean stillRunning = new AtomicBoolean(true);
+            final AtomicBoolean failed = new AtomicBoolean(false);
+            final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
+            
+            Runnable slotGrabber = new Runnable()
+            {
+               
+               @Override
+               public void run()
+               {
+                  ClusterInfoSession session = sessionRef.get();
+                  try
+                  {
+                     boolean haveSlot = false;
+                     while (!haveSlot && stillRunning.get())
+                     {
+                        newSlot.setDestination(new JunkDestination());
+                        if (session.mkdir(slotPath,newSlot,DirMode.EPHEMERAL) != null)
+                           haveSlot = true;
+                     }
+                  }
+                  catch(ClusterInfoException e) { failed.set(true);  }
+                  finally { stillRunning.set(false); }
+               }
+            };
+            
+            ClusterInfoSession session = factory.createSession();
+            sessionRef.set(session);
+
+            try
+            {
+               Thread thread = new Thread(slotGrabber);
+
+               thread.start();
+
+               boolean onStandby = false;
+               for (int i =0; i < 100 && !onStandby; i++) // try 100 times
+               {
+                  ((DisruptibleSession)originalSession).disrupt();
+                  Thread.sleep(100);
+                  if (!stillRunning.get())
+                     onStandby = true;
+               }
+
+               assertTrue(onStandby);
+
+            }
+            finally
+            {
+               stillRunning.set(false);
+
+               assertFalse(failed.get());
+            }
+            //-------------------------------------------------------------------------
+
+            // If we got here then the MpContainer is on standby and the number of Mps should
+            // drop to zero.
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  { return 0 == sc.getMessageProcessorCount(); } }));
+            
+            // Now we need to bring it back up.
+            session.stop();
+
+            // If we got here then the MpContainer is on standby and the number of Mps should
+            // drop to zero.
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  { return 100000 == sc.getMessageProcessorCount(); } }));
+         }
+         
+         public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+      };
+
+      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
+   }
+   
+   @Test
+   public void testFailedClusterManagerDuringKeyStoreCalls() throws Throwable
+   {
+      KeySourceImpl.maxcount = 100000;
+      System.setProperty("min_nodes_for_cluster", "1");
+      System.setProperty("total_slots_for_cluster", "1");
+
+      Checker checker = new Checker()   
+      {
+         @Override
+         public void check(ApplicationContext context) throws Throwable
+         {
+            // start things and verify that the init method was called
+            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+            final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
+                
+            // verify we haven't called it again, not that there's really
+            // a way to given the code
+            assertEquals(1, mp.startCalls.get());
+            
+            // make sure that there are no Mps
+            MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
+
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  {  return 100000 == sc.getMessageProcessorCount(); } }));
+            
+            // now push the cluster into backup node.
+            ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
+            assertNotNull(originalSession);
+            ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+            
+            // get the current slot data to use as a template
+            final String slotPath = clusterId.asPath() + "/" + String.valueOf(0);
+            final DefaultRouterSlotInfo newSlot = (DefaultRouterSlotInfo)originalSession.getData(slotPath, null);
+            assertNotNull(newSlot);
+            
+            //-------------------------------------------------------------------------
+            // start a thread that continuously tries to grab the slot until it gets it.
+            final AtomicBoolean stillRunning = new AtomicBoolean(true);
+            final AtomicBoolean failed = new AtomicBoolean(false);
+            final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
+            
+            Runnable slotGrabber = new Runnable()
+            {
+               
+               @Override
+               public void run()
+               {
+                  ClusterInfoSession session = sessionRef.get();
+                  try
+                  {
+                     boolean haveSlot = false;
+                     while (!haveSlot && stillRunning.get())
+                     {
+                        newSlot.setDestination(new JunkDestination());
+                        if (session.mkdir(slotPath,newSlot,DirMode.EPHEMERAL) != null)
+                           haveSlot = true;
+                     }
+                  }
+                  catch(ClusterInfoException e) { failed.set(true);  }
+                  finally { stillRunning.set(false); }
+               }
+            };
+            
+            for (int j = 0; j < 100; j++)
+            {
+               ClusterInfoSession session = factory.createSession();
+               sessionRef.set(session);
+               
+               try
+               {
+                  Thread thread = new Thread(slotGrabber);
+
+                  thread.start();
+
+                  boolean onStandby = false;
+                  for (int i =0; i < 100 && !onStandby; i++) // try 100 times
+                  {
+                     ((DisruptibleSession)originalSession).disrupt();
+                     Thread.sleep(100);
+                     if (!stillRunning.get())
+                        onStandby = true;
+                  }
+
+                  assertTrue(onStandby);
+
+                  // Now we need to bring it back up.
+                  session.stop();
+               }
+               finally
+               {
+                  stillRunning.set(false);
+
+                  assertFalse(failed.get());
+               }
+            }
+            //-------------------------------------------------------------------------
+
+            // If we got here then the MpContainer is on standby and the number of Mps should
+            // drop to zero.
+            poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  { return 100000 == sc.getMessageProcessorCount(); } });
+            
+            assertEquals(100000,statsCollector.getMessageProcessorCount());
+         }
+         
+         public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+      };
+
+      runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
+   }
 }

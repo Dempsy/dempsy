@@ -173,7 +173,7 @@ public class TestAllClusterImpls
             sessionsToClose.add(session);
             String mpapp = createApplicationLevel(cid,session);
             String clusterPath = mpapp + "/" + cid.getMpClusterName();
-            assertNotNull(pass,session.mkdir(clusterPath, DirMode.PERSISTENT));
+            assertNotNull(pass,session.mkdir(clusterPath, "YoDude", DirMode.PERSISTENT));
             assertNotNull(pass,clusterPath);
             Collection<String> clusterPaths = session.getSubdirs(mpapp,null);
             assertNotNull(pass,clusterPaths);
@@ -209,7 +209,7 @@ public class TestAllClusterImpls
             assertNotNull(pass,cluster);
 
             String node = cluster + "/Test";
-            assertNotNull(session.mkdir(node,DirMode.EPHEMERAL));
+            assertNotNull(session.mkdir(node,null,DirMode.EPHEMERAL));
             assertEquals(1, session.getSubdirs(cluster,null).size());
 
             String data = "testSimpleJoinTest-data";
@@ -276,7 +276,7 @@ public class TestAllClusterImpls
             assertFalse(pass,mainSession.equals(otherSession));
             
             String clusterHandle = mpapp + "/" + cid.getMpClusterName();
-            mainSession.mkdir(clusterHandle,DirMode.PERSISTENT);
+            mainSession.mkdir(clusterHandle,"YoDude",DirMode.PERSISTENT);
             assertTrue(pass,mainSession.exists(clusterHandle,null));
             
             assertTrue(poll(5000, mainAppWatcher, new Condition<TestWatcher>() {

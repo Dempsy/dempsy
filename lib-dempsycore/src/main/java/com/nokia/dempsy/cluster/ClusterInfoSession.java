@@ -34,7 +34,7 @@ public interface ClusterInfoSession
     * @throws ClusterInfoException on an error which can include the fact that the
     * parent directory doesn't exist.
     */
-   public String mkdir(String path, DirMode mode) throws ClusterInfoException;
+   public String mkdir(String path, Object data, DirMode mode) throws ClusterInfoException;
    
    /**
     * This will remove the directory stored at the path. The directory can be

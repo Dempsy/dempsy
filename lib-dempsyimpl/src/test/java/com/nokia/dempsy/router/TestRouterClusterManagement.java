@@ -53,9 +53,15 @@ public class TestRouterClusterManagement
       public void handle(Exception message) {}
    }
    
+   public String onodes = null;
+   public String oslots = null;
+   
    @Before
    public void init() throws Throwable
    {
+      onodes = System.setProperty("min_nodes_for_cluster", "1");
+      oslots = System.setProperty("total_slots_for_cluster", "20");
+
       final ClusterId clusterId = new ClusterId("test", "test-slot");
       Destination destination = new Destination() {};
       ApplicationDefinition app = new ApplicationDefinition(clusterId.getApplicationName());
@@ -93,6 +99,11 @@ public class TestRouterClusterManagement
    {
       routerFactory.stop();
       inbound.stop();
+      if (onodes != null)
+         System.setProperty("min_nodes_for_cluster", onodes);
+      if (oslots != null)
+         System.setProperty("total_slots_for_cluster", oslots);
+      onodes = oslots = null;
    }
    
    @Test

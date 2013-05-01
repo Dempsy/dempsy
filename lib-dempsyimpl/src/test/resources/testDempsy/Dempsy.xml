@@ -15,8 +15,8 @@
       </property>
       <property name="defaultRoutingStrategy">
          <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
-            <constructor-arg name="defaultTotalSlots" type="int" value="20" />
-            <constructor-arg name="defaultNumNodes" type="int" value="1" />
+            <constructor-arg name="defaultTotalSlots" type="int" value="${total_slots_for_cluster}" />
+            <constructor-arg name="defaultNumNodes" type="int" value="${min_nodes_for_cluster}" />
          </bean>
       </property>
       <property name="defaultSerializer" ref="serializer" />
