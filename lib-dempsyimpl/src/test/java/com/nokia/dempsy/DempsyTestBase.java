@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -151,9 +152,15 @@ public class DempsyTestBase
       public static boolean useSingletonSession = false;
    }
 
+   public String onodes = null;
+   public String oslots = null;
+
    @Before
    public void init()
    {
+      onodes = System.setProperty("min_nodes_for_cluster", "1");
+      oslots = System.setProperty("total_slots_for_cluster", "20");
+      
       TestMp.currentOutputCount = 10;
       TestMp.activateCheckedException = false;
       TestMp.alwaysPauseOnActivation = false;
@@ -161,6 +168,20 @@ public class DempsyTestBase
       TestZookeeperSessionFactory.useSingletonSession = false;
       defaultClusterCheck = "testDempsy/ClusterCheck-AlwaysInCurrentCluster.xml";
       TestKryoOptimizer.proxy = null;
+   }
+   
+   @After
+   public void after()
+   {
+      if (onodes != null)
+         System.setProperty("min_nodes_for_cluster", onodes);
+      else
+         System.clearProperty("min_nodes_for_cluster");
+      if (oslots != null)
+         System.setProperty("total_slots_for_cluster", oslots);
+      else
+         System.clearProperty("total_slots_for_cluster");
+      onodes = oslots = null;
    }
 
    public static class TestMessage implements Serializable

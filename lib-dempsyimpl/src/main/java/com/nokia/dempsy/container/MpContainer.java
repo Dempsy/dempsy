@@ -226,15 +226,13 @@ public class MpContainer implements Container, ContainerTestAccess
    // Monitoring and Management
    //----------------------------------------------------------------------------
 
-   final RunningEventSwitch expand = new RunningEventSwitch(isRunning);
-   final RunningEventSwitch contract = new RunningEventSwitch(isRunning);
+   final RunningEventSwitch keyspaceChangeSwitch = new RunningEventSwitch(isRunning);
    final Object keyspaceResponsibilityChangedLock = new Object(); // we need to synchronize keyspaceResponsibilityChanged alone
    
    // This method is only called from an anonymous runnable and it's gated by the RunningEventSwitch expand.
    private void runExpandKeyspace()
    {
       List<Future<Object>> futures = new ArrayList<Future<Object>>();
-      expand.workerInitiateRun();
 
       StatsCollector.TimerContext tcontext = null;
       try{
@@ -242,7 +240,7 @@ public class MpContainer implements Container, ContainerTestAccess
          Iterable<?> iterable = keySource.getAllPossibleKeys();
          for(final Object key: iterable)
          {
-            if (expand.wasPreempted() || !isRunning.get())
+            if (keyspaceChangeSwitch.wasPreempted() || !isRunning.get())
                break;
             
             // strategyInbound can't be null if we're in runExpandKeyspace since it was invoked 
@@ -281,14 +279,63 @@ public class MpContainer implements Container, ContainerTestAccess
       finally
       {
          if (tcontext != null) tcontext.stop();
-         if (expand.wasPreempted()) // this run is being preempted
+         if (keyspaceChangeSwitch.wasPreempted()) // this run is being preempted
          {
             for (Future<Object> f : futures)
                try { f.cancel(false); } catch (Throwable th) { logger.warn("Error trying to cancel an attempt to pre-instantiate a Mp",th); }
          }
-         expand.workerStopping();
       }
    }
+   
+   public class KeyspaceChanger implements Runnable
+   {
+      boolean grow = false;
+      boolean shrink = false;
+      
+      @Override
+      public void run()
+      {
+         try
+         {
+            // Notify that we're running
+            keyspaceChangeSwitch.workerInitiateRun();
+            
+            if (shrink)
+            {
+               // First do the contract by evicting all 
+               doEvict(new EvictCheck()
+               {
+                  // we shouldEvict if the message key no longer belongs as 
+                  //  part of this container.
+                  // strategyInbound can't be null if we're here since this was invoked 
+                  //  indirectly from it. So here we don't need to check for null.
+                  @Override
+                  public boolean shouldEvict(Object key, Object instance) { return !strategyInbound.doesMessageKeyBelongToNode(key); }
+                  // In this case, it's evictable.
+                  @Override
+                  public boolean isGenerallyEvitable() { return true; }
+                  @Override
+                  public boolean shouldStopEvicting() { return keyspaceChangeSwitch.wasPreempted(); }
+               });
+            }
+            
+            if (grow)
+            {
+               if (keySource != null)
+                  runExpandKeyspace();
+            }
+            
+            grow = shrink = false;
+         }
+         catch (RuntimeException exception)
+         {
+            logger.error("Failed to shrink the KeySpace.", exception);
+         }
+         finally { keyspaceChangeSwitch.workerStopping(); }
+      }
+   }
+   
+   private KeyspaceChanger changer = new KeyspaceChanger();
    
    @Override
    public void keyspaceResponsibilityChanged(boolean less, boolean more)
@@ -296,59 +343,25 @@ public class MpContainer implements Container, ContainerTestAccess
       synchronized(keyspaceResponsibilityChangedLock)
       {
          // need to handle less by passivating
-         if (less)
+         if (less || more)
          {
-            contract.preemptWorkerAndWait();
+            keyspaceChangeSwitch.preemptWorkerAndWait();
             
-            Thread t = new Thread(new Runnable()
-            {
-               @Override
-               public void run() 
-               {
-                  try
-                  {
-                     contract.workerInitiateRun();
-                     doEvict(new EvictCheck()
-                     {
-                        // we shouldEvict if the message key no longer belongs as 
-                        //  part of this container.
-                        // strategyInbound can't be null if we're here since this was invoked 
-                        //  indirectly from it. So here we don't need to check for null.
-                        @Override
-                        public boolean shouldEvict(Object key, Object instance) { return !strategyInbound.doesMessageKeyBelongToNode(key); }
-                        // In this case, it's evictable.
-                        @Override
-                        public boolean isGenerallyEvitable() { return true; }
-                        @Override
-                        public boolean shouldStopEvicting() { return contract.wasPreempted(); }
-                     });
-                  }
-                  finally { contract.workerStopping(); }
-               }
-            }, "Keyspace Contraction Thread");
+            // we don't want to set either to false in case preempting a previous 
+            // change created an incomplete state. The state will be redone here and
+            // only when a complete, uninterrupted pass finishes will the states
+            // of grow and shrink be reset (see the last line of the run() method
+            // in the KeyspaceChanger.
+            if (more) changer.grow = true;
+            if (less) changer.shrink = true;
+            
+            Thread t = new Thread(changer, "Keyspace Change Thread");
             t.setDaemon(true);
             t.start();
 
-            contract.waitForWorkerToStart();
+            keyspaceChangeSwitch.waitForWorkerToStart();
          }
 
-         // If more were added and we have a keySource we need to do
-         //  preinstantiation
-         if (more && keySource != null)
-         {
-            expand.preemptWorkerAndWait();
-            
-            Thread t = new Thread(new Runnable()
-            {
-               @Override
-               public void run() { runExpandKeyspace();  }
-            }, "Pre-Instantation Thread");
-            t.setDaemon(true);
-            t.start();
-
-            expand.waitForWorkerToStart();
-         }
-         
       }
    }
 

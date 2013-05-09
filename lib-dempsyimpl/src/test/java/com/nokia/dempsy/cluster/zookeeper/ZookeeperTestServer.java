@@ -25,6 +25,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -41,6 +43,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.TestUtils;
+import com.nokia.dempsy.TestUtils.Condition;
 
 @Ignore
 public class ZookeeperTestServer
@@ -70,7 +73,29 @@ public class ZookeeperTestServer
     * occur by closing the session from another client.
     * see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
     */
-   public static ZooKeeper createExpireSessionClient(ZooKeeper origZk) throws Throwable
+   /**
+    * cause a problem with the server running lets sever the connection
+    * according to the zookeeper faq we can force a session expired to 
+    * occur by closing the session from another client.
+    * see: http://wiki.apache.org/hadoop/ZooKeeper/FAQ#A4
+    */
+   private static class KWatcher implements Watcher
+   {
+      AtomicReference<ZooKeeper> connection = new AtomicReference<ZooKeeper>(null);
+      AtomicBoolean closed = new AtomicBoolean(false);
+      
+      @Override
+      public void process(final WatchedEvent event)
+      {
+         final ZooKeeper tcon = connection.get();
+         if (tcon != null && event.getState() == Watcher.Event.KeeperState.SyncConnected)
+         {
+            try { tcon.close(); closed.set(true); } catch (InterruptedException ie) {}
+         }
+      }
+   }
+   
+   public static void forceSessionExpiration(ZooKeeper origZk) throws Throwable
    {
       TestUtils.Condition<ZooKeeper> condition = new TestUtils.Condition<ZooKeeper>() 
       {
@@ -89,11 +114,43 @@ public class ZookeeperTestServer
       
       assertTrue(TestUtils.poll(5000, origZk, condition));
       
-      long sessionid = origZk.getSessionId();
-      byte[] pw = origZk.getSessionPasswd();
-      ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher() { @Override public void process(WatchedEvent arg0) { } }, sessionid, pw);
-      assertTrue(TestUtils.poll(5000, killer, condition));
-      return killer;
+      boolean done = false;
+      while (!done)
+      {
+         long sessionid = origZk.getSessionId();
+         byte[] pw = origZk.getSessionPasswd();
+         KWatcher kwatcher = new KWatcher();
+         ZooKeeper killer = new ZooKeeper("127.0.0.1:" + port,5000, kwatcher, sessionid, pw);
+         kwatcher.connection.set(killer);
+
+         // wait until we get a close
+         boolean calledBack = TestUtils.poll(5000, kwatcher, new Condition<KWatcher>()
+               {
+            @Override
+            public boolean conditionMet(KWatcher o) throws Throwable
+            {
+               return o.closed.get();
+            }
+               });
+
+         if (!calledBack)
+            killer.close(); 
+
+         final AtomicBoolean isExpired = new AtomicBoolean(false);
+         ZooKeeper check = new ZooKeeper("127.0.0.1:" + port,5000, new Watcher()
+         {
+            @Override
+            public void process(WatchedEvent event)
+            {
+               if (event.getState() == Watcher.Event.KeeperState.Expired)
+                  isExpired.set(true);
+            }
+         }, sessionid, pw);
+         
+         done = TestUtils.poll(5000, isExpired, new Condition<AtomicBoolean>() { public boolean conditionMet(AtomicBoolean o) { return o.get(); } });
+         
+         check.close();
+      }
    }
    
    public static class InitZookeeperServerBean

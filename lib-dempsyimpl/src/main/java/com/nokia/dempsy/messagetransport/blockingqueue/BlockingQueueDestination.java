@@ -31,5 +31,8 @@ public class BlockingQueueDestination implements Destination
    public int hashCode() { return queue.hashCode(); }
    
    @Override
-   public boolean equals(Object other) { return other == null ? false : queue.equals(((BlockingQueueDestination) other).queue); }
+   public boolean equals(Object other) 
+   {
+      return (other == null || !(other instanceof BlockingQueueDestination)) ? false : queue.equals(((BlockingQueueDestination) other).queue);
+   }
 }

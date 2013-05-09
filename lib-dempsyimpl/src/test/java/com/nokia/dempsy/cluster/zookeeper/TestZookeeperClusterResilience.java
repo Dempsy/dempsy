@@ -244,8 +244,7 @@ public class TestZookeeperClusterResilience
          session.getSubdirs(new MicroShardUtils(clusterId).getShardsDir(), callback);
          
          ZooKeeper origZk = session.zkref.get();
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(origZk);
-         killer.close(); // tricks the server into expiring the other session
+         ZookeeperTestServer.forceSessionExpiration(origZk);
          
          // wait for the callback
          assertTrue(TestUtils.poll(baseTimeoutMillis, callback, new Condition<TestWatcher>() {
@@ -310,10 +309,10 @@ public class TestZookeeperClusterResilience
             {
                try
                {
+                  called.set(true);
                   logger.trace("process called on TestWatcher.");
                   session.exists(u.getClusterDir(), this);
                   session.getSubdirs(u.getClusterDir(), this);
-                  called.set(true);
                }
                catch (ClusterInfoException cie)
                {
@@ -324,20 +323,33 @@ public class TestZookeeperClusterResilience
          };
          
          // now see if the cluster works.
-         callback.process();
+         callback.process(); // this registers the session with the callback as the Watcher
          
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(session.zkref.get());
-         
-         // the above actually results in a SyncConnected event ... so we need to filter that out since it will result in a callback.
-         assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
-
          // now reset the condition
          callback.called.set(false);
          
-         killer.close(); // tricks the server into expiring the other session
-         
          // and eventually a callback
-         assertTrue(poll(baseTimeoutMillis,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
+         ZookeeperTestServer.forceSessionExpiration(session.zkref.get());
+
+         // we should see the session expiration in a callback
+         assertTrue(poll(5000,callback,new Condition<TestWatcher>() {  @Override public boolean conditionMet(TestWatcher o) {  return o.called.get(); } }));
+
+         // and eventually a reconnect
+         assertTrue(poll(5000,callback,new Condition<TestWatcher>() 
+         {  
+            @Override public boolean conditionMet(TestWatcher o) 
+            {
+               try
+               {
+                  o.process();
+                  return true;
+               }
+               catch (Throwable th)
+               {
+                  return false;
+               }
+            } 
+         }));
          
          // now we should be able to recheck
          u.mkAllPersistentAppDirs(session,null);
@@ -517,8 +529,7 @@ public class TestZookeeperClusterResilience
 
          logger.trace("Killing zookeeper");
          ZooKeeper origZk = session.zkref.get();
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(origZk);
-         killer.close(); // tricks the server into expiring the other session
+         ZookeeperTestServer.forceSessionExpiration(origZk);
          logger.trace("Killed zookeeper");
          
          // wait for the current session to go invalid
@@ -730,12 +741,10 @@ public class TestZookeeperClusterResilience
          
          callback.process();
          
-         ZooKeeper killer = ZookeeperTestServer.createExpireSessionClient(session.zkref.get());
-         
          // force the ioexception to happen
          forceIOException.set(true);
          
-         killer.close(); // tricks the server into expiring the other session
+         ZookeeperTestServer.forceSessionExpiration(session.zkref.get());
          
          // now in the background it should be retrying but hosed.
          assertTrue(forceIOExceptionLatch.await(baseTimeoutMillis * 3, TimeUnit.MILLISECONDS));

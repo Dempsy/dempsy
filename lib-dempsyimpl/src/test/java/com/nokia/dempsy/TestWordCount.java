@@ -223,7 +223,10 @@ public class TestWordCount extends DempsyTestBase
             dempsy = actx.getBean(Dempsy.class);
             WordRank rank = (WordRank)TestUtils.getMp(dempsy, "test-wordcount", "test-cluster2");
             List<Pair<String,Long>> results = rank.getPairs();
-            assertEquals("the",results.get(0).getFirst());
+            
+            boolean exactCheck = !TestUtils.getReceiver(2, contexts).getFailFast();
+            if (exactCheck) // we can only do this assert if there are no dropped messages
+               assertEquals("the",results.get(0).getFirst());
          }
          
          @Override

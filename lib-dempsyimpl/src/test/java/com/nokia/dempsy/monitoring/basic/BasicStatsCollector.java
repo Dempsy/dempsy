@@ -268,8 +268,12 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
       return messagesReceived.get();
    }
    
+   @Override
    public long getMessageProcessorsCreated() { return mpsCreated.get(); }
 
+   @Override
+   public long getMessageProcessorCount() { return numberOfMPs.get(); }
+   
    @Override
    public long getMessageBytesSent()
    {

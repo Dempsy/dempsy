@@ -51,7 +51,7 @@ import com.nokia.dempsy.util.Pair;
 public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
 {
    private static Logger logger = LoggerFactory.getLogger(LocalClusterSessionFactory.class);
-   private static List<LocalSession> currentSessions = new ArrayList<LocalSession>();
+   protected static List<LocalSession> currentSessions = new ArrayList<LocalSession>();
 
    // ====================================================================
    // This section pertains to the management of the tree information

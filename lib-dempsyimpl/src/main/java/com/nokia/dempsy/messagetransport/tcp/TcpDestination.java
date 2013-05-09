@@ -80,7 +80,7 @@ public class TcpDestination extends ReceiverIndexedDestination implements Destin
    @Override
    public boolean equals(Object other)
    {
-      if (other == null)
+      if (other == null || !(other instanceof TcpDestination))
          return false;
       TcpDestination otherTcpDestination = (TcpDestination)other;
       return inetAddress.equals(otherTcpDestination.inetAddress ) && (port == otherTcpDestination.port) && super.equals(other);

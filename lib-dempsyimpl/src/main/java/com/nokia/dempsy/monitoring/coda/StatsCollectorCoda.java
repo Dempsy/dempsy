@@ -379,7 +379,13 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    {
       return mpsCreated.count();
    }
-   
+
+   @Override
+   public long getMessageProcessorCount()
+   {
+      return numberOfMPs.get();
+   }
+
    @Override
    public long getMessageBytesSent()
    {

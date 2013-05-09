@@ -19,12 +19,15 @@ package com.nokia.dempsy;
 import static com.nokia.dempsy.TestUtils.getMp;
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -33,10 +36,17 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.TestUtils.Condition;
+import com.nokia.dempsy.cluster.ClusterInfoException;
+import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
+import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.Container;
+import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
+import com.nokia.dempsy.router.DecentralizedRoutingStrategy.DefaultRouterShardInfo;
+import com.nokia.dempsy.router.microshard.MicroShardUtils;
 
 public class TestDempsyKeySource extends DempsyTestBase
 {
@@ -62,6 +72,7 @@ public class TestDempsyKeySource extends DempsyTestBase
       public static volatile boolean infinite = false;
       public static volatile CountDownLatch pause = new CountDownLatch(0);
       public static volatile KSIterable lastCreated = null;
+      public static volatile int maxcount = 2;
 
       public void setDempsy(Dempsy dempsy) { this.dempsy = dempsy; }
 
@@ -85,7 +96,7 @@ public class TestDempsyKeySource extends DempsyTestBase
                long count = 0;
 
                @Override
-               public boolean hasNext() { if (count >= 1) kickClusterInfoMgr(); return m_infinite ? true : (count < 2);  }
+               public boolean hasNext() { if (count >= 1) kickClusterInfoMgr(); return m_infinite ? true : (count < maxcount);  }
 
                @Override
                public String next() { try { m_pause.await(); } catch (InterruptedException ie) {} count++; return (lastKey = "test" + count);}
@@ -329,4 +340,247 @@ public class TestDempsyKeySource extends DempsyTestBase
       TestMp.activateCheckedException = false;
       runAllCombinations(checker,"SinglestageWithKeySourceAndExecutorApplicationActx.xml");
    }
+   
+   public static class JunkDestination implements Destination {}
+
+   @Test
+   public void testExpandingAndContractingKeySpace() throws Throwable
+   {
+      KeySourceImpl.maxcount = 100000;
+      System.setProperty("min_nodes_for_cluster", "1");
+      System.setProperty("total_slots_for_cluster", "1");
+
+      Checker checker = new Checker()   
+      {
+         @Override
+         public void check(ClassPathXmlApplicationContext context) throws Throwable
+         {
+            // start things and verify that the init method was called
+            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+            final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
+
+            // verify we haven't called it again, not that there's really
+            // a way to given the code
+            assertEquals(1, mp.startCalls.get());
+
+            // make sure that there are no Mps
+            MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
+
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  {  return 100000 == sc.getMessageProcessorCount(); } }));
+
+            // now push the cluster into backup node.
+            ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
+            assertNotNull(originalSession);
+            ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+
+            // get the current slot data to use as a template
+            MicroShardUtils msutils = new MicroShardUtils(clusterId);
+            final String slotPath = msutils.getShardsDir() + "/" + String.valueOf(0);
+            final DefaultRouterShardInfo newSlot = (DefaultRouterShardInfo)originalSession.getData(slotPath, null);
+            assertNotNull(newSlot);
+
+            //-------------------------------------------------------------------------
+            // start a thread that continuously tries to grab the slot until it gets it.
+            final AtomicBoolean stillRunning = new AtomicBoolean(true);
+            final AtomicBoolean failed = new AtomicBoolean(false);
+            final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
+
+            Runnable slotGrabber = new Runnable()
+            {
+
+               @Override
+               public void run()
+               {
+                  ClusterInfoSession session = sessionRef.get();
+                  try
+                  {
+                     boolean haveSlot = false;
+                     while (!haveSlot && stillRunning.get())
+                     {
+                        if (session.mkdir(slotPath,DirMode.EPHEMERAL) != null)
+                        {
+                           newSlot.setDestination(new JunkDestination());
+                           session.setData(slotPath,newSlot);
+                           haveSlot = true;
+                        }
+                     }
+                  }
+                  catch(ClusterInfoException e) { failed.set(true);  }
+                  finally { stillRunning.set(false); }
+               }
+            };
+
+            ClusterInfoSession session = factory.createSession();
+            sessionRef.set(session);
+
+            try
+            {
+               Thread thread = new Thread(slotGrabber);
+
+               thread.start();
+
+               boolean onStandby = false;
+               for (int i =0; i < 100 && !onStandby; i++) // try 100 times
+               {
+                  ((DisruptibleSession)originalSession).disrupt();
+                  Thread.sleep(100);
+                  if (!stillRunning.get())
+                     onStandby = true;
+               }
+
+               assertTrue(onStandby);
+
+            }
+            finally
+            {
+               stillRunning.set(false);
+
+               assertFalse(failed.get());
+            }
+            //-------------------------------------------------------------------------
+
+            // If we got here then the MpContainer is on standby and the number of Mps should
+            // drop to zero.
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  { return 0 == sc.getMessageProcessorCount(); } }));
+
+            // Now we need to bring it back up.
+            session.stop();
+
+            // If we got here then the MpContainer is on standby and the number of Mps should
+            // drop to zero.
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  { return 100000 == sc.getMessageProcessorCount(); } }));
+         }
+
+         public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+      };
+
+      runAllCombinations(checker, "SinglestageWithKeySourceAndExecutorApplicationActx.xml");
+   }
+
+   @Test
+   public void testFailedClusterManagerDuringKeyStoreCalls() throws Throwable
+   {
+      KeySourceImpl.maxcount = 100000;
+      System.setProperty("min_nodes_for_cluster", "1");
+      System.setProperty("total_slots_for_cluster", "1");
+
+      Checker checker = new Checker()   
+      {
+         @Override
+         public void check(ClassPathXmlApplicationContext context) throws Throwable
+         {
+            // start things and verify that the init method was called
+            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+            final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
+
+            // verify we haven't called it again, not that there's really
+            // a way to given the code
+            assertEquals(1, mp.startCalls.get());
+
+            // make sure that there are no Mps
+            MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
+
+            assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  {  return 100000 == sc.getMessageProcessorCount(); } }));
+
+            // now push the cluster into backup node.
+            ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
+            assertNotNull(originalSession);
+            ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+
+            // get the current slot data to use as a template
+            MicroShardUtils msutils = new MicroShardUtils(clusterId);
+            final String slotPath = msutils.getShardsDir() + "/" + String.valueOf(0);
+            final DefaultRouterShardInfo newSlot = (DefaultRouterShardInfo)originalSession.getData(slotPath, null);
+            assertNotNull(newSlot);
+
+            //-------------------------------------------------------------------------
+            // start a thread that continuously tries to grab the slot until it gets it.
+            final AtomicBoolean stillRunning = new AtomicBoolean(true);
+            final AtomicBoolean failed = new AtomicBoolean(false);
+            final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
+
+            Runnable slotGrabber = new Runnable()
+            {
+
+               @Override
+               public void run()
+               {
+                  ClusterInfoSession session = sessionRef.get();
+                  try
+                  {
+                     boolean haveSlot = false;
+                     while (!haveSlot && stillRunning.get())
+                     {
+                        if (session.mkdir(slotPath,DirMode.EPHEMERAL) != null)
+                        {
+                           newSlot.setDestination(new JunkDestination());
+                           session.setData(slotPath,newSlot);
+                           haveSlot = true;
+                        }
+                     }
+                  }
+                  catch(ClusterInfoException e) { failed.set(true);  }
+                  finally { stillRunning.set(false); }
+               }
+            };
+
+            for (int j = 0; j < 100; j++)
+            {
+               ClusterInfoSession session = factory.createSession();
+               sessionRef.set(session);
+
+               try
+               {
+                  Thread thread = new Thread(slotGrabber);
+
+                  thread.start();
+
+                  boolean onStandby = false;
+                  for (int i =0; i < 100 && !onStandby; i++) // try 100 times
+                  {
+                     ((DisruptibleSession)originalSession).disrupt();
+                     Thread.sleep(100);
+                     if (!stillRunning.get())
+                        onStandby = true;
+                  }
+
+                  assertTrue(onStandby);
+
+                  // Now we need to bring it back up.
+                  session.stop();
+               }
+               finally
+               {
+                  stillRunning.set(false);
+
+                  assertFalse(failed.get());
+               }
+            }
+            //-------------------------------------------------------------------------
+
+            // If we got here then the MpContainer is on standby and the number of Mps should
+            // drop to zero.
+            poll(baseTimeoutMillis, statsCollector, 
+                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                  { return 100000 == sc.getMessageProcessorCount(); } });
+
+            assertEquals(100000,statsCollector.getMessageProcessorCount());
+         }
+
+         public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+      };
+
+      runAllCombinations(checker,"SinglestageWithKeySourceAndExecutorApplicationActx.xml");
+   }
+
 }

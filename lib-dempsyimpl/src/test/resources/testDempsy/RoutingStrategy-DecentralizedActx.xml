@@ -3,7 +3,7 @@
     "http://www.springframework.org/dtd/spring-beans-2.0.dtd">
 <beans>
    <bean name="routingstrategy" class="com.nokia.dempsy.router.DecentralizedRoutingStrategy">
-      <constructor-arg index="0" type="int" value="20" />
-      <constructor-arg index="1" type="int" value="1" />
+      <constructor-arg index="0" type="int" value="${total_slots_for_cluster}" />
+      <constructor-arg index="1" type="int" value="${min_nodes_for_cluster}" />
    </bean>
 </beans>

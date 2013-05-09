@@ -463,7 +463,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   destinations.set(null);
                   logger.warn("Failed to set up the Outbound for " + clusterId + " from " + OutboundManager.this.clusterId, e);
                }
-               catch (RuntimeException rte)
+               catch (Throwable rte)
                {
                   logger.error("Failed to set up the Outbound for " + clusterId + " from " + OutboundManager.this.clusterId, rte);
                }
@@ -486,7 +486,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       private MicroShardUtils msutils;
       private DefaultRouterClusterInfo clusterInfo;
       private AtomicBoolean isRunning = new AtomicBoolean(true);
-      
+      private Set<String> shardsToForceRemove = new HashSet<String>();
+
       private void modifyDestinationsAcquired(Collection<Integer> toRemove, Collection<Integer> toAdd)
       {
          if (logger.isTraceEnabled())
@@ -564,6 +565,11 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                cleanupAfterExceptionDuringNodeDirCheck();
                throw re;
             }
+            catch (Throwable th)
+            {
+               cleanupAfterExceptionDuringNodeDirCheck();
+               throw new RuntimeException("Unknown exception!",th);
+            }
          }
          
          // called from the catch clauses in checkNodeDirectory
@@ -603,6 +609,20 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             Set<Integer> destinationsToRemove = new HashSet<Integer>();
             Set<Integer> destinationsToAdd = new HashSet<Integer>();
             
+            //==============================================================================
+            // if there are any slots to for remove, then do that first
+            if (shardsToForceRemove.size() > 0)
+            {
+               for (Iterator<String> cur = shardsToForceRemove.iterator(); cur.hasNext();)
+               {
+                  String pathToRemove = cur.next();
+                  try { session.rmdir(pathToRemove); }
+                  catch (ClusterInfoException.NoNodeException nne) { /* This is fine. */ } 
+                  cur.remove();
+               }
+            }
+            //==============================================================================
+
             //==============================================================================
             // need to verify that the existing shards in destinationsAcquired are still ours. 
             Map<Integer,DefaultRouterShardInfo> shardNumbersToShards = new HashMap<Integer,DefaultRouterShardInfo>();
@@ -660,7 +680,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   destinationsToRemove.add(shardToReaquire); // we're going to skip it ... and drop it.
                }
                // otherwise we will try to reacquire it.
-               else if (!acquireShard(shardToReaquire, defaultTotalShards, session, clusterId, thisDestination, shardNumbersToShards))
+               else if (!acquireShard(shardToReaquire, defaultTotalShards, session, clusterId, thisDestination, shardNumbersToShards, shardsToForceRemove))
                {
                   if (traceOn)
                      logger.trace(Inbound.this.toString() + " removing " + shardToReaquire + 
@@ -774,7 +794,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                
                // if we're already considering this shard ...
                if (!doIOwnThisShard(shardToTry,shardNumbersToShards) && 
-                     acquireShard(shardToTry, defaultTotalShards, session, clusterId, thisDestination, shardNumbersToShards))
+                     acquireShard(shardToTry, defaultTotalShards, session, clusterId, thisDestination, shardNumbersToShards, shardsToForceRemove))
                {
                   if (!destinationsAcquired.contains(shardToTry))
                      destinationsToAdd.add(shardToTry);
@@ -1031,20 +1051,26 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    
    private static boolean acquireShard(int shardNum, int totalAddressNeeded,
          ClusterInfoSession clusterHandle, ClusterId clusterId, 
-         Destination destination, Map<Integer,DefaultRouterShardInfo> shardNumbersToShards) throws ClusterInfoException
+         Destination destination, Map<Integer,DefaultRouterShardInfo> shardNumbersToShards,
+         Collection<String> forceRemoveThesePaths) throws ClusterInfoException
    {
       MicroShardUtils utils = new MicroShardUtils(clusterId);
       String shardPath = utils.getShardsDir() + "/" + String.valueOf(shardNum);
       if (clusterHandle.mkdir(shardPath,DirMode.EPHEMERAL) != null)
       {
+         // Once I have the slot I must delete it if I never get to putting the slot in
+         forceRemoveThesePaths.add(shardPath);
          DefaultRouterShardInfo dest = (DefaultRouterShardInfo)clusterHandle.getData(shardPath, null);
          if(dest == null)
          {
             dest = new DefaultRouterShardInfo(destination,shardNum,totalAddressNeeded);
             clusterHandle.setData(shardPath, dest);
          }
+         forceRemoveThesePaths.remove(shardPath); // we're ok now
+
          if (shardNumbersToShards != null)
             shardNumbersToShards.put(shardNum, dest);
+         
          return true;
       }
       else

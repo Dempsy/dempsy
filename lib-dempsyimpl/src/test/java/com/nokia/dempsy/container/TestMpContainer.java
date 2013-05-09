@@ -633,7 +633,7 @@ public class TestMpContainer
    
    static class FixedInbound implements RoutingStrategy.Inbound
    {
-      static AtomicReference<Set<Object>> validKeys = new AtomicReference<Set<Object>>(new HashSet<Object>());
+      AtomicReference<Set<Object>> validKeys = new AtomicReference<Set<Object>>(new HashSet<Object>());
       
       @Override
       public void stop(){ } 
@@ -820,4 +820,62 @@ public class TestMpContainer
             { @Override public boolean conditionMet(AtomicBoolean o) { return !o.get(); } }));
    }
 
+   @Test
+   public void testKeyspaceContractExpandRace() throws Throwable
+   {
+      // need to get hold of the block passivate latch and set it to 1
+      TestProcessor prototype = context.getBean(TestProcessor.class);
+      CountDownLatch blockPassivate = new CountDownLatch(1);
+      prototype.blockPassivate = blockPassivate;
+      
+      final String[] keys = new String[1000000];
+      final String[] keys2 = new String[1000000];
+      final String[] emptyKeys = new String[0];
+      for (int i = 0; i < keys.length; i++)
+      {
+         keys[i] = String.valueOf(i);
+         keys2[i] = String.valueOf(i + keys.length);
+      }
+      
+      // set an inbound strategy that provides a known value
+      final FixedInbound inboundShards1 = new FixedInbound().set((Object[])keys);
+      final FixedInbound inboundShards2 = new FixedInbound().set((Object[])keys2);
+      final FixedInbound inboundShardsEmpty = new FixedInbound().set((Object[])emptyKeys);
+      // The keysource contains ALL keys even if they aren't in the current container
+      FixedKeySource keysource = new FixedKeySource().set(keys,keys2);
+      
+      // set a keysource with all of the keys
+      container.setKeySource(keysource);
+
+      // first run the pre-initialization work to create the Mps
+      container.setInboundStrategy(inboundShards1);
+      container.keyspaceResponsibilityChanged(false, true);
+      
+      // assert the exact number were created.
+      TestUtils.poll(baseTimeoutMillis * 10, container, new TestUtils.Condition<MpContainer>() 
+            { @Override public boolean conditionMet(MpContainer o) { return o.getProcessorCount() == keys.length; } });
+      assertEquals(keys.length, container.getProcessorCount());
+      
+      // make sure that doesn't change
+      Thread.sleep(10);
+      assertEquals(keys.length,container.getProcessorCount());
+      
+      FixedInbound[] inbounds = { inboundShards1, inboundShards2 };
+      blockPassivate.countDown();
+      for (int i = 0; i < 1; i++)
+      {
+         // now we need a rapid contract followed by expand
+         container.setInboundStrategy(inboundShardsEmpty);
+         container.keyspaceResponsibilityChanged(true, false);
+         container.setInboundStrategy(inbounds[i & 1]);
+         container.keyspaceResponsibilityChanged(false, true);
+         Thread.sleep(1000);
+         blockPassivate.countDown();
+      }
+
+      // make sure we're back.
+      TestUtils.poll(baseTimeoutMillis * 10, container, new TestUtils.Condition<MpContainer>() 
+            { @Override public boolean conditionMet(MpContainer o) { return o.getProcessorCount() == keys2.length; } });
+      assertEquals("Num mps is " + container.getProcessorCount(), keys2.length, container.getProcessorCount());
+   }
 }

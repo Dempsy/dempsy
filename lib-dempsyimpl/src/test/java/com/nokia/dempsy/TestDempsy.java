@@ -20,6 +20,7 @@ import static com.nokia.dempsy.TestUtils.getAdaptor;
 import static com.nokia.dempsy.TestUtils.getMp;
 import static com.nokia.dempsy.TestUtils.poll;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -415,4 +416,114 @@ public class TestDempsy extends DempsyTestBase
             },"MultistageApplicationExplicitDestinationsActx.xml");
    }
    
+   @Test
+   public void testForkedFailure() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(ClassPathXmlApplicationContext context) throws Throwable
+         {
+            final AtomicBoolean stopIt = new AtomicBoolean(false);
+            final AtomicBoolean failed = new AtomicBoolean(false);
+            final AtomicBoolean stopped = new AtomicBoolean(false);
+            
+            try
+            {
+               // start things and verify that the init method was called
+               Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+
+               final TestAdaptor adaptor = (TestAdaptor) getAdaptor(dempsy, "test-app","test-cluster0");
+               assertNotNull(adaptor);
+
+               Thread adaptorThread = new Thread(new Runnable()
+               {
+                  @Override
+                  public void run()
+                  {
+                     try
+                     {
+                        long i = 0;
+                        while (!stopIt.get())
+                        {
+                           adaptor.pushMessage(new TestMessage("" + i));
+                           i++;
+                           Thread.sleep(10);
+                        }
+                     }
+                     catch (Throwable th)
+                     {
+                        failed.set(true);
+                     }
+                     finally
+                     {
+                        stopped.set(true);
+                     }
+                  }
+               }, "testForkedFailure-Adaptor Thread ");
+               adaptorThread.start();
+               
+               TestMp[] mps = new TestMp[3];
+               DisruptibleSession[] sessions = new DisruptibleSession[3];
+               
+
+               for (int i = 0; i < mps.length; i++)
+               {
+                  String cluster = "test-cluster" + (i + 1);
+                  mps[i] = (TestMp) getMp(dempsy,"test-app",cluster);
+                  sessions[i] = (DisruptibleSession)(dempsy.getCluster(new ClusterId("test-app", cluster)).getNodes().get(0).retouRteg().getClusterSession());
+                  assertEquals(1, mps[i].startCalls.get());
+               }
+
+               for (int i = 0; i < mps.length; i++)
+               {
+                  for (int j = 0; j < mps.length; j++)
+                  {
+                     if (i != j)
+                        assertTrue(mps[i] != mps[j]);
+                  }
+               }
+               
+               // now check to see that data is going to all 3.
+               for (int i = 0; i < mps.length; i++)
+               {
+                  assertTrue(poll(baseTimeoutMillis, mps[i], new Condition<TestMp>() { public boolean conditionMet(TestMp o)
+                  {
+                     return o.handleCalls.get() > 0;
+                  }}));
+               }
+
+               int curPos = 0;
+               for (int j = 0; j < 3; j++)
+               {
+                  // now kill a cluster or 2 (or 3)
+                  for (int k = 0; k <= j; k++)
+                     sessions[curPos++ % sessions.length].disrupt();
+
+                  for (int i = 0; i < mps.length; i++)
+                  {
+                     final long curCalls = mps[i].handleCalls.get();
+                     assertTrue(poll(baseTimeoutMillis, mps[i], new Condition<TestMp>() { public boolean conditionMet(TestMp o)
+                     {
+                        return o.handleCalls.get() > curCalls;
+                     }}));
+                  }
+               }               
+            }
+            finally
+            {
+               stopIt.set(true);
+               assertFalse(failed.get());
+               
+               assertTrue(poll(baseTimeoutMillis, stopped, new Condition<AtomicBoolean>() { public boolean conditionMet(AtomicBoolean o) { return o.get(); }}));
+            }
+         }
+         
+         public String toString() { return "testForkedFailure"; }
+
+      },"SimpleMultistageApplicationActx.xml");
+
+   }
+   
+
 }

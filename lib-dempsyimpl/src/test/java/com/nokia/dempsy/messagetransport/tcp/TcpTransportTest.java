@@ -1087,15 +1087,24 @@ public class TcpTransportTest
                
                assertTrue(numAdaptorThreads > 1);
                
+               DefaultDempsyExecutor executor = ((DefaultDempsyExecutor)adaptor.getExecutor());
+               
                // send as many messages as there are threads.
                
-               for (int i = 0; i < (((DefaultDempsyExecutor)adaptor.getExecutor()).getMaxNumberOfQueuedLimitedTasks() + adaptor.getExecutor().getNumThreads()); i++)
+               // first dump the max number of messages
+               for (int i = 0; i < executor.getMaxNumberOfQueuedLimitedTasks(); i++)
                   sender.send(makeMessageBuffer(factory,"Hello".getBytes()));
                
-               // wait until all Listeners are in and all threads enqueued
+               // wait until there's room in the queue due to messages being passed on to
+               // the receiver; one for each thread.
                assertTrue(TestUtils.poll(baseTimeoutMillis, receiver, new TestUtils.Condition<StringListener>() 
                      { @Override public boolean conditionMet(StringListener o) { return o.numIn.get() == numAdaptorThreads; } }));
+                              
+               // send one more for each opened up place in the queue now
+               for (int i = 0; i < numAdaptorThreads; i++)
+                  sender.send(makeMessageBuffer(factory,"Hello".getBytes()));
 
+               // wait until all Listeners are in and all threads enqueued. This is the totally full state.
                assertTrue(TestUtils.poll(baseTimeoutMillis, ((DefaultDempsyExecutor)adaptor.getExecutor()), new TestUtils.Condition<DefaultDempsyExecutor>() 
                      { @Override public boolean conditionMet(DefaultDempsyExecutor o) { return o.getNumberLimitedPending() == o.getMaxNumberOfQueuedLimitedTasks(); } }));
 
