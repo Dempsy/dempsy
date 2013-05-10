@@ -330,7 +330,7 @@ public class TestDempsy extends DempsyTestBase
                      for (int i = 0; i < 10; i++)
                      {
                         logger.trace("=========================");
-                        dsess.disrupt();
+                        dsess.disrupt(0);
 
                         // now wait until more messages come through
                         final long curCount = mp.handleCalls.get();
@@ -498,7 +498,7 @@ public class TestDempsy extends DempsyTestBase
                {
                   // now kill a cluster or 2 (or 3)
                   for (int k = 0; k <= j; k++)
-                     sessions[curPos++ % sessions.length].disrupt();
+                     sessions[curPos++ % sessions.length].disrupt(0);
 
                   for (int i = 0; i < mps.length; i++)
                   {

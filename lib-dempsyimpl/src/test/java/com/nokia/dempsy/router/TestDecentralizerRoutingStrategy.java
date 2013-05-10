@@ -1,6 +1,7 @@
 package com.nokia.dempsy.router;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +54,9 @@ public class TestDecentralizerRoutingStrategy
          LocalClusterSessionFactory mpfactory = new LocalClusterSessionFactory();
          final ClusterInfoSession session = mpfactory.createSession();
          tsession = session;
+         
+         final AtomicBoolean failed = new AtomicBoolean(false);
+         final AtomicBoolean exited = new AtomicBoolean(false);
 
          inbound = (DecentralizedRoutingStrategy.Inbound)strategy.createInbound(session,clusterId, 
                new Dempsy(){ public List<Class<?>> gm(ClusterDefinition clusterDef) { return super.getAcceptedMessages(clusterDef); }}.gm(cd), 
@@ -82,7 +86,9 @@ public class TestDecentralizerRoutingStrategy
                                     inbound.doesMessageKeyBelongToNode("Hello");
                                  }
                               }
-                              catch (Throwable th) { th.printStackTrace(); }
+                              catch (Throwable th) { th.printStackTrace(); failed.set(true); }
+                              
+                              exited.set(true);
                            }
                         }).start();
 
@@ -94,7 +100,7 @@ public class TestDecentralizerRoutingStrategy
 
          inbound.shardChangeWatcher.process();
 
-         new Thread(new Runnable()
+         Thread shardCreateThread = new Thread(new Runnable()
          {
 
             @Override
@@ -106,28 +112,43 @@ public class TestDecentralizerRoutingStrategy
                   while (running.get())
                      session.mkdir(msutils.getShardsDir() + "/0", DirMode.EPHEMERAL);
                }
-               catch (Throwable th) { th.printStackTrace(); }
+               catch (Throwable th) { th.printStackTrace(); failed.set(true); }
             }
-         }).start();
+         });
+         shardCreateThread.start();
 
-         for (int i = 0; i < 1000000; i++)
+         for (int i = 0; i < 100; i++)
          {
-            ((DisruptibleSession)session).disrupt();
-            Thread.yield();
+            ((DisruptibleSession)session).disrupt(100);
+            Thread.sleep(1);
          }
+         
+         running.set(false);
+         
+         assertTrue(TestUtils.poll(20000, shardCreateThread, new TestUtils.Condition<Thread>()
+         {
+            @Override public boolean conditionMet(Thread o){ return !o.isAlive() && exited.get(); }
+         }));
+         
+         assertFalse(failed.get());
       }
       finally
       {
-         if (onodes != null)
-            System.setProperty("min_nodes_for_cluster", onodes);
-         if (oslots != null)
-            System.setProperty("total_slots_for_cluster", oslots);
          running.set(false);
          
          if (inbound != null)
             inbound.stop();
          if (tsession != null)
             tsession.stop();
+
+         if (onodes != null)
+            System.setProperty("min_nodes_for_cluster", onodes);
+         else
+            System.clearProperty("min_nodes_for_cluster");
+         if (oslots != null)
+            System.setProperty("total_slots_for_cluster", oslots);
+         else
+            System.clearProperty("total_slots_for_cluster");
       }
    }
 
@@ -215,16 +236,21 @@ public class TestDecentralizerRoutingStrategy
       }
       finally
       {
-         if (onodes != null)
-            System.setProperty("min_nodes_for_cluster", onodes);
-         if (oslots != null)
-            System.setProperty("total_slots_for_cluster", oslots);
          running.set(false);
          
          if (inbound != null)
             inbound.stop();
          if (tsession != null)
             tsession.stop();
+
+         if (onodes != null)
+            System.setProperty("min_nodes_for_cluster", onodes);
+         else
+            System.clearProperty("min_nodes_for_cluster");
+         if (oslots != null)
+            System.setProperty("total_slots_for_cluster", oslots);
+         else
+            System.clearProperty("total_slots_for_cluster");
       }
    }
 

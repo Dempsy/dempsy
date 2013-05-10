@@ -8,5 +8,5 @@ package com.nokia.dempsy.cluster;
  */
 public interface DisruptibleSession
 {
-   public void disrupt();
+   public void disrupt(long delayMs);
 }

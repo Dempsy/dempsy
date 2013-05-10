@@ -414,12 +414,13 @@ public class TestZookeeperClusterResilience
    public static class AnotherAdaptor implements Adaptor
    {
       public Dispatcher dispatcher;
+      public final AtomicBoolean startCalled = new AtomicBoolean(false);
       
       @Override
       public void setDispatcher(Dispatcher dispatcher){ this.dispatcher = dispatcher; }
 
       @Override
-      public void start() { }
+      public void start() { startCalled.set(true); }
 
       @Override
       public void stop() { }
@@ -567,10 +568,10 @@ public class TestZookeeperClusterResilience
          
          assertTrue(TestUtils.waitForClustersToBeInitialized(baseTimeoutMillis, dempsy[3]));
          
-         // wait for the dispatcher to be set
+         // wait for the dispatcher to be set and adaptor to be started
          assertTrue(poll(baseTimeoutMillis,anotherAdaptor,new Condition<AnotherAdaptor>() {
             @Override
-            public boolean conditionMet(AnotherAdaptor o) { return o.dispatcher != null; }
+            public boolean conditionMet(AnotherAdaptor o) { return o.startCalled.get(); }
          }));
          
          // Now send a message.

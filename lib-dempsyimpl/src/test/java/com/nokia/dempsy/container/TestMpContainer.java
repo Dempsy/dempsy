@@ -828,8 +828,10 @@ public class TestMpContainer
       CountDownLatch blockPassivate = new CountDownLatch(1);
       prototype.blockPassivate = blockPassivate;
       
-      final String[] keys = new String[1000000];
-      final String[] keys2 = new String[1000000];
+      final int numKeys = 100000;
+      
+      final String[] keys = new String[numKeys];
+      final String[] keys2 = new String[keys.length];
       final String[] emptyKeys = new String[0];
       for (int i = 0; i < keys.length; i++)
       {
@@ -851,6 +853,19 @@ public class TestMpContainer
       container.setInboundStrategy(inboundShards1);
       container.keyspaceResponsibilityChanged(false, true);
       
+      // as long as we're increasing, continue to wait
+      boolean done = false;
+      int lastCount = container.getProcessorCount();
+      while (!done)
+      {
+         done = true;
+         Thread.sleep(1000);
+         int nextCount = container.getProcessorCount();
+         if (lastCount < nextCount)
+            done = false;
+         lastCount = nextCount;
+      }
+
       // assert the exact number were created.
       TestUtils.poll(baseTimeoutMillis * 10, container, new TestUtils.Condition<MpContainer>() 
             { @Override public boolean conditionMet(MpContainer o) { return o.getProcessorCount() == keys.length; } });
@@ -871,6 +886,19 @@ public class TestMpContainer
          container.keyspaceResponsibilityChanged(false, true);
          Thread.sleep(1000);
          blockPassivate.countDown();
+      }
+      
+      // as long as we're increasing, continue to wait
+      done = false;
+      lastCount = container.getProcessorCount();
+      while (!done)
+      {
+         done = true;
+         Thread.sleep(1000);
+         int nextCount = container.getProcessorCount();
+         if (lastCount < nextCount)
+            done = false;
+         lastCount = nextCount;
       }
 
       // make sure we're back.

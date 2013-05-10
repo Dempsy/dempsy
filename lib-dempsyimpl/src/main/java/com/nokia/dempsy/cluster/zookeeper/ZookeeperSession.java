@@ -197,9 +197,12 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
    }
    
    @Override
-   public void disrupt()
+   public void disrupt(long delayMs)
    {
       try { if (zkref != null) zkref.get().close(); } catch (Throwable th) { /* let it go otherwise */ }
+      // delay before notifying
+      if (delayMs > 0)
+         try { Thread.sleep(delayMs); } catch (InterruptedException ie) {}
    }
    
    protected static class ZkWatcher implements Watcher

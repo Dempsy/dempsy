@@ -92,7 +92,7 @@ public class TestDempsyKeySource extends DempsyTestBase
          public Iterator<String> iterator()
          {
             return new Iterator<String>()
-                  {
+            {
                long count = 0;
 
                @Override
@@ -114,10 +114,10 @@ public class TestDempsyKeySource extends DempsyTestBase
                   if (session instanceof DisruptibleSession)
                   {
                      DisruptibleSession dses = (DisruptibleSession)session;
-                     dses.disrupt();
+                     dses.disrupt(0);
                   }
                }
-                  };
+            };
          }
 
       }
@@ -372,7 +372,7 @@ public class TestDempsyKeySource extends DempsyTestBase
                   {  return 100000 == sc.getMessageProcessorCount(); } }));
 
             // now push the cluster into backup node.
-            ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
+            final ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
             assertNotNull(originalSession);
             ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
 
@@ -387,6 +387,8 @@ public class TestDempsyKeySource extends DempsyTestBase
             final AtomicBoolean stillRunning = new AtomicBoolean(true);
             final AtomicBoolean failed = new AtomicBoolean(false);
             final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
+            
+            final AtomicBoolean gotIt = new AtomicBoolean(false);
 
             Runnable slotGrabber = new Runnable()
             {
@@ -402,6 +404,7 @@ public class TestDempsyKeySource extends DempsyTestBase
                      {
                         if (session.mkdir(slotPath,DirMode.EPHEMERAL) != null)
                         {
+                           gotIt.set(true);
                            newSlot.setDestination(new JunkDestination());
                            session.setData(slotPath,newSlot);
                            haveSlot = true;
@@ -422,17 +425,19 @@ public class TestDempsyKeySource extends DempsyTestBase
 
                thread.start();
 
-               boolean onStandby = false;
-               for (int i =0; i < 100 && !onStandby; i++) // try 100 times
+               ((DisruptibleSession)originalSession).disrupt(1000);
+               assertTrue(poll(baseTimeoutMillis, ((DisruptibleSession)originalSession), new Condition<DisruptibleSession>()
                {
-                  ((DisruptibleSession)originalSession).disrupt();
-                  Thread.sleep(100);
-                  if (!stillRunning.get())
-                     onStandby = true;
-               }
-
-               assertTrue(onStandby);
-
+                  @Override
+                  public boolean conditionMet(DisruptibleSession o) throws Throwable
+                  {
+                     Thread.sleep(100);
+                     if (!gotIt.get())
+                        o.disrupt(1000);
+                     return gotIt.get();
+                  }
+               }));
+               
             }
             finally
             {
@@ -458,7 +463,7 @@ public class TestDempsyKeySource extends DempsyTestBase
                   { return 100000 == sc.getMessageProcessorCount(); } }));
          }
 
-         public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+         public String toString() { return "testExpandingAndContractingKeySpace"; }
       };
 
       runAllCombinations(checker, "SinglestageWithKeySourceAndExecutorApplicationActx.xml");
@@ -509,6 +514,8 @@ public class TestDempsyKeySource extends DempsyTestBase
             final AtomicBoolean failed = new AtomicBoolean(false);
             final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
 
+            final AtomicBoolean gotIt = new AtomicBoolean(false);
+
             Runnable slotGrabber = new Runnable()
             {
 
@@ -523,6 +530,7 @@ public class TestDempsyKeySource extends DempsyTestBase
                      {
                         if (session.mkdir(slotPath,DirMode.EPHEMERAL) != null)
                         {
+                           gotIt.set(true);
                            newSlot.setDestination(new JunkDestination());
                            session.setData(slotPath,newSlot);
                            haveSlot = true;
@@ -534,7 +542,7 @@ public class TestDempsyKeySource extends DempsyTestBase
                }
             };
 
-            for (int j = 0; j < 100; j++)
+            for (int j = 0; j < 10; j++)
             {
                ClusterInfoSession session = factory.createSession();
                sessionRef.set(session);
@@ -545,16 +553,18 @@ public class TestDempsyKeySource extends DempsyTestBase
 
                   thread.start();
 
-                  boolean onStandby = false;
-                  for (int i =0; i < 100 && !onStandby; i++) // try 100 times
+                  ((DisruptibleSession)originalSession).disrupt(1000);
+                  assertTrue(poll(baseTimeoutMillis, ((DisruptibleSession)originalSession), new Condition<DisruptibleSession>()
                   {
-                     ((DisruptibleSession)originalSession).disrupt();
-                     Thread.sleep(100);
-                     if (!stillRunning.get())
-                        onStandby = true;
-                  }
-
-                  assertTrue(onStandby);
+                     @Override
+                     public boolean conditionMet(DisruptibleSession o) throws Throwable
+                     {
+                        Thread.sleep(100);
+                        if (!gotIt.get())
+                           o.disrupt(1000);
+                        return gotIt.get();
+                     }
+                  }));
 
                   // Now we need to bring it back up.
                   session.stop();

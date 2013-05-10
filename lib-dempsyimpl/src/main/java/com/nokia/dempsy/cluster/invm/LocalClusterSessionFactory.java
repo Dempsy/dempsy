@@ -431,7 +431,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
       }
       
       @Override
-      public void disrupt()
+      public void disrupt(long delayMs)
       {
          // first dump the ephemeral nodes
          Set<String> parents = new HashSet<String>();
@@ -457,6 +457,11 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
 
             localEphemeralDirs.clear();
          }
+         
+         // delay before notifying
+         if (delayMs > 0)
+            try { Thread.sleep(delayMs); } catch (InterruptedException ie) {}
+         
          for (String path : parents)
          {
             try
