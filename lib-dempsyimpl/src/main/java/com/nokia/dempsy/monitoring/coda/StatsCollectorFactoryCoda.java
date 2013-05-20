@@ -16,24 +16,33 @@
 
 package com.nokia.dempsy.monitoring.coda;
 
+import info.ganglia.gmetric4j.gmetric.GMetric;
+import info.ganglia.gmetric4j.gmetric.GMetric.UDPAddressingMode;
+
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.codahale.metrics.ConsoleReporter;
+import com.codahale.metrics.CsvReporter;
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricFilter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.ganglia.GangliaReporter;
+import com.codahale.metrics.graphite.Graphite;
+import com.codahale.metrics.graphite.GraphiteReporter;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.tcp.TcpDestination;
 import com.nokia.dempsy.messagetransport.tcp.TcpTransport;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.StatsCollectorFactory;
-import com.yammer.metrics.core.MetricName;
-import com.yammer.metrics.reporting.ConsoleReporter;
-import com.yammer.metrics.reporting.CsvReporter;
-import com.yammer.metrics.reporting.GangliaReporter;
-import com.yammer.metrics.reporting.GraphiteReporter;
 
 /**
  * Create a Stats Collector, appropriate for a given cluster,
@@ -53,6 +62,8 @@ import com.yammer.metrics.reporting.GraphiteReporter;
  */
 public class StatsCollectorFactoryCoda implements StatsCollectorFactory
 {
+   MetricRegistry registry = new MetricRegistry();
+   
    /**
     * If you want more refined control over the way metrics are defined in various 
     * monitoring systems like Ganglia or Graphite the you can implement this interface
@@ -64,7 +75,7 @@ public class StatsCollectorFactoryCoda implements StatsCollectorFactory
        * Create a MetricName to be used by the StatsCollectorCoda to register the metric
        * of the provided name.
        */
-      public MetricName createName(ClusterId clusterId, String metricName);
+      public String createName(ClusterId clusterId, String metricName);
       
       /**
        * This method should be implemented to return the prefix for the naming that
@@ -84,9 +95,9 @@ public class StatsCollectorFactoryCoda implements StatsCollectorFactory
    private MetricNamingStrategy namer = new MetricNamingStrategy()
    {
       @Override
-      public MetricName createName(ClusterId clusterId, String metricName)
+      public String createName(ClusterId clusterId, String metricName)
       {
-         return new MetricName(clusterId.getApplicationName() + "-" + clusterId.getMpClusterName(), "Dempsy", metricName);
+         return clusterId.getApplicationName() + "-" + clusterId.getMpClusterName() + ".Dempsy." + metricName;
       }
       
       @Override
@@ -190,39 +201,119 @@ public class StatsCollectorFactoryCoda implements StatsCollectorFactory
    public void setNamingStrategy(MetricNamingStrategy namer) { this.namer = namer; }
    
    public MetricNamingStrategy getNamingStrategy() { return namer; }
+   
+   private static interface Stopper
+   {
+      public void stop();
+   }
+   
+   private List<Stopper> stoppers = new ArrayList<Stopper>();
+   private int numRunningStatsCollectors = 0;
 
    @Override
-   public StatsCollector createStatsCollector(ClusterId clusterId,
-         Destination listenerDestination) {
+   public synchronized StatsCollector createStatsCollector(ClusterId clusterId, Destination listenerDestination) {
       
-      StatsCollectorCoda sc = new StatsCollectorCoda(clusterId,namer);
+      StatsCollectorCoda sc = new StatsCollectorCoda(clusterId,registry,namer,this);
       
-      for( MetricsReporterSpec spec: reporters)
+      if (numRunningStatsCollectors == 0)
       {
-         try
+
+         final JmxReporter defreporter = JmxReporter.forRegistry(registry).build();
+         defreporter.start();
+         
+         stoppers.add(new Stopper()
          {
-            switch(spec.getType())
+            final JmxReporter jmxreporter = defreporter;
+            @Override public void stop() { jmxreporter.stop(); }
+         });
+      
+         for( MetricsReporterSpec spec: reporters)
+         {
+            try
             {
-            case CONSOLE:
-               ConsoleReporter.enable(spec.getPeriod(), spec.getUnit());
-               break;
-            case CSV:
-               CsvReporter.enable(spec.getOutputDir(), spec.getPeriod(), spec.getUnit());
-               break;
-            case GRAPHITE:
-               GraphiteReporter.enable(spec.getPeriod(), spec.getUnit(), spec.getHostName(), 
-                     spec.getPortNumber(), namer.buildPrefix(clusterId, listenerDestination));
-               break;
-            case GANGLIA:
-               GangliaReporter.enable(spec.getPeriod(), spec.getUnit(), spec.getHostName(),
-                     spec.getPortNumber(), namer.buildPrefix(clusterId, listenerDestination));
-               break;
+               switch(spec.getType())
+               {
+                  case CONSOLE:
+                  {
+                     final ConsoleReporter reporter = ConsoleReporter.forRegistry(registry)
+                           .convertRatesTo(TimeUnit.SECONDS)
+                           .convertDurationsTo(TimeUnit.MILLISECONDS)
+                           .build();
+                     reporter.start(spec.getPeriod(), spec.getUnit());
+                     stoppers.add(new Stopper()
+                     {
+                        final ConsoleReporter mreporter = reporter;
+                        @Override public void stop() { mreporter.stop(); }
+                     });
+                     break;
+                  }
+                  case CSV:
+                  {
+                     final CsvReporter reporter = CsvReporter.forRegistry(registry)
+                           .formatFor(Locale.US)
+                           .convertRatesTo(TimeUnit.SECONDS)
+                           .convertDurationsTo(TimeUnit.MILLISECONDS)
+                           .build(spec.getOutputDir());
+                     reporter.start(spec.getPeriod(), spec.getUnit());
+                     stoppers.add(new Stopper()
+                     {
+                        final CsvReporter mreporter = reporter;
+                        @Override public void stop() { mreporter.stop(); }
+                     });
+                     break;
+                  }
+                  case GRAPHITE:
+                  {
+                     final Graphite graphite = new Graphite(new InetSocketAddress(spec.getHostName(), spec.getPortNumber()));
+                     final GraphiteReporter reporter = GraphiteReporter.forRegistry(registry)
+                           .prefixedWith(namer.buildPrefix(clusterId, listenerDestination))
+                           .convertRatesTo(TimeUnit.SECONDS)
+                           .convertDurationsTo(TimeUnit.MILLISECONDS)
+                           .filter(MetricFilter.ALL)
+                           .build(graphite);
+                     reporter.start(spec.getPeriod(), spec.getUnit());
+                     stoppers.add(new Stopper()
+                     {
+                        final GraphiteReporter mreporter = reporter;
+                        @Override public void stop() { mreporter.stop(); }
+                     });
+                     break;
+                  }
+                  case GANGLIA:
+                  {
+                     final GMetric ganglia = new GMetric(spec.getHostName(), spec.getPortNumber(), UDPAddressingMode.UNICAST,1);
+                     final GangliaReporter reporter = GangliaReporter.forRegistry(registry)
+                           //                     .prefixedWith(namer.buildPrefix(clusterId, listenerDestination))
+                           .convertRatesTo(TimeUnit.SECONDS)
+                           .convertDurationsTo(TimeUnit.MILLISECONDS)
+                           .filter(MetricFilter.ALL)
+                           .build(ganglia);
+                     reporter.start(spec.getPeriod(), spec.getUnit());
+                     stoppers.add(new Stopper()
+                     {
+                        final GangliaReporter mreporter = reporter;
+                        @Override public void stop() { mreporter.stop(); }
+                     });
+                     break;
+                  }
+               }
+            } catch (Exception e) {
+               logger.error("Can't initialize Metrics Reporter " + spec.toString(), e);
             }
-         } catch (Exception e) {
-            logger.error("Can't initialize Metrics Reporter " + spec.toString(), e);
          }
       }
       
+      numRunningStatsCollectors++;
       return sc;
+   }
+   
+   protected synchronized void stop(StatsCollectorCoda sc)
+   {
+      numRunningStatsCollectors--;
+      if (numRunningStatsCollectors == 0)
+      {
+         for (Stopper stopper : stoppers)
+            stopper.stop();
+      }
    }
 }

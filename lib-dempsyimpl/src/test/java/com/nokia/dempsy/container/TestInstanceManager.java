@@ -35,6 +35,7 @@ import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.internal.InstanceWrapper;
+import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
@@ -223,7 +224,8 @@ public class TestInstanceManager
    public MpContainer setupContainer(Object prototype) throws ContainerException
    {
       DummyDispatcher dispatcher = new DummyDispatcher();
-      StatsCollector stats = new StatsCollectorCoda(new ClusterId("test", "test"), new StatsCollectorFactoryCoda().getNamingStrategy());
+      StatsCollectorFactoryCoda scc = new StatsCollectorFactoryCoda();
+      StatsCollector stats = scc.createStatsCollector(new ClusterId("test", "test"), new Destination() {});
       JavaSerializer<Object> serializer = new JavaSerializer<Object>();
 
       manager = new MpContainer(new ClusterId("test","test"));

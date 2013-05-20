@@ -16,17 +16,14 @@
 
 package com.nokia.dempsy.monitoring.coda;
 
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
-import com.yammer.metrics.Metrics;
-import com.yammer.metrics.core.Meter;
-import com.yammer.metrics.core.MetricName;
-import com.yammer.metrics.core.MetricsRegistry;
-import com.yammer.metrics.core.Timer;
 
 /**
  * An implementation of the Dempsy StatsCollector
@@ -40,6 +37,8 @@ import com.yammer.metrics.core.Timer;
  */
 public class StatsCollectorCoda implements StatsCollector, MetricGetters
 {
+   private final MetricRegistry registry;
+   
    // Metric Names
    public static final String MN_MSG_RCVD = "messages-received";
    public static final String MN_BYTES_RCVD = "bytes-received";
@@ -100,8 +99,9 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    
    private StatsCollector.Gauge currentMessagesPendingGauge;
    private StatsCollector.Gauge currentMessagesOutPendingGauge;
-   private ClusterId clusterId;
-   private StatsCollectorFactoryCoda.MetricNamingStrategy namer;
+   final private ClusterId clusterId;
+   final private StatsCollectorFactoryCoda.MetricNamingStrategy namer;
+   final private StatsCollectorFactoryCoda factory;
    
    {
       StatsCollector.Gauge tmp = new Gauge()
@@ -117,72 +117,74 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       currentMessagesOutPendingGauge = tmp;
    }
 
-   public StatsCollectorCoda(ClusterId clusterId, StatsCollectorFactoryCoda.MetricNamingStrategy namer)
+   public StatsCollectorCoda(ClusterId clusterId, MetricRegistry registry, StatsCollectorFactoryCoda.MetricNamingStrategy namer, StatsCollectorFactoryCoda factory)
    {
+      this.factory = factory;
+      this.registry = registry;
       this.namer = namer;
       this.clusterId = clusterId;
-      messagesReceived = Metrics.newMeter(createName(MN_MSG_RCVD), "messages", TimeUnit.SECONDS);
-      bytesReceived = Metrics.newMeter(createName(MN_BYTES_RCVD), "bytes", TimeUnit.SECONDS);
-      messagesDiscarded = Metrics.newMeter(createName(MN_MSG_DISCARD), "messages", TimeUnit.SECONDS);
-      messagesCollisions = Metrics.newMeter(createName(MN_MSG_COLLISION), "messages", TimeUnit.SECONDS);
-      messagesDispatched = Metrics.newMeter(createName(MN_MSG_DISPATCH), "messages", TimeUnit.SECONDS);
-      messagesFwFailed = Metrics.newMeter(createName(MN_MSG_FWFAIL), "messages", TimeUnit.SECONDS);
-      messagesMpFailed = Metrics.newMeter(createName(MN_MSG_MPFAIL), "messages", TimeUnit.SECONDS);
-      messagesProcessed = Metrics.newMeter(createName(MN_MSG_PROC), "messages", TimeUnit.SECONDS);
-      messagesSent = Metrics.newMeter(createName(MN_MSG_SENT), "messages", TimeUnit.SECONDS);
-      bytesSent = Metrics.newMeter(createName(MN_BYTES_SENT), "bytes", TimeUnit.SECONDS);
-      messagesUnsent = Metrics.newMeter(createName(MN_MSG_UNSENT), "messsages", TimeUnit.SECONDS);
+      messagesReceived = registry.meter(createName(MN_MSG_RCVD));
+      bytesReceived = registry.meter(createName(MN_BYTES_RCVD));
+      messagesDiscarded = registry.meter(createName(MN_MSG_DISCARD));
+      messagesCollisions = registry.meter(createName(MN_MSG_COLLISION));
+      messagesDispatched = registry.meter(createName(MN_MSG_DISPATCH));
+      messagesFwFailed = registry.meter(createName(MN_MSG_FWFAIL));
+      messagesMpFailed = registry.meter(createName(MN_MSG_MPFAIL));
+      messagesProcessed = registry.meter(createName(MN_MSG_PROC));
+      messagesSent = registry.meter(createName(MN_MSG_SENT));
+      bytesSent = registry.meter(createName(MN_BYTES_SENT));
+      messagesUnsent = registry.meter(createName(MN_MSG_UNSENT));
       inProcessMessages = new AtomicInteger();
-      Metrics.newGauge(createName(GAGE_MPS_IN_PROCESS), new com.yammer.metrics.core.Gauge<Integer>() {
+      registry.register(createName(GAGE_MPS_IN_PROCESS), new com.codahale.metrics.Gauge<Integer>() {
          @Override
-         public Integer value()
+         public Integer getValue()
          {
             return inProcessMessages.get();
          }
       });
 
       numberOfMPs = new AtomicLong();
-      mpsCreated = Metrics.newMeter(createName(MN_MP_CREATE), "instances", TimeUnit.SECONDS);
-      mpsDeleted = Metrics.newMeter(createName(MN_MP_DELETE), "instances", TimeUnit.SECONDS);
-      Metrics.newGauge(createName(GAGE_MPS), new com.yammer.metrics.core.Gauge<Long>() {
+      mpsCreated = registry.meter(createName(MN_MP_CREATE));
+      mpsDeleted = registry.meter(createName(MN_MP_DELETE));
+      registry.register(createName(GAGE_MPS), new com.codahale.metrics.Gauge<Long>() {
          @Override
-         public Long value() {
+         public Long getValue() {
             return numberOfMPs.get();
          }
       });
       
-      Metrics.newGauge(createName(GAGE_MSG_PENDING), new com.yammer.metrics.core.Gauge<Long>() {
+      registry.register(createName(GAGE_MSG_PENDING), new com.codahale.metrics.Gauge<Long>() {
          @Override
-         public Long value()
+         public Long getValue()
          {
             return StatsCollectorCoda.this.currentMessagesPendingGauge.value();
          }
       });
 
-      Metrics.newGauge(createName(GAGE_MSG_OUT_PENDING), new com.yammer.metrics.core.Gauge<Long>() {
+      registry.register(createName(GAGE_MSG_OUT_PENDING), new com.codahale.metrics.Gauge<Long>() {
          @Override
-         public Long value()
+         public Long getValue()
          {
             return StatsCollectorCoda.this.currentMessagesOutPendingGauge.value();
          }
       });
 
-      preInstantiationDuration = Metrics.newTimer(createName(TM_MP_PREIN), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      preInstantiationDuration = registry.timer(createName(TM_MP_PREIN));
 
-      mpHandleMessageDuration = Metrics.newTimer(createName(TM_MP_HANDLE), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      mpHandleMessageDuration = registry.timer(createName(TM_MP_HANDLE));
 
-      outputInvokeDuration = Metrics.newTimer(createName(TM_MP_OUTPUT), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      outputInvokeDuration = registry.timer(createName(TM_MP_OUTPUT));
 
-      evictionInvokeDuration = Metrics.newTimer(createName(TM_MP_EVIC), TimeUnit.MILLISECONDS, TimeUnit.SECONDS);
+      evictionInvokeDuration = registry.timer(createName(TM_MP_EVIC));
    }
    
    public ClusterId getClusterId() { return clusterId; }
    
-   protected MetricName createName(String metric) { return namer.createName(clusterId, metric); }
+   protected String createName(String metric) { return namer.createName(clusterId, metric); }
 
-   protected MetricsRegistry getMetricsRegistry()
+   protected MetricRegistry getMetricsRegistry()
    {
-      return Metrics.defaultRegistry();
+      return registry;
    }
 
    @Override
@@ -258,31 +260,31 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public long getProcessedMessageCount()
    {
-      return messagesProcessed.count();
+      return messagesProcessed.getCount();
    }
 
    @Override
    public long getDispatchedMessageCount()
    {
-      return messagesDispatched.count();
+      return messagesDispatched.getCount();
    }
 
    @Override
    public long getMessageFailedCount()
    {
-      return messagesFwFailed.count() + messagesMpFailed.count();
+      return messagesFwFailed.getCount() + messagesMpFailed.getCount();
    }
 
    @Override
    public long getDiscardedMessageCount()
    {
-      return messagesDiscarded.count();
+      return messagesDiscarded.getCount();
    }
 
    @Override
    public long getMessageCollisionCount()
    {
-      return messagesCollisions.count();
+      return messagesCollisions.getCount();
    }
 
    @Override
@@ -294,17 +296,17 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public void stop()
    {
-      Metrics.shutdown();
       for (String name: METRIC_NAMES){
-          Metrics.defaultRegistry().removeMetric(createName(name));
+          registry.remove(createName(name));
       }
+      factory.stop(this);
    }
 
    private static class CodaTimerContext implements StatsCollector.TimerContext
    {
-      private com.yammer.metrics.core.TimerContext ctx;
+      private com.codahale.metrics.Timer.Context ctx;
 
-      private CodaTimerContext(com.yammer.metrics.core.TimerContext ctx) { this.ctx = ctx; }
+      private CodaTimerContext(com.codahale.metrics.Timer.Context ctx) { this.ctx = ctx; }
 
       @Override
       public void stop() { ctx.stop(); }
@@ -319,13 +321,13 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public double getPreInstantiationDuration()
    {
-      return preInstantiationDuration.meanRate();
+      return preInstantiationDuration.getMeanRate();
    }
 
    @Override
    public long getPreInstantiationCount()
    {
-      return preInstantiationDuration.count();
+      return preInstantiationDuration.getCount();
    }
 
    @Override
@@ -343,7 +345,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public double getOutputInvokeDuration()
    {
-      return outputInvokeDuration.meanRate();
+      return outputInvokeDuration.getMeanRate();
    }
 
    @Override
@@ -353,31 +355,31 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
 
    @Override
    public double getEvictionDuration() {
-      return evictionInvokeDuration.meanRate();
+      return evictionInvokeDuration.getMeanRate();
    }
 
    @Override
    public long getMessagesNotSentCount()
    {
-      return messagesUnsent.count();
+      return messagesUnsent.getCount();
    }
 
    @Override
    public long getMessagesSentCount()
    {
-      return messagesSent.count();
+      return messagesSent.getCount();
    }
    
    @Override
    public long getMessagesReceivedCount()
    {
-      return messagesReceived.count();
+      return messagesReceived.getCount();
    }
    
    @Override
    public long getMessageProcessorsCreated()
    {
-      return mpsCreated.count();
+      return mpsCreated.getCount();
    }
 
    @Override
@@ -389,13 +391,13 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public long getMessageBytesSent()
    {
-      return bytesSent.count();
+      return bytesSent.getCount();
    }
 
    @Override
    public long getMessageBytesReceived()
    {
-      return bytesReceived.count();
+      return bytesReceived.getCount();
    }
 
    @Override

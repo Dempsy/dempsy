@@ -43,6 +43,7 @@ import com.nokia.dempsy.container.mocks.MockInputMessage;
 import com.nokia.dempsy.container.mocks.MockOutputMessage;
 import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.message.MessageBufferOutput;
+import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
@@ -86,7 +87,8 @@ public class TestMpContainerLoadHandling
       ClusterId cid = new ClusterId("TestMpContainerLoadHandling", "test" + sequence++);
       dispatcher = new MockDispatcher();
 
-      StatsCollectorCoda sc = new StatsCollectorCoda(cid, new StatsCollectorFactoryCoda().getNamingStrategy()); 
+      StatsCollectorFactoryCoda scc = new StatsCollectorFactoryCoda();
+      StatsCollectorCoda sc = (StatsCollectorCoda)scc.createStatsCollector(cid, new Destination() {});
       stats = sc;
       JavaSerializer<Object> serializer = new JavaSerializer<Object>();
 

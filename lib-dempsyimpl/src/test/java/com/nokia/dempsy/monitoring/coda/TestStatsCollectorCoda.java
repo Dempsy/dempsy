@@ -25,12 +25,12 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.monitoring.StatsCollector;
-import com.yammer.metrics.core.Metered;
-import com.yammer.metrics.core.MetricName;
-import com.yammer.metrics.core.MetricsRegistry;
 
 public class TestStatsCollectorCoda {
 
@@ -40,12 +40,14 @@ public class TestStatsCollectorCoda {
    @SuppressWarnings("unchecked")
    long getStatValue(StatsCollectorCoda statCollector, String metricName)
    {
-      MetricsRegistry metricReg = statCollector.getMetricsRegistry();
-      Object meter = metricReg.allMetrics().get(statCollector.createName(metricName));
-      if (!com.yammer.metrics.core.Gauge.class.isAssignableFrom(meter.getClass()))
-         return ((Metered)metricReg.allMetrics().get(statCollector.createName(metricName))).count();
-      else
-         return ((com.yammer.metrics.core.Gauge<Long>)metricReg.allMetrics().get(statCollector.createName(metricName))).value();
+      MetricRegistry metricReg = statCollector.getMetricsRegistry();
+      
+      Meter meter = metricReg.getMeters().get(statCollector.createName(metricName));
+      if (meter != null)
+         return meter.getCount();
+      // otherwise, it's a gauge
+      Gauge<Long> gauge = metricReg.getGauges().get(statCollector.createName(metricName));
+      return gauge.getValue();
    }
 
    private StatsCollectorFactoryCoda statsCollectorFactory;
@@ -53,7 +55,7 @@ public class TestStatsCollectorCoda {
    @Before
    public void setUp() throws Exception {
       statsCollectorFactory = new StatsCollectorFactoryCoda();
-      stats = new StatsCollectorCoda(clusterId,statsCollectorFactory.getNamingStrategy());
+      stats = (StatsCollectorCoda)statsCollectorFactory.createStatsCollector(clusterId, new Destination(){ });
    }
 
    @After
@@ -74,10 +76,9 @@ public class TestStatsCollectorCoda {
       setUp();
       StatsCollectorFactoryCoda.MetricNamingStrategy strategy = statsCollectorFactory.getNamingStrategy();
       ClusterId clusterId = new ClusterId("app","cluster");
-      MetricName name = strategy.createName(clusterId, "metric");
+      String name = strategy.createName(clusterId, "metric");
 
-      assertEquals("metric", name.getName());
-      assertEquals("app-cluster", name.getGroup());
+      assertEquals("app-cluster.Dempsy.metric", name);
       assertTrue(strategy.buildPrefix(clusterId, new Destination() { @Override public String toString() { return "destination"; } }).startsWith("Hello."));
 
       // make sure setting the environment prefix doesn't effect the -D option
