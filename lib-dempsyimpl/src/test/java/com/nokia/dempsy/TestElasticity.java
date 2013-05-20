@@ -333,12 +333,6 @@ public class TestElasticity extends DempsyTestBase
             @Override public boolean conditionMet(NumberRank rank) { return rank.countMap.get()[rankIndexToSend.get()].size() == 20; }
          });
          
-//         if (20 != rank.countMap.get()[rankIndexToSend.get()].size())
-//         {
-//            for (int num = 0; num < 20; num++)
-//               dispatcher.dispatch(new VerifyNumber(num,rankIndexToSend.get()));
-//         }
-         
          assertEquals(20,rank.countMap.get()[rankIndexToSend.get()].size());
       }
       
