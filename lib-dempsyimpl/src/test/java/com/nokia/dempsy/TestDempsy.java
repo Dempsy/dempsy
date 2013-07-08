@@ -62,6 +62,7 @@ import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.cluster.DisruptibleSession;
+import com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.MpContainer;
@@ -137,6 +138,7 @@ public class TestDempsy
       KeySourceImpl.infinite = false;
       KeySourceImpl.pause = new CountDownLatch(0);
       KeySourceImpl.maxcount = 2;
+      KeySourceImpl.lastCreated = null;
       TestMp.currentOutputCount = 10;
       TestMp.activateCheckedException = false;
       System.setProperty("min_nodes_for_cluster", "1");
@@ -453,7 +455,7 @@ public class TestDempsy
                            Thread waitingForShutdownThread = new Thread(waitingForShutdown,"Waiting For Shutdown");
                            waitingForShutdownThread.start();
                            Thread.yield();
-
+                           
                            logger.debug("Running test ...");
                            if (checker != null)
                               checker.check(actx);
@@ -471,6 +473,10 @@ public class TestDempsy
                         {
                            logger.error("***************** FAILED ON: " + pass);
                            throw re;
+                        }
+                        finally
+                        {
+                           LocalClusterSessionFactory.completeReset();
                         }
 
                         runCount++;
@@ -1023,6 +1029,7 @@ public class TestDempsy
    {
       KeySourceImpl.pause = new CountDownLatch(1);
       KeySourceImpl.infinite = true;
+      KeySourceImpl.lastCreated = null;
 
       Checker checker = new Checker()   
       {
@@ -1078,6 +1085,7 @@ public class TestDempsy
             // prepare for the next run
             KeySourceImpl.pause = new CountDownLatch(1);
             KeySourceImpl.infinite = true;
+            KeySourceImpl.lastCreated = null;
          }
          
          public String toString() { return "testOverlappingKeyStoreCalls"; }
