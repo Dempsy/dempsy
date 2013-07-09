@@ -60,7 +60,7 @@ public class TcpTransportTest
    
    public static interface Checker
    {
-      public void check(int port, boolean localhost) throws Throwable;
+      public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable;
    }
    
    private static int failFastCalls = 0;
@@ -73,13 +73,13 @@ public class TcpTransportTest
    private void runAllCombinations(Checker check) throws Throwable
    {
       logger.debug("checking " + check + " with ephemeral port and not using \"localhost.\"");
-      check.check(-1, false);
+      check.check(-1, false, 500);
       logger.debug("checking " + check + " with port 8765 and not using \"localhost.\"");
-      check.check(8765, false);
+      check.check(8765, false, -1);
       logger.debug("checking " + check + " with ephemeral port using \"localhost.\"");
-      check.check(-1, true);
+      check.check(-1, true, -1);
       logger.debug("checking " + check + " with port 8765 using \"localhost.\"");
-      check.check(8765, true);
+      check.check(8765, true, -1);
    }
    
 
@@ -95,7 +95,7 @@ public class TcpTransportTest
       runAllCombinations(new Checker()
       {
          @Override
-         public void check(int port, boolean localhost) throws Throwable
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
          {
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
@@ -108,7 +108,7 @@ public class TcpTransportTest
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
-               factory = makeSenderFactory(false,statsCollector); // distruptible sender factory
+               factory = makeSenderFactory(false,statsCollector,batchOutgoingMessagesDelayMillis); // distruptible sender factory
 
                if (port > 0) adaptor.setPort(port);
                if (localhost) adaptor.setUseLocalhost(localhost);
@@ -176,7 +176,7 @@ public class TcpTransportTest
       runAllCombinations(new Checker()
       {
          @Override
-         public void check(int port, boolean localhost) throws Throwable
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
          {
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
@@ -191,7 +191,7 @@ public class TcpTransportTest
                adaptor.setStatsCollector(statsCollector);
                final StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
-               factory = makeSenderFactory(false,statsCollector);
+               factory = makeSenderFactory(false,statsCollector,batchOutgoingMessagesDelayMillis);
 
                if (port > 0) adaptor.setPort(port);
                if (localhost) adaptor.setUseLocalhost(localhost);
@@ -268,7 +268,7 @@ public class TcpTransportTest
          //===========================================
          // setup the sender and receiver
          adaptor = new TcpReceiver(null,getFailFast());
-         factory = makeSenderFactory(false,null); // distruptible sender factory
+         factory = makeSenderFactory(false,null,500); // distruptible sender factory
          receiveLargeMessageLatch = new CountDownLatch(1);
          adaptor.setListener( new Listener()
          {
@@ -296,7 +296,7 @@ public class TcpTransportTest
          if (port > 0) adaptor.setPort(port);
          if (localhost) adaptor.setUseLocalhost(localhost);
 
-         senderFactory = makeSenderFactory(false,null);
+         senderFactory = makeSenderFactory(false,null,500);
 
          int size = 1024*1024*10;
          byte[] tosend = new byte[size];
@@ -341,7 +341,7 @@ public class TcpTransportTest
       runAllCombinations(new Checker()
       {
          @Override
-         public void check(int port, boolean localhost) throws Throwable
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
          {
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
@@ -352,7 +352,7 @@ public class TcpTransportTest
                // setup the sender and receiver
                adaptor = new TcpReceiver(null,getFailFast());
                adaptor.setStatsCollector(statsCollector);
-               factory = makeSenderFactory(true,statsCollector); // distruptible sender factory
+               factory = makeSenderFactory(true,statsCollector, batchOutgoingMessagesDelayMillis); // distruptible sender factory
 
                if (port > 0) adaptor.setPort(port);
                if (localhost) adaptor.setUseLocalhost(localhost);
@@ -459,7 +459,7 @@ public class TcpTransportTest
       runAllCombinations(new Checker()
       {
          @Override
-         public void check(int port, boolean localhost) throws Throwable
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
          {
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
@@ -472,7 +472,7 @@ public class TcpTransportTest
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
-               factory = makeSenderFactory(false,statsCollector); // not disruptible
+               factory = makeSenderFactory(false,statsCollector,batchOutgoingMessagesDelayMillis); // not disruptible
 
                if (port > 0) adaptor.setPort(port);
                if (localhost) adaptor.setUseLocalhost(localhost);
@@ -583,7 +583,7 @@ public class TcpTransportTest
       runAllCombinations(new Checker()
       {
          @Override
-         public void check(int port, boolean localhost) throws Throwable
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
          {
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
@@ -598,7 +598,7 @@ public class TcpTransportTest
                adaptor.setStatsCollector(statsCollector);
                final StringListener receiver = new StringListener();
                adaptor.setListener(receiver);
-               factory = makeSenderFactory(false,statsCollector);
+               factory = makeSenderFactory(false,statsCollector, batchOutgoingMessagesDelayMillis);
 
                if (port > 0) adaptor.setPort(port);
                if (localhost) adaptor.setUseLocalhost(localhost);
@@ -825,13 +825,13 @@ public class TcpTransportTest
       onlyOnce = true;
    }
    
-   private TcpSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector)
+   private TcpSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector, long batchOutgoingMessagesDelayMillis)
    {
       return disruptible ? 
-            new TcpSenderFactory(statsCollector,-1,10000,false){
+            new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis){
          protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
          {
-            return new TcpSender((TcpDestination)destination,statsCollector,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessages)
+            return new TcpSender((TcpDestination)destination,statsCollector,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessagesDelayMillis,TcpTransport.defaultMtu)
             {
                boolean onceOnly = onlyOnce;
                boolean didItOnceAlready = false;
@@ -854,7 +854,7 @@ public class TcpTransportTest
                }
             };
          }
-      } : new TcpSenderFactory(statsCollector,-1,10000,false);
+      } : new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis);
    }
    
    @Test
@@ -863,7 +863,7 @@ public class TcpTransportTest
       runAllCombinations(new Checker()
       {
          @Override
-         public void check(int port, boolean localhost) throws Throwable
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
          {
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
@@ -877,7 +877,7 @@ public class TcpTransportTest
                adaptor.setStatsCollector(statsCollector);
                StringListener receiver = new StringListener(latch);
                adaptor.setListener(receiver);
-               factory = makeSenderFactory(false,statsCollector); // distruptible sender factory
+               factory = makeSenderFactory(false,statsCollector,batchOutgoingMessagesDelayMillis); // distruptible sender factory
 
                if (port > 0) adaptor.setPort(port);
                if (localhost) adaptor.setUseLocalhost(localhost);

@@ -7,6 +7,6 @@
 
 	<bean name="transport"
 		class="com.nokia.dempsy.messagetransport.tcp.TcpTransport" >
-		<property name="batchOutgoingMessages" value="true" />
+		<property name="batchOutgoingMessagesDelayMillis" value="100" />
 	</bean>
 </beans>

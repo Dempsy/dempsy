@@ -34,16 +34,18 @@ public class TcpSenderFactory implements SenderFactory
    protected StatsCollector statsCollector = null;
    private Map<Destination,TcpSender> senders = new HashMap<Destination, TcpSender>();
    
-   protected long socketWriteTimeoutMillis;
-   protected boolean batchOutgoingMessages;
-   protected long maxNumberOfQueuedOutbound;
+   protected final long socketWriteTimeoutMillis;
+   protected final long batchOutgoingMessagesDelayMillis;
+   protected final long maxNumberOfQueuedOutbound;
+   protected final int mtu;
    
-   protected TcpSenderFactory(StatsCollector statsCollector, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
+   protected TcpSenderFactory(StatsCollector statsCollector, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, long batchOutgoingMessagesDelayMillis)
    {
       this.statsCollector = statsCollector;
       this.socketWriteTimeoutMillis = socketWriteTimeoutMillis;
-      this.batchOutgoingMessages = batchOutgoingMessages;
+      this.batchOutgoingMessagesDelayMillis = batchOutgoingMessagesDelayMillis;
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
+      this.mtu = TcpTransport.determineMtu();
    }
 
    @Override
@@ -86,7 +88,7 @@ public class TcpSenderFactory implements SenderFactory
     */
    protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
    {
-      return new TcpSender( (TcpDestination)destination, statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages );
+      return new TcpSender( (TcpDestination)destination, statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessagesDelayMillis, mtu );
    }
 
 }

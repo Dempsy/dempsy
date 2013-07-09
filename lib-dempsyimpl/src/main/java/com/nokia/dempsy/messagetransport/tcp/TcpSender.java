@@ -24,6 +24,7 @@ import java.net.Socket;
 import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -34,13 +35,16 @@ import org.slf4j.LoggerFactory;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.util.SocketTimeout;
+import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Histogram;
 
 public class TcpSender implements Sender
 {
    private static Logger logger = LoggerFactory.getLogger(TcpSender.class);
    
-   private TcpDestination destination;
+   private final TcpDestination destination;
    private Socket socket = null;
 
    private enum IsLocalAddress { Yes, No, Unknown };
@@ -53,18 +57,23 @@ public class TcpSender implements Sender
    private long timeoutMillis;
    protected SocketTimeout socketTimeout = null;
    private long maxNumberOfQueuedMessages;
-   private boolean batchOutgoingMessages;
+   private long batchOutgoingMessagesDelayMillis = -1;
+   private final int mtu;
+   
+   private Histogram batching = null;
 
    protected BlockingQueue<byte[]> sendingQueue = new LinkedBlockingQueue<byte[]>();
    
    protected TcpSender(TcpDestination destination, StatsCollector statsCollector, 
-         long maxNumberOfQueuedOutgoing, long socketWriteTimeoutMillis, boolean batchOutgoingMessages) throws MessageTransportException
+         long maxNumberOfQueuedOutgoing, long socketWriteTimeoutMillis, 
+         long batchOutgoingMessagesDelayMillis, int mtu) throws MessageTransportException
    {
       this.destination = destination;
       this.statsCollector = statsCollector;
       this.timeoutMillis = socketWriteTimeoutMillis;
-      this.batchOutgoingMessages = batchOutgoingMessages;
+      this.batchOutgoingMessagesDelayMillis = batchOutgoingMessagesDelayMillis;
       this.maxNumberOfQueuedMessages = maxNumberOfQueuedOutgoing;
+      this.mtu = (int)(mtu * 0.9); // our mtu is 90% of the given one to leave enough room for headers
       if (this.statsCollector != null)
       {
          this.statsCollector.setMessagesOutPendingGauge(new StatsCollector.Gauge()
@@ -76,6 +85,11 @@ public class TcpSender implements Sender
             }
          });
       }
+      
+      if (batchOutgoingMessagesDelayMillis >= 0 && statsCollector != null && 
+            StatsCollectorCoda.class.isAssignableFrom(statsCollector.getClass()))
+         batching = Metrics.newHistogram(((StatsCollectorCoda)statsCollector).createName("messages-batched"));
+      
       this.start();
    }
    
@@ -94,6 +108,12 @@ public class TcpSender implements Sender
       }
    }
    
+   private final long calcDelay(long nextTimeToSend)
+   {
+      final long delay = System.currentTimeMillis() - nextTimeToSend;
+      return delay > 0 ? delay : 0;
+   }
+   
    private void start()
    {
       senderThread.set(new Thread(new Runnable()
@@ -103,6 +123,11 @@ public class TcpSender implements Sender
          @Override
          public void run()
          {
+            final boolean batchOutgoingMessages = batchOutgoingMessagesDelayMillis >= 0;
+            long batchCount = 0;
+            long nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis; // only used if batchOutgoingMessagesDelayMillis >= 0
+            int rawByteCount = 0;
+            
             byte[] messageBytes = null;
             try
             {
@@ -113,31 +138,73 @@ public class TcpSender implements Sender
                {
                   try
                   {
-                     messageBytes = batchOutgoingMessages ? sendingQueue.poll() : sendingQueue.take();
+                     messageBytes = batchOutgoingMessages ? sendingQueue.poll(calcDelay(nextTimeToSend), TimeUnit.MILLISECONDS) : sendingQueue.take();
                      
                      DataOutputStream localDataOutputStream = getDataOutputStream();
 
-                     if (messageBytes == null)
+                     if (messageBytes == null) // this is only possible if we polled above ...
+                                               //  which we only do if batchOutgoingMessagesDelayMillis >= 0
                      {
                         socketTimeout.begin();
-                        localDataOutputStream.flush();
+                        localDataOutputStream.flush(); // we must be past the time because the poll above timed out.
                         socketTimeout.end();
-                        messageBytes = sendingQueue.take();
+                        rawByteCount = 0; // reset the rawByteCount since we flushed
+                        nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
+                        if (batching != null)
+                           batching.update(batchCount);
+                        batchCount = 0;
+                        messageBytes = sendingQueue.take(); // might as well wait for the next one.
                      }
                   
                      if (maxNumberOfQueuedMessages < 0 || sendingQueue.size() <= maxNumberOfQueuedMessages)
                      {
                         int size = messageBytes.length;
+                        int curRawByteCount = size;
                         if (size > Short.MAX_VALUE)
+                        {
                            size = -1;
-                        socketTimeout.begin();
+                           curRawByteCount += 6; // this is the overhead of a short plus a long.... see below.
+                        }
+                        else
+                           curRawByteCount += 2; // this means the length will fit in a short.
+                        
+                        // if rawByteCount == 0 then we haven't sent anything anyway and we need to 
+                        // put the entire message in a flush anyway.
+                        if (rawByteCount > 0 && (rawByteCount + curRawByteCount > mtu))
+                        {
+                           // we need to flush before sending.
+                           socketTimeout.begin();
+                           localDataOutputStream.flush();
+                           socketTimeout.end();
+                           rawByteCount = 0; // reset the rawByteCount since we flushed
+                           if (batchOutgoingMessages)
+                              nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
+                        }
+                        
+                        
+                        //===================================================
+                        // Do the write ... first the size
                         localDataOutputStream.writeShort( size );
+                        rawByteCount += 2; // sizeof short
                         if (size == -1)
-                           localDataOutputStream.writeInt(messageBytes.length);
+                        {
+                           localDataOutputStream.writeInt(size = messageBytes.length);
+                           rawByteCount += 4; // sizeof int
+                        }
                         localDataOutputStream.write( messageBytes );
+                        rawByteCount += size; // sizeof message
+                        //===================================================
+
                         if (!batchOutgoingMessages)
+                        {
+                           socketTimeout.begin();
                            localDataOutputStream.flush(); // flush individual message
-                        socketTimeout.end();
+                           socketTimeout.end();
+                           rawByteCount = 0; // reset the rawByteCount since we flushed
+                           // no need to reget the time since we're not 
+                        }
+                        else
+                           batchCount++;
 
                         if (statsCollector != null) statsCollector.messageSent(messageBytes);
                      }

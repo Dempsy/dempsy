@@ -23,6 +23,9 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.nokia.dempsy.executor.DempsyExecutor;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.OverflowHandler;
@@ -30,20 +33,24 @@ import com.nokia.dempsy.messagetransport.Receiver;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.messagetransport.Transport;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.util.Pair;
 
 public class TcpTransport implements Transport
 {
+   private static final Logger logger = LoggerFactory.getLogger(TcpSender.class);
+
    private OverflowHandler overflowHandler = null;
    private boolean failFast = false;
    
-   private boolean batchOutgoingMessages = false;
+   private long batchOutgoingMessagesDelayMillis = -1;
    private long socketWriteTimeoutMillis = 30000; 
    private long maxNumberOfQueuedOutbound = 10000;
+   public static final int defaultMtu = 1500;
 
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector) throws MessageTransportException
    {
-      return new TcpSenderFactory(statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessages);
+      return new TcpSenderFactory(statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessagesDelayMillis);
    }
 
    @Override
@@ -71,9 +78,9 @@ public class TcpTransport implements Transport
     * <p>The drawback here is that messages can be lost that have been marked as Sent but it can
     * perform better.</p>
     */
-   public void setBatchOutgoingMessages(boolean batchOutgoingMessages)
+   public void setBatchOutgoingMessagesDelayMillis(long batchOutgoingMessagesDelayMillis)
    {
-      this.batchOutgoingMessages = batchOutgoingMessages;
+      this.batchOutgoingMessagesDelayMillis = batchOutgoingMessagesDelayMillis;
    }
 
    /**
@@ -97,8 +104,27 @@ public class TcpTransport implements Transport
    {
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
    }
+   
+   public static int determineMtu()
+   {
+      try
+      {
+         NetworkInterface ni = getFirstNonLocalhostNetworkInterface().getFirst();
+         return (ni == null) ? defaultMtu : ni.getMTU();
+      }
+      catch (SocketException se)
+      {
+         logger.error("Failed to retrieve the MTU. Assuming " + defaultMtu,se);
+         return defaultMtu;
+      }
+   }
 
    public static InetAddress getFirstNonLocalhostInetAddress() throws SocketException
+   {
+      return getFirstNonLocalhostNetworkInterface().getSecond();
+   }
+   
+   private static Pair<NetworkInterface,InetAddress> getFirstNonLocalhostNetworkInterface() throws SocketException
    {
       Enumeration<NetworkInterface> netInterfaces=NetworkInterface.getNetworkInterfaces();
       while(netInterfaces.hasMoreElements()){
@@ -107,10 +133,10 @@ public class TcpTransport implements Transport
          {
             InetAddress tempInetAddress = loopInetAddress.nextElement();
             if (!tempInetAddress.isLoopbackAddress() && tempInetAddress instanceof Inet4Address)
-               return tempInetAddress;
+               return new Pair<NetworkInterface,InetAddress>(networkInterface,tempInetAddress);
          }
       }
-      return null;
+      return new Pair<NetworkInterface,InetAddress>(null,null);
    }
    
    public static InetAddress getInetAddressBestEffort()

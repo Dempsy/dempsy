@@ -139,6 +139,7 @@ public class TestDempsy
       KeySourceImpl.pause = new CountDownLatch(0);
       KeySourceImpl.maxcount = 2;
       KeySourceImpl.lastCreated = null;
+
       TestMp.currentOutputCount = 10;
       TestMp.activateCheckedException = false;
       System.setProperty("min_nodes_for_cluster", "1");

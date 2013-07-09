@@ -178,7 +178,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    
    public ClusterId getClusterId() { return clusterId; }
    
-   protected MetricName createName(String metric) { return namer.createName(clusterId, metric); }
+   public MetricName createName(String metric) { return namer.createName(clusterId, metric); }
 
    protected MetricsRegistry getMetricsRegistry()
    {
