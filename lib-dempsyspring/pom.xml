@@ -3,7 +3,7 @@
    <parent>
       <groupId>net.dempsy</groupId>
       <artifactId>dempsy-parent</artifactId>
-      <version>0.7.4</version>
+      <version>0.7.5-SNAPSHOT</version>
    </parent>
 
    <artifactId>lib-dempsyspring</artifactId>
