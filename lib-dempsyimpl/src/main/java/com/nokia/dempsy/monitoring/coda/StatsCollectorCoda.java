@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Histogram;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricName;
 import com.yammer.metrics.core.MetricsRegistry;
@@ -78,7 +79,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    };
 
    private Meter messagesReceived;
-   private Meter bytesReceived;
+   private Histogram bytesReceived;
    private Meter messagesDiscarded;
    private Meter messagesCollisions;
    private Meter messagesDispatched;
@@ -86,7 +87,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    private Meter messagesMpFailed;
    private Meter messagesProcessed;
    private Meter messagesSent;
-   private Meter bytesSent;
+   private Histogram bytesSent;
    private Meter messagesUnsent;
    private AtomicInteger inProcessMessages;
    private AtomicLong numberOfMPs;
@@ -122,7 +123,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       this.namer = namer;
       this.clusterId = clusterId;
       messagesReceived = Metrics.newMeter(createName(MN_MSG_RCVD), "messages", TimeUnit.SECONDS);
-      bytesReceived = Metrics.newMeter(createName(MN_BYTES_RCVD), "bytes", TimeUnit.SECONDS);
+      bytesReceived = Metrics.newHistogram(createName(MN_BYTES_RCVD));
       messagesDiscarded = Metrics.newMeter(createName(MN_MSG_DISCARD), "messages", TimeUnit.SECONDS);
       messagesCollisions = Metrics.newMeter(createName(MN_MSG_COLLISION), "messages", TimeUnit.SECONDS);
       messagesDispatched = Metrics.newMeter(createName(MN_MSG_DISPATCH), "messages", TimeUnit.SECONDS);
@@ -130,7 +131,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       messagesMpFailed = Metrics.newMeter(createName(MN_MSG_MPFAIL), "messages", TimeUnit.SECONDS);
       messagesProcessed = Metrics.newMeter(createName(MN_MSG_PROC), "messages", TimeUnit.SECONDS);
       messagesSent = Metrics.newMeter(createName(MN_MSG_SENT), "messages", TimeUnit.SECONDS);
-      bytesSent = Metrics.newMeter(createName(MN_BYTES_SENT), "bytes", TimeUnit.SECONDS);
+      bytesSent = Metrics.newHistogram(createName(MN_BYTES_SENT));
       messagesUnsent = Metrics.newMeter(createName(MN_MSG_UNSENT), "messsages", TimeUnit.SECONDS);
       inProcessMessages = new AtomicInteger();
       Metrics.newGauge(createName(GAGE_MPS_IN_PROCESS), new com.yammer.metrics.core.Gauge<Integer>() {
@@ -188,7 +189,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public void messageReceived(byte[] message) {
       messagesReceived.mark();
-      bytesReceived.mark(message.length);
+      bytesReceived.update(message.length);
    }
 
    @Override
@@ -226,7 +227,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public void messageSent(byte[] message) {
       messagesSent.mark();
-      bytesSent.mark(message.length);
+      bytesSent.update(message.length);
    }
 
    @Override
@@ -384,13 +385,13 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    @Override
    public long getMessageBytesSent()
    {
-      return bytesSent.count();
+      return Math.round(bytesSent.count() * bytesSent.mean());
    }
 
    @Override
    public long getMessageBytesReceived()
    {
-      return bytesReceived.count();
+      return Math.round(bytesReceived.count() * bytesReceived.mean());
    }
 
    @Override

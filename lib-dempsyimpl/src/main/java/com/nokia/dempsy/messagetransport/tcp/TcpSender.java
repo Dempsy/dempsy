@@ -39,6 +39,7 @@ import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.util.SocketTimeout;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Histogram;
+import com.yammer.metrics.core.MetricName;
 
 public class TcpSender implements Sender
 {
@@ -50,17 +51,18 @@ public class TcpSender implements Sender
    private enum IsLocalAddress { Yes, No, Unknown };
    private IsLocalAddress isLocalAddress = IsLocalAddress.Unknown;
    
-   private AtomicReference<Thread> senderThread = new AtomicReference<Thread>();
-   private AtomicBoolean isSenderRunning = new AtomicBoolean(false);
-   private AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
-   private StatsCollector statsCollector = null;
+   private final AtomicReference<Thread> senderThread = new AtomicReference<Thread>();
+   private final AtomicBoolean isSenderRunning = new AtomicBoolean(false);
+   private final AtomicBoolean senderKeepRunning = new AtomicBoolean(false);
+   private final StatsCollector statsCollector;
    private long timeoutMillis;
    protected SocketTimeout socketTimeout = null;
    private long maxNumberOfQueuedMessages;
    private long batchOutgoingMessagesDelayMillis = -1;
    private final int mtu;
    
-   private Histogram batching = null;
+   private final Histogram batching;
+   private final MetricName batchingMetricName;
 
    protected BlockingQueue<byte[]> sendingQueue = new LinkedBlockingQueue<byte[]>();
    
@@ -88,14 +90,28 @@ public class TcpSender implements Sender
       
       if (batchOutgoingMessagesDelayMillis >= 0 && statsCollector != null && 
             StatsCollectorCoda.class.isAssignableFrom(statsCollector.getClass()))
-         batching = Metrics.newHistogram(((StatsCollectorCoda)statsCollector).createName("messages-batched"));
+      {
+         batchingMetricName = ((StatsCollectorCoda)statsCollector).createName("messages-batched");
+         batching = Metrics.newHistogram(batchingMetricName);
+      }
+      else
+      {
+         batching = null;
+         batchingMetricName = null;
+      }
       
       this.start();
    }
    
+   public long getBatchOutgoingMessagesDelayMillis() { return batchOutgoingMessagesDelayMillis; }
+   
    public void setTimeoutMillis(long timeoutMillis) { this.timeoutMillis = timeoutMillis; }
 
    public void setMaxNumberOfQueuedMessages(long maxNumberOfQueuedMessages) { this.maxNumberOfQueuedMessages = maxNumberOfQueuedMessages; }
+   
+   public final int getMtu() { return mtu; }
+   
+   public final Histogram getBatchingHistogram() { return batching; }
    
    @Override
    public void send(byte[] messageBytes) throws MessageTransportException
@@ -143,19 +159,29 @@ public class TcpSender implements Sender
                      DataOutputStream localDataOutputStream = getDataOutputStream();
 
                      if (messageBytes == null) // this is only possible if we polled above ...
-                                               //  which we only do if batchOutgoingMessagesDelayMillis >= 0
+                                               //  which we only do if batchOutgoingMessages is true
                      {
-                        socketTimeout.begin();
-                        localDataOutputStream.flush(); // we must be past the time because the poll above timed out.
-                        socketTimeout.end();
-                        rawByteCount = 0; // reset the rawByteCount since we flushed
-                        nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
-                        if (batching != null)
-                           batching.update(batchCount);
-                        batchCount = 0;
+                        // if rawByteCount == 0 (or, for that matter, if batchCount == 0) then we 
+                        //  haven't sent anything yet and this must be the first time through this
+                        //  loop. After the first time through the main send loop this cant really be 0
+                        if (rawByteCount > 0)
+                        {
+                           socketTimeout.begin();
+                           localDataOutputStream.flush(); // we must be past the time because the poll above timed out.
+                           socketTimeout.end();
+                           rawByteCount = 0; // reset the rawByteCount since we flushed
+                           nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
+                           if (batching != null)
+                              batching.update(batchCount);
+                           batchCount = 0;
+                        }
                         messageBytes = sendingQueue.take(); // might as well wait for the next one.
                      }
+                     
+                     // Examine the above logic. Once we get here messageBytes cannot be null.
+                     //   Therefore we have a message to send (or discard if we're overflowed).
                   
+                     // If the queue is not overflowed, or we're unbounded, then we will send the message
                      if (maxNumberOfQueuedMessages < 0 || sendingQueue.size() <= maxNumberOfQueuedMessages)
                      {
                         int size = messageBytes.length;
@@ -168,8 +194,9 @@ public class TcpSender implements Sender
                         else
                            curRawByteCount += 2; // this means the length will fit in a short.
                         
-                        // if rawByteCount == 0 then we haven't sent anything anyway and we need to 
-                        // put the entire message in a flush anyway.
+                        // This 'if' clause checks to see if the new message will overflow
+                        //   the packet meaning we should flush what's there.
+                        // if rawByteCount == 0 then there's nothing to flush.
                         if (rawByteCount > 0 && (rawByteCount + curRawByteCount > mtu))
                         {
                            // we need to flush before sending.
@@ -178,7 +205,12 @@ public class TcpSender implements Sender
                            socketTimeout.end();
                            rawByteCount = 0; // reset the rawByteCount since we flushed
                            if (batchOutgoingMessages)
+                           {
                               nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
+                              if (batching != null)
+                                 batching.update(batchCount);
+                              batchCount = 0;
+                           }
                         }
                         
                         
@@ -307,6 +339,9 @@ public class TcpSender implements Sender
       closeQuietly(socket);
       if (socketTimeout != null)
          socketTimeout.stop();
+      
+      if (batching != null)
+         Metrics.defaultRegistry().removeMetric(batchingMetricName);
    }
    
    /**

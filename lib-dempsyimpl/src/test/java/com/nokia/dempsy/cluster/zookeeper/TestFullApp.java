@@ -56,7 +56,7 @@ public class TestFullApp
 {
    private static final String dempsyConfig = "fullApp/Dempsy.xml";
    private static final String clusterManager = "testDempsy/ClusterInfo-ZookeeperActx.xml";
-   private static final String transport = "testDempsy/Transport-TcpActx.xml";
+   private static final String transport = "testDempsy/Transport-TcpNoBatchingActx.xml";
    private static final long baseTimeoutMillis = 10000;
    
    private static String[] ctx = new String[4];

@@ -22,6 +22,7 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
+import java.util.Properties;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,18 +40,43 @@ public class TcpTransport implements Transport
 {
    private static final Logger logger = LoggerFactory.getLogger(TcpSender.class);
 
+   public static final int defaultMtu = 1500;
+   public static final String disableBatchingSystemProperty = "disableBatching";
+   public static final long defaultBatchingDelayMillis = 175;
+   
    private OverflowHandler overflowHandler = null;
    private boolean failFast = false;
    
-   private long batchOutgoingMessagesDelayMillis = -1;
+   private long batchOutgoingMessagesDelayMillis = defaultBatchingDelayMillis;
    private long socketWriteTimeoutMillis = 30000; 
    private long maxNumberOfQueuedOutbound = 10000;
-   public static final int defaultMtu = 1500;
+   private boolean disableBatching;
+   
+   public TcpTransport()
+   {
+      Properties systemProperties = System.getProperties();
+      if (systemProperties.containsKey(disableBatchingSystemProperty))
+      {
+         String tmp = System.getProperty(disableBatchingSystemProperty);
+         
+         // if -DdisableBatching is set and it's NOT set to a negative indicator, 
+         // then it will be true.
+         disableBatching = !("f".equalsIgnoreCase(tmp) || "n".equalsIgnoreCase(tmp) ||
+               "false".equalsIgnoreCase(tmp) || "f".equalsIgnoreCase(tmp) || "0".equalsIgnoreCase(tmp));
+      }
+      else
+         disableBatching = false;
+      
+      if (disableBatching)
+         logger.info("Tcp Transport is disabling batching due to a command line option -D" + 
+               disableBatchingSystemProperty + " being set.");
+   }
 
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector) throws MessageTransportException
    {
-      return new TcpSenderFactory(statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessagesDelayMillis);
+      return new TcpSenderFactory(statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, 
+            disableBatching ? -1 : batchOutgoingMessagesDelayMillis);
    }
 
    @Override
@@ -60,7 +86,7 @@ public class TcpTransport implements Transport
       receiver.setOverflowHandler(overflowHandler);
       return receiver;
    }
-
+   
    @Override
    public void setOverflowHandler(OverflowHandler overflowHandler)
    {
@@ -70,7 +96,7 @@ public class TcpTransport implements Transport
    public void setFailFast(boolean failFast) { this.failFast = failFast; }
    
    /**
-    * <p>By default the {@link TcpSender} sends and flushes one message at a time. You can have
+    * <p>By default the {@link TcpSender} sends and flushes messages in batches. You can have
     * any {@link TcpSender} that results from the {@link TcpSenderFactory} from this instance
     * of the {@link TcpTransport} batch up all pending messages prior to flushing the output 
     * buffer.</p>
@@ -82,6 +108,17 @@ public class TcpTransport implements Transport
    {
       this.batchOutgoingMessagesDelayMillis = batchOutgoingMessagesDelayMillis;
    }
+   
+   /**
+    * By default batching is turned on with a 175 millisecond batching timeout. If you want to
+    * disable batching, you can set this parameter on the transport.
+    */
+   public void setDisableBatching(boolean disableBatching)
+   {
+      this.disableBatching = disableBatching;
+   }
+   
+   public boolean isBatchingDisabled() { return this.disableBatching; }
 
    /**
     * Because the {@link TcpSender} does a blocking write, this will set a timeout on the 

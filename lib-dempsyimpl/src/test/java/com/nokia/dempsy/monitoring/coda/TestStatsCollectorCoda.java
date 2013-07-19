@@ -42,10 +42,15 @@ public class TestStatsCollectorCoda {
    {
       MetricsRegistry metricReg = statCollector.getMetricsRegistry();
       Object meter = metricReg.allMetrics().get(statCollector.createName(metricName));
-      if (!com.yammer.metrics.core.Gauge.class.isAssignableFrom(meter.getClass()))
-         return ((Metered)metricReg.allMetrics().get(statCollector.createName(metricName))).count();
-      else
+      if (com.yammer.metrics.core.Gauge.class.isAssignableFrom(meter.getClass()))
          return ((com.yammer.metrics.core.Gauge<Long>)metricReg.allMetrics().get(statCollector.createName(metricName))).value();
+      else if (com.yammer.metrics.core.Histogram.class.isAssignableFrom(meter.getClass()))
+      {
+         final com.yammer.metrics.core.Histogram h = (com.yammer.metrics.core.Histogram)metricReg.allMetrics().get(statCollector.createName(metricName));
+         return Math.round(h.count() * h.mean());
+      }
+      else
+         return ((Metered)metricReg.allMetrics().get(statCollector.createName(metricName))).count();
    }
 
    private StatsCollectorFactoryCoda statsCollectorFactory;

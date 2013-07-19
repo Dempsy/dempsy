@@ -18,6 +18,7 @@ package com.nokia.dempsy.messagetransport.tcp;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -25,6 +26,7 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nokia.dempsy.TestUtils;
+import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.executor.DefaultDempsyExecutor;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.Listener;
@@ -46,13 +49,21 @@ import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
+import com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda;
+import com.yammer.metrics.core.Histogram;
 
 public class TcpTransportTest
 {
    static Logger logger = LoggerFactory.getLogger(TcpTransportTest.class);
    private static final int numThreads = 4;
    
-   private static long baseTimeoutMillis = 20000;
+//   private static final long baseTimeoutMillis = 20000;
+   private static final long baseTimeoutMillis = 9999999999999L;
+   
+   // 2 is the TcpTransport message overhead for any message whos size is <= Short.MAX_VALUE
+   private static final int tcpTransportHeaderSize = 2;
+   
+   private static final String charSet = "ABCDEFGHIJKLMNOPabcdefghijklmnop0123456789";
    
 //-------------------------------------------------------------------------------------
 // Support code for multirun tests.
@@ -82,7 +93,106 @@ public class TcpTransportTest
       check.check(8765, true, -1);
    }
    
+   /**
+    * Just send a simple message and make sure it gets through.
+    */
+   @Test
+   public void testTransportInstantiation() throws Throwable
+   {
+      final AtomicBoolean batchedAtLeastOnce = new AtomicBoolean(false);
+      
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
+         {
+            final StatsCollector statsCollector = new StatsCollectorFactoryCoda().createStatsCollector(new ClusterId("test", "test-cluster"), new Destination(){});
 
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            try
+            {
+               
+               boolean shouldBatch = batchOutgoingMessagesDelayMillis >= 0;
+               
+               if (shouldBatch)
+                  batchedAtLeastOnce.set(true);
+               
+               TcpTransport transport = new TcpTransport();
+               transport.setFailFast(getFailFast());
+
+               // by default batching isn't disabled.
+               assertFalse(transport.isBatchingDisabled());
+               
+               if (!shouldBatch)
+                  transport.setDisableBatching(true);
+               
+               if (!shouldBatch)
+                  assertTrue(transport.isBatchingDisabled());
+               
+               assertEquals(!shouldBatch, transport.isBatchingDisabled());
+               
+               //===========================================
+               // setup the sender and receiver
+               adaptor = (TcpReceiver)transport.createInbound(null);
+               adaptor.setStatsCollector(statsCollector);
+               StringListener receiver = new StringListener();
+               adaptor.setListener(receiver);
+
+               factory = transport.createOutbound(null, statsCollector);
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+
+               // send a message
+               byte[] messageBytes = "Hello".getBytes();
+               Sender sender = factory.getSender(destination);
+               
+               assertEquals((shouldBatch ? TcpTransport.defaultBatchingDelayMillis : -1), ((TcpSender)sender).getBatchOutgoingMessagesDelayMillis());
+               
+               sender.send(messageBytes);
+               sender.send(messageBytes);
+               
+               // wait for it to be received.
+               for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                     endTime > System.currentTimeMillis() && receiver.numMessages.get() < 2;)
+                  Thread.sleep(1);
+               assertEquals(2,receiver.numMessages.get());
+
+               // verify everything came over ok.
+               assertEquals(1,receiver.receivedStringMessages.size());
+               assertEquals("Hello",receiver.receivedStringMessages.iterator().next());
+               
+               if (shouldBatch)
+               {
+                  // verify the histogram
+                  Histogram histogram = ((TcpSender)sender).getBatchingHistogram();
+                  assertEquals(calcMean(2),histogram.mean(),0.0000001);
+                  assertEquals(1,histogram.count());
+               }
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "testTransportInstantiation"; }
+      });
+      
+      assertTrue(batchedAtLeastOnce.get());
+   }
+   
+   
 //-------------------------------------------------------------------------------------
 // multirun tests.
 //-------------------------------------------------------------------------------------
@@ -145,6 +255,453 @@ public class TcpTransportTest
          
          @Override
          public String toString() { return "testTransportSimpleMessage"; }
+      });
+   }
+   
+   public static class BatchingOutputStreamWatcher implements OutputStreamFactory
+   {
+      final long[] flushByteCounts;
+
+      public BatchingOutputStreamWatcher(final long[] flushByteCounts) { this.flushByteCounts = flushByteCounts; }
+      
+      @Override
+      public OutputStream makeOutputStream(final OutputStream socketOutputStream, final Socket socket) throws IOException
+      {
+         return new OutputStream()
+         {
+            final OutputStream proxy = socketOutputStream;
+            int curCount = 0;
+            
+            @Override
+            public void write(int b) throws IOException {
+               flushByteCounts[curCount]++;
+            }
+            
+            public void flush() throws IOException { curCount++; proxy.flush(); }
+            
+            public void close() throws IOException { proxy.close(); }
+            
+            public void write(byte b[], int off, int len) throws IOException
+            {
+               flushByteCounts[curCount] += len;
+               proxy.write(b, off, len);
+            }
+         };
+      }
+   }
+   
+   private static final double calcMean(final long... values)
+   {
+      double ret = 0.0;
+      for (long val : values)
+         ret += (double)val;
+      return ret / (double)values.length;
+   }
+   
+   /**
+    * This test simply checks the batching bookeepeing in the case were the message flow
+    * times out.
+    */
+   @Test
+   public void transportBatchingTimeout() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
+         {
+            final StatsCollector statsCollector = new StatsCollectorFactoryCoda().createStatsCollector(new ClusterId("test", "test-cluster"), new Destination(){});
+
+            // we're going to batch no matter what the parameter says.
+            // We want the batching timeout to be really small
+            batchOutgoingMessagesDelayMillis = 175;
+            
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            
+            try
+            {
+               //===========================================
+               // setup the sender and receiver
+               adaptor = new TcpReceiver(null,getFailFast());
+               adaptor.setStatsCollector(statsCollector);
+               StringListener receiver = new StringListener();
+               adaptor.setListener(receiver);
+               
+               // we want to keep track of the number of bytes written
+               final long[] flushByteCounts = new long[4]; //
+                     
+               factory = makeSenderFactory(new BatchingOutputStreamWatcher(flushByteCounts),
+                     statsCollector,batchOutgoingMessagesDelayMillis);
+
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+
+               // send a message
+               Sender sender = factory.getSender(destination);
+               
+               // send messageBytes
+               byte[] messageBytes = "Hello".getBytes();
+               int sentBytesPerMessage = messageBytes.length + tcpTransportHeaderSize;
+               
+               sender.send(messageBytes);
+               Thread.sleep(batchOutgoingMessagesDelayMillis * 2);
+               sender.send(messageBytes);
+               sender.send(messageBytes);
+               Thread.sleep(batchOutgoingMessagesDelayMillis * 2);
+               sender.send(messageBytes);
+               
+               // now numBytesLastFlush should be set to the num of bytes that were last flushed.
+               // numBytesSent should be the total bytes, even those still in the buffer.
+               // Therefore numBytesSent - numBytesLastFlush should be the number of bytes waiting.
+               // These are asserted below.
+               
+               // we've now sent one message more than what's required to cause a flush.
+               
+               // wait for it to be received.
+               for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                     endTime > System.currentTimeMillis() && receiver.numMessages.get() < 4;)
+                  Thread.sleep(1);
+               Thread.sleep(10);
+               assertEquals(4,receiver.numMessages.get());
+
+               // verify everything came over ok.
+               assertEquals(1,receiver.receivedStringMessages.size());
+               assertEquals("Hello",receiver.receivedStringMessages.iterator().next());
+               
+               assertEquals(sentBytesPerMessage,flushByteCounts[0]);
+               assertEquals(sentBytesPerMessage * 2,flushByteCounts[1]);
+               assertEquals(sentBytesPerMessage,flushByteCounts[2]);
+               assertEquals(0, flushByteCounts[3]);
+               
+               // verify the histogram
+               Histogram histogram = ((TcpSender)sender).getBatchingHistogram();
+               assertEquals(calcMean(1,2,1),histogram.mean(),0.0000001);
+               assertEquals(3,histogram.count());
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+               
+               statsCollector.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "transportBatchingTimeout"; }
+      });
+   }
+   
+   /**
+    * This test simply checks the batching bookeepeing in the simple case. It sets the
+    * batch wait time stupidly high in order to make sure that exactly one full batch
+    * cycle happens and makes sure that the correct number of bytes were accumulated, 
+    * flushed, and left over.
+    */
+   @Test
+   public void transportBatching() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
+         {
+            final StatsCollector statsCollector = new StatsCollectorFactoryCoda().createStatsCollector(new ClusterId("test", "test-cluster"), new Destination(){});
+
+            // we're going to batch no matter what the parameter says.
+            batchOutgoingMessagesDelayMillis = 10000;
+            
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            
+            try
+            {
+               //===========================================
+               // setup the sender and receiver
+               adaptor = new TcpReceiver(null,getFailFast());
+               adaptor.setStatsCollector(statsCollector);
+               StringListener receiver = new StringListener();
+               adaptor.setListener(receiver);
+               
+               // we want to keep track of the number of bytes written
+               final long[] flushByteCounts = new long[2]; // This should be all that's needed
+                     
+               factory = makeSenderFactory(new BatchingOutputStreamWatcher(flushByteCounts),
+                     statsCollector,batchOutgoingMessagesDelayMillis);
+
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+
+               // send a message
+               Sender sender = factory.getSender(destination);
+               
+               int mtu = ((TcpSender)sender).getMtu();
+               
+               // send enough messages to get one through
+               byte[] messageBytes = "Hello".getBytes();
+               int numMessagesSent = 0;
+               int numBytesSent = 0;
+               int numBytesLastFlush = 0;
+               while (numBytesSent < mtu)
+               {
+                  sender.send(messageBytes);
+                  numBytesLastFlush = numBytesSent;
+                  numBytesSent += messageBytes.length + tcpTransportHeaderSize; 
+                  numMessagesSent++;
+               }
+               
+               // now numBytesLastFlush should be set to the num of bytes that were last flushed.
+               // numBytesSent should be the total bytes, even those still in the buffer.
+               // Therefore numBytesSent - numBytesLastFlush should be the number of bytes waiting.
+               // These are asserted below.
+               
+               // we've now sent one message more than what's required to cause a flush.
+               
+               // wait for it to be received.
+               for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                     endTime > System.currentTimeMillis() && receiver.numMessages.get() < numMessagesSent;)
+                  Thread.sleep(1);
+               Thread.sleep(10);
+               assertEquals(numMessagesSent,receiver.numMessages.get());
+
+               // verify everything came over ok.
+               assertEquals(1,receiver.receivedStringMessages.size());
+               assertEquals("Hello",receiver.receivedStringMessages.iterator().next());
+               
+               assertEquals(numBytesLastFlush,flushByteCounts[0]);
+               assertEquals(numBytesSent - numBytesLastFlush, flushByteCounts[1]);
+               
+               // verify the histogram
+               Histogram histogram = ((TcpSender)sender).getBatchingHistogram();
+               assertEquals(calcMean((numMessagesSent - 1),1),histogram.mean(),0.0000001);
+               assertEquals(2,histogram.count());
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+               
+               statsCollector.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "transportBatching"; }
+      });
+   }
+   
+   /**
+    * This test simply checks the batching bookeepeing in the case where the 
+    * message sent is larger than the Mtu
+    */
+   @Test
+   public void transportBatchingMessageLargerThanMtu() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
+         {
+            final StatsCollector statsCollector = new StatsCollectorFactoryCoda().createStatsCollector(new ClusterId("test", "test-cluster"), new Destination(){});
+
+            // we're going to batch no matter what the parameter says.
+            batchOutgoingMessagesDelayMillis = 10000;
+            
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            TcpReceiver adaptor2 = null;
+            
+            try
+            {
+               //===========================================
+               // setup the sender and receiver
+               adaptor = new TcpReceiver(null,getFailFast());
+               adaptor2 = new TcpReceiver(null,getFailFast());
+               adaptor.setStatsCollector(statsCollector);
+               StringListener receiver = new StringListener();
+               adaptor.setListener(receiver);
+               
+               // we want to keep track of the number of bytes written
+               final long[] flushByteCounts = new long[2]; // This should be all that's needed
+                     
+               factory = makeSenderFactory(new BatchingOutputStreamWatcher(flushByteCounts),
+                     statsCollector,batchOutgoingMessagesDelayMillis);
+
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+               Destination destination2 = adaptor2.getDestination(); // get the destination
+
+               // send a message
+               Sender sender = factory.getSender(destination);
+               factory.getSender(destination2);  // create a second sender to make sure the historgram acts correctly
+               
+               int mtu = ((TcpSender)sender).getMtu();
+               
+               // now create a message larger than the mtu by 10%
+               Random random = new Random();
+               byte[] messageBytes = new byte[(int)(mtu * 1.1)];
+               for (int i = 0; i < messageBytes.length; i++)
+                  messageBytes[i] = (byte)charSet.charAt(random.nextInt(charSet.length()));
+               
+               // send the message ... it should be sent without delay.
+               sender.send(messageBytes);
+
+               // wait for it to be received.
+               for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                     endTime > System.currentTimeMillis() && receiver.numMessages.get() == 0;)
+                  Thread.sleep(1);
+               Thread.sleep(10);
+               assertEquals(1,receiver.numMessages.get());
+
+               // verify everything came over ok.
+               assertEquals(1,receiver.receivedStringMessages.size());
+               
+               assertEquals(messageBytes.length + tcpTransportHeaderSize,flushByteCounts[0]);
+               assertEquals(0, flushByteCounts[1]);
+               
+               // verify the histogram
+               Histogram histogram = ((TcpSender)sender).getBatchingHistogram();
+               assertEquals(1.0D,histogram.mean(),0.0000001);
+               assertEquals(1,histogram.count());
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+               
+               if (adaptor2 != null)
+                  adaptor2.stop();
+               
+               statsCollector.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "transportBatchingMessageLargerThanMtu"; }
+      });
+   }
+   
+   /**
+    * This test simply checks the batching bookeepeing in the case where the 
+    * message sent is larger than the Mtu
+    */
+   @Test
+   public void transportBatchingMessageLargerAndSmallerMixed() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
+         {
+            final StatsCollector statsCollector = new StatsCollectorFactoryCoda().createStatsCollector(new ClusterId("test", "test-cluster"), new Destination(){});
+
+            // we're going to batch no matter what the parameter says.
+            batchOutgoingMessagesDelayMillis = 10000;
+            
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            
+            try
+            {
+               //===========================================
+               // setup the sender and receiver
+               adaptor = new TcpReceiver(null,getFailFast());
+               adaptor.setStatsCollector(statsCollector);
+               StringListener receiver = new StringListener();
+               adaptor.setListener(receiver);
+               
+               // we want to keep track of the number of bytes written
+               final long[] flushByteCounts = new long[4]; // This should be all that's needed
+                     
+               factory = makeSenderFactory(new BatchingOutputStreamWatcher(flushByteCounts),
+                     statsCollector,batchOutgoingMessagesDelayMillis);
+
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+
+               // send a message
+               Sender sender = factory.getSender(destination);
+               
+               int mtu = ((TcpSender)sender).getMtu();
+               
+               // now create a message larger than the mtu by 10%
+               Random random = new Random();
+               byte[] largeMessageBytes = new byte[(int)(mtu * 1.1)];
+               for (int i = 0; i < largeMessageBytes.length; i++)
+                  largeMessageBytes[i] = (byte)charSet.charAt(random.nextInt(charSet.length()));
+               
+               byte[] messageBytes = "Hello".getBytes();
+               
+               // send the message ... it should be sent without delay.
+               sender.send(largeMessageBytes); // this should flush everything
+               sender.send(messageBytes); // this should wait for another message.
+               sender.send(messageBytes); // this should wait for another message.
+               sender.send(largeMessageBytes); // this should flush everything
+
+               // wait for it to be received.
+               for (long endTime = System.currentTimeMillis() + baseTimeoutMillis;
+                     endTime > System.currentTimeMillis() && receiver.numMessages.get() < 4;)
+                  Thread.sleep(1);
+               Thread.sleep(10);
+               assertEquals(4,receiver.numMessages.get());
+
+               // verify everything came over ok.
+               assertEquals(2,receiver.receivedStringMessages.size());
+               
+               assertEquals(largeMessageBytes.length + tcpTransportHeaderSize,flushByteCounts[0]);
+               assertEquals((messageBytes.length + tcpTransportHeaderSize) * 2, flushByteCounts[1]);
+               assertEquals(largeMessageBytes.length + tcpTransportHeaderSize,flushByteCounts[2]);
+               assertEquals(0,flushByteCounts[3]);
+               
+               // verify the histogram
+               Histogram histogram = ((TcpSender)sender).getBatchingHistogram();
+               assertEquals(calcMean(1,2,1),histogram.mean(),0.0000001);
+               assertEquals(3,histogram.count());
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+               
+               statsCollector.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "transportBatchingMessageLargerAndSmallerMixed"; }
       });
    }
    
@@ -825,9 +1382,14 @@ public class TcpTransportTest
       onlyOnce = true;
    }
    
-   private TcpSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector, long batchOutgoingMessagesDelayMillis)
+   public static interface OutputStreamFactory
    {
-      return disruptible ? 
+      public OutputStream makeOutputStream(OutputStream socketOutputStream, Socket socket) throws IOException;
+   }
+   
+   private TcpSenderFactory makeSenderFactory(final OutputStreamFactory osfactory, StatsCollector statsCollector, long batchOutgoingMessagesDelayMillis)
+   {
+      return osfactory != null ? 
             new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis){
          protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
          {
@@ -843,9 +1405,11 @@ public class TcpTransportTest
                      didItOnceAlready = true;
                      return new Socket(destination.inetAddress,destination.port)
                      {
-                        public OutputStream getOutputStream() throws IOException
+                        final OutputStreamFactory factory = osfactory;
+                        
+                        public OutputStream getOutputStream() throws IOException 
                         {
-                           return new DisruptibleOutputStream(super.getOutputStream(), this);
+                           return factory.makeOutputStream(super.getOutputStream(),this);
                         }
                      };
                   }
@@ -855,6 +1419,18 @@ public class TcpTransportTest
             };
          }
       } : new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis);
+   }
+   
+   private TcpSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector, long batchOutgoingMessagesDelayMillis)
+   {
+      return disruptible ? makeSenderFactory(new OutputStreamFactory()
+      {
+         @Override public OutputStream makeOutputStream(OutputStream socketOutputStream, Socket socket) throws IOException
+         {
+            return new DisruptibleOutputStream(socketOutputStream, socket);
+         }
+      }, statsCollector, batchOutgoingMessagesDelayMillis) 
+            : new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis);
    }
    
    @Test

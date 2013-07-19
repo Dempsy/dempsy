@@ -88,20 +88,14 @@ public class TestDempsy
    String[] dempsyConfigs = new String[] { "testDempsy/Dempsy.xml" };
    
    String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-ZookeeperActx.xml", "testDempsy/ClusterInfo-LocalActx.xml" };
-//   String[] clusterManagers = new String[]{ "testDempsy/ClusterInfo-LocalActx.xml" };
    String[][] transports = new String[][] {
          { "testDempsy/Transport-PassthroughActx.xml", "testDempsy/Transport-PassthroughBlockingActx.xml" }, 
          { "testDempsy/Transport-BlockingQueueActx.xml" }, 
-         { "testDempsy/Transport-TcpActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
+         { "testDempsy/Transport-TcpNoBatchingActx.xml", "testDempsy/Transport-TcpFailSlowActx.xml", "testDempsy/Transport-TcpWithOverflowActx.xml", "testDempsy/Transport-TcpBatchedOutputActx.xml" }
    };
-//   String[][] transports = new String[][] {
-//         { "testDempsy/Transport-PassthroughBlockingActx.xml" }
-//   };
    
    String[] serializers = new String[]
          { "testDempsy/Serializer-JavaActx.xml", "testDempsy/Serializer-KryoActx.xml", "testDempsy/Serializer-KryoOptimizedActx.xml" };
-//   String[] serializers = new String[]
-//         { "testDempsy/Serializer-KryoActx.xml" };
    
    // bad combinations.
    List<ClusterId> badCombos = Arrays.asList(new ClusterId[] {
@@ -545,7 +539,7 @@ public class TestDempsy
       {
          actx = new ClassPathXmlApplicationContext(
                "testDempsy/Dempsy-IndividualClusterStart.xml",
-               "testDempsy/Transport-TcpActx.xml",
+               "testDempsy/Transport-TcpNoBatchingActx.xml",
                "testDempsy/ClusterInfo-LocalActx.xml",
                "testDempsy/Serializer-KryoActx.xml",
                "testDempsy/SimpleMultistageApplicationWithExecutorActx.xml"

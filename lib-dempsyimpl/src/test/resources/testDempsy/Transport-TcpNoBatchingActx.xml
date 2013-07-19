@@ -7,5 +7,6 @@
 
 	<bean name="transport" class="com.nokia.dempsy.messagetransport.tcp.TcpTransport" >
      <property name="failFast" value="true" />
+     <property name="disableBatching" value="true" />
    </bean>
 </beans>
