@@ -126,7 +126,7 @@ public class TcpSender implements Sender
    
    private final long calcDelay(long nextTimeToSend)
    {
-      final long delay = System.currentTimeMillis() - nextTimeToSend;
+      final long delay = nextTimeToSend - System.currentTimeMillis();
       return delay > 0 ? delay : 0;
    }
    
