@@ -1117,6 +1117,7 @@ public class TestDempsy
             TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
             adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
 
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==1; } }));
             Thread.sleep(100);
             assertEquals(0,statsCollector.getMessageProcessorsCreated());
             
