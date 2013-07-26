@@ -45,6 +45,7 @@ import org.slf4j.MarkerFactory;
 
 import com.nokia.dempsy.Dispatcher;
 import com.nokia.dempsy.KeySource;
+import com.nokia.dempsy.annotations.Activation;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.Start;
 import com.nokia.dempsy.config.ClusterId;
@@ -318,21 +319,27 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       catch(SerializationException e2)
       {
          logger.warn("the container for " + clusterId + " failed to deserialize message received for " + clusterId, e2);
+         statCollector.messageFailed(false);
       }
       catch (ContainerException ce)
       {
          if (ce.isExpected())
          {
+        	 statCollector.messageFailed(true);
             if (logger.isDebugEnabled())
                logger.debug("the container for " + clusterId + " failed to dispatch message the following message " + 
                SafeString.objectDescription(message) + " to the message processor " + SafeString.valueOf(prototype),ce);
          }
          else
+         {
+             statCollector.messageFailed(false);
             logger.warn("the container for " + clusterId + " failed to dispatch message the following message " + 
                   SafeString.objectDescription(message) + " to the message processor " + SafeString.valueOf(prototype), ce);
+         }
       }
       catch (Throwable ex)
       {
+          statCollector.messageFailed(false);
          logger.warn("the container for " + clusterId + " failed to dispatch message the following message " + 
                SafeString.objectDescription(message) + " to the message processor " + SafeString.valueOf(prototype), ex);
       }
@@ -490,7 +497,14 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   @Override
                   public Object call()
                   {
-                     try { getInstanceForKey(k); }
+                     try 
+                     { 
+                    	 // getInstanceForKey will return null ONLY when the activation call returns 'false'
+                    	 if (getInstanceForKey(k) == null && logger.isInfoEnabled()) 
+                    		 logger.info("Activation during pre-instantiation of Mp for key " + SafeString.objectDescription(key) + 
+                    				 " was rejected by the Mp itself (the @" + Activation.class.getSimpleName() + 
+                    				 "method itself returned false. This Mp will not be added to the container.");
+                     }
                      catch(ContainerException e)
                      {
                         logger.error("Failed to instantiate MP for Key "+key +
@@ -639,48 +653,59 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       {
          evictedAndBlocking = false;
          InstanceWrapper wrapper = getInstanceForDispatch(message);
-
-         // wrapper cannot be null ... look at the getInstanceForDispatch method
-         Object instance = wrapper.getExclusive(block);
-
-         if (instance != null) // null indicates we didn't get the lock
+         
+         // wrapper will be null if the activate returns 'false'
+         if (wrapper != null)
          {
-            try
-            {
-               if(wrapper.isEvicted())
-               {
-                  // if we're not blocking then we need to just return a failure. Otherwise we want to try again
-                  // because eventually the current Mp will be passivated and removed from the container and
-                  // a subsequent call to getInstanceForDispatch will create a new one.
-                  if (block)
-                  {
-                     Thread.yield();
-                     evictedAndBlocking = true; // we're going to try again.
-                  }
-                  else // otherwise it's just like we couldn't get the lock. The Mp is busy being killed off.
-                  {
-                     if (logger.isTraceEnabled())
-                        logger.trace("the container for " + clusterId + " failed handle message due to evicted Mp " + SafeString.valueOf(prototype));
-                     
-                     statCollector.messageDiscarded(message);
-                     statCollector.messageCollision(message);
-                     messageDispatchSuccessful = false;
-                  }
-               }
-               else
-               {
-                  invokeOperation(wrapper.getInstance(), Operation.handle, message);
-                  messageDispatchSuccessful = true;
-               }
-            }
-            finally { wrapper.releaseLock(); }
-         } 
-         else  // ... we didn't get the lock
+        	 Object instance = wrapper.getExclusive(block);
+
+        	 if (instance != null) // null indicates we didn't get the lock
+        	 {
+        		 try
+        		 {
+        			 if(wrapper.isEvicted())
+        			 {
+        				 // if we're not blocking then we need to just return a failure. Otherwise we want to try again
+        				 // because eventually the current Mp will be passivated and removed from the container and
+        				 // a subsequent call to getInstanceForDispatch will create a new one.
+        				 if (block)
+        				 {
+        					 Thread.yield();
+        					 evictedAndBlocking = true; // we're going to try again.
+        				 }
+        				 else // otherwise it's just like we couldn't get the lock. The Mp is busy being killed off.
+        				 {
+        					 if (logger.isTraceEnabled())
+        						 logger.trace("the container for " + clusterId + " failed handle message due to evicted Mp " + SafeString.valueOf(prototype));
+
+        					 statCollector.messageDiscarded(message);
+        					 statCollector.messageCollision(message);
+        					 messageDispatchSuccessful = false;
+        				 }
+        			 }
+        			 else
+        			 {
+        				 invokeOperation(wrapper.getInstance(), Operation.handle, message);
+        				 messageDispatchSuccessful = true;
+        			 }
+        		 }
+        		 finally { wrapper.releaseLock(); }
+        	 } 
+        	 else  // ... we didn't get the lock
+        	 {
+        		 if (logger.isTraceEnabled())
+        			 logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
+        		 statCollector.messageDiscarded(message);
+        		 statCollector.messageCollision(message);
+        	 }
+         }
+         else
          {
-            if (logger.isTraceEnabled())
-               logger.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
-            statCollector.messageDiscarded(message);
-            statCollector.messageCollision(message);
+        	 // if we got here then the activate on the Mp explicitly returned 'false'
+        	 if (logger.isDebugEnabled())
+        		 logger.debug("the container for " + clusterId + " failed to activate the Mp for " + SafeString.valueOf(prototype));
+        	 // we consider this "processed"
+        	 break; // leave the do/while loop
          }
       } while (evictedAndBlocking);
 
@@ -691,6 +716,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
     *  Returns the instance associated with the given message, creating it if
     *  necessary. Will append the message to the instance's work queue (which
     *  may also contain an activation invocation).
+    *  
+    *  This method can return null if the instance activation explicitly returns
+    *  'false' which tells the container NOT to incorporate the new instance.
     */
    protected InstanceWrapper getInstanceForDispatch(Object message) throws ContainerException
    {
@@ -1115,9 +1143,10 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   + " with " + ((data != null) ? data.length : 0) + " bytes of data"
                   + " via " + SafeString.valueOf(prototype));
 
+         boolean activateSuccessful = false;
          try
          {
-            prototype.activate(instance, key, data);
+            activateSuccessful = prototype.activate(instance, key, data);
          }
          catch(IllegalArgumentException e)
          {
@@ -1146,15 +1175,17 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
                   " because of an unknown exception.",e);
          }
 
-         // we only want to create a wrapper and place the instance into the container
-         //  if the instance activated correctly. If we got here then the above try block
-         //  must have been successful.
-         wrapper = new InstanceWrapper(instance); // null check above.
-         instances.put(key, wrapper); // once it goes into the map, we can remove it from the 'being worked' set
-         keysBeingWorked.remove(key); // remove it from the keysBeingWorked since any subsequent call will get
-                                      //  the newly added one.
-         statCollector.messageProcessorCreated(key);
-
+         if (activateSuccessful)
+         {
+        	 // we only want to create a wrapper and place the instance into the container
+        	 //  if the instance activated correctly. If we got here then the above try block
+        	 //  must have been successful.
+        	 wrapper = new InstanceWrapper(instance); // null check above.
+        	 instances.put(key, wrapper); // once it goes into the map, we can remove it from the 'being worked' set
+        	 keysBeingWorked.remove(key); // remove it from the keysBeingWorked since any subsequent call will get
+        	 //  the newly added one.
+        	 statCollector.messageProcessorCreated(key);
+         }
          return wrapper;
       }
    }

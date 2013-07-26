@@ -90,9 +90,10 @@ public class LifecycleHelper
    /**
     * Invokes the activation method of the passed instance.
     */
-   public void activate(Object instance, Object key, byte[] activationData) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
+   public boolean activate(Object instance, Object key, byte[] activationData) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
    {
-      activationMethod.invoke(instance, key, activationData);
+      Object o = activationMethod.invoke(instance, key, activationData);
+      return o == null ? true : ((Boolean)o);
    }
    
    /**

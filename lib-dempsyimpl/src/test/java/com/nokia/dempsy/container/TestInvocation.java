@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import org.junit.Before;
 import org.junit.Test;
 
 import com.nokia.dempsy.annotations.Activation;
@@ -44,6 +45,12 @@ public class TestInvocation
 //----------------------------------------------------------------------------
 //  Test classes -- must be static/public for introspection
 //----------------------------------------------------------------------------
+	
+	@Before
+	public void setup()
+	{
+		ActivateReturns.returnValue = true;
+	}
 
    @MessageProcessor
    public static class InvocationTestMP
@@ -96,6 +103,35 @@ public class TestInvocation
          outputCalled = true;
          return "42";
       }
+   }
+   
+   @MessageProcessor
+   public static class ActivateReturns implements Cloneable
+   {
+	   public static boolean returnValue = true;
+	   public boolean isActivated;
+	   public String activationValue;
+
+	   @Activation
+	   public boolean activate(byte[] data)
+	   {
+		   isActivated = true;
+		   activationValue = new String(data);
+		   return returnValue;
+	   }
+
+	   @MessageHandler
+	   public int handle(String value)
+	   {
+		   return 42;
+	   }
+	   
+	   @Override
+	   public ActivateReturns clone() throws CloneNotSupportedException
+	   {
+		   return (ActivateReturns)super.clone();
+	   }
+
    }
 
 
@@ -165,7 +201,7 @@ public class TestInvocation
       assertNotSame("instantiation failed; returned prototype", prototype, instance);
 
       assertFalse("instance activated before activation method called", instance.isActivated);
-      invoker.activate(instance, null, "ABC".getBytes());
+      assertTrue(invoker.activate(instance, null, "ABC".getBytes()));
       assertTrue("instance was not activated", instance.isActivated);
       assertEquals("ABC", instance.activationValue);
 
@@ -173,6 +209,26 @@ public class TestInvocation
       byte[] data = invoker.passivate(instance);
       assertTrue("instance was not passivated", instance.isPassivated);
       assertEquals("ABC", new String(data));
+   }
+
+   @Test
+   public void testActivateReturns() throws Exception
+   {
+      ActivateReturns prototype = new ActivateReturns();
+      LifecycleHelper invoker = new LifecycleHelper(prototype);
+
+      ActivateReturns instance = (ActivateReturns)invoker.newInstance();
+      assertNotNull("instantiation failed; null instance", instance);
+      assertNotSame("instantiation failed; returned prototype", prototype, instance);
+
+      assertFalse("instance activated before activation method called", instance.isActivated);
+      assertTrue(invoker.activate(instance, null, "ABC".getBytes()));
+      assertTrue("instance was not activated", instance.isActivated);
+      assertEquals("ABC", instance.activationValue);
+
+      ActivateReturns.returnValue = false;
+      assertFalse(invoker.activate(instance, null, "DEF".getBytes()));
+      assertEquals("DEF", instance.activationValue);
    }
 
 
