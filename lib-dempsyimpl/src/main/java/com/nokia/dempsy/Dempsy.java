@@ -483,8 +483,11 @@ public class Dempsy
    {
       try
       {
-         for(Application app : applications)
-            app.stop();
+         if (applications != null)
+         {
+            for(Application app : applications)
+               app.stop();
+         }
       }
       finally
       {

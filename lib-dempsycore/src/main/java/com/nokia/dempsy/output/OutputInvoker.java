@@ -16,7 +16,10 @@
 
 package com.nokia.dempsy.output;
 
+import java.util.concurrent.Executor;
+
 import com.nokia.dempsy.annotations.Output;
+import com.nokia.dempsy.config.ClusterId;
 
 
 /**
@@ -48,6 +51,16 @@ public interface OutputInvoker {
    * simultaneously.
    */
   public void setConcurrency(int concurrency);
+  
+  /**
+   * If the {@link OutputExecuter} want's it, the ClusterId can be obtained from the 
+   * {@link OutputInvoker}. This might be helpful in setting up application specific 
+   * output based monitoring metrics.
+   * 
+   * @return the ClusterId for the MP container for which the output invocation will
+   * be happending against.
+   */
+  public ClusterId getClusterId();
 
 }
 

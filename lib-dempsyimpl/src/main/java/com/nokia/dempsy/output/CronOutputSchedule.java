@@ -16,13 +16,14 @@
 
 package com.nokia.dempsy.output;
 
+import java.text.ParseException;
+
+import org.quartz.CronScheduleBuilder;
 import org.quartz.JobDetail;
-import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.Trigger;
+import org.quartz.TriggerBuilder;
 import org.quartz.impl.StdSchedulerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -30,34 +31,12 @@ import org.slf4j.LoggerFactory;
  * This class executes @Output method on MPs based on provided cron time expression (example: '*\/1 * * * * ?', run job at every one sec) 
  *  
  */
-public class CronOutputSchedule implements OutputExecuter {
+public class CronOutputSchedule extends AbstractOutputSchedule implements OutputExecuter {
 
-  /** The logger. */
-  private static Logger logger = LoggerFactory.getLogger(CronOutputSchedule.class);
-  
-  /** The scheduler. */
-  private Scheduler scheduler;
-  
   /** The cron expression. */
   private String cronExpression;
   
-  /** The output invoker. */
-  private OutputInvoker outputInvoker;
-  
-  /** Contains the number of threads to set on the {@link OutputInvoker} */
-  private int concurrency = -1;
-
-  public int getConcurrency()
-  {
-     return concurrency;
-  }
-
-  public void setConcurrency(int concurrency)
-  {
-     this.concurrency = concurrency;
-  }
-
-/**
+  /**
    * Instantiates a new cron output scheduler.
    *
    * @param cronExpression the cron expression
@@ -71,9 +50,8 @@ public class CronOutputSchedule implements OutputExecuter {
    */
   public void start() {
     try {
-      OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
-      JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
-      Trigger trigger = outputQuartzHelper.getCronTrigger(cronExpression);
+      JobDetail jobDetail = super.getJobDetail();
+      Trigger trigger = getCronTrigger(cronExpression);
       scheduler = StdSchedulerFactory.getDefaultScheduler();
       scheduler.scheduleJob(jobDetail, trigger);
       scheduler.start();
@@ -82,26 +60,26 @@ public class CronOutputSchedule implements OutputExecuter {
     }
   }
 
-  /* (non-Javadoc)
-   * @see com.nokia.dempsy.output.OutputExecuter#stop()
+  /**
+   * Gets the cron trigger.
+   *
+   * @param cronExpression the cron expression
+   * @return the cron trigger
    */
-  public void stop() {
+  private Trigger getCronTrigger(String cronExpression) {
+    CronScheduleBuilder cronScheduleBuilder = null;
+    Trigger cronTrigger = null;
     try {
-      // gracefully shutting down
-      scheduler.shutdown();
-    } catch (SchedulerException se) {
-      logger.error("Error occurred while stopping the cron scheduler : " + se.getMessage(), se);
+      cronScheduleBuilder = CronScheduleBuilder.cronSchedule(cronExpression);
+      cronScheduleBuilder.withMisfireHandlingInstructionFireAndProceed();
+      TriggerBuilder<Trigger> cronTtriggerBuilder = TriggerBuilder.newTrigger();
+      cronTtriggerBuilder.withSchedule(cronScheduleBuilder);
+      cronTrigger = cronTtriggerBuilder.build();
+    } catch (ParseException pe) {
+      logger.error("Error occurred while builiding the cronTrigger : " + pe.getMessage(), pe);
     }
+    return cronTrigger;
   }
 
-  /* (non-Javadoc)
-   * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
-   */
-  public void setOutputInvoker(OutputInvoker outputInvoker) {
-    this.outputInvoker = outputInvoker;
-    
-    if (concurrency > 1)
-       outputInvoker.setConcurrency(concurrency);
-  }
 
 }

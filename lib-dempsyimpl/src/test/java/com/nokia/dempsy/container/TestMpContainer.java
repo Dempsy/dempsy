@@ -240,6 +240,7 @@ public class TestMpContainer
    {
       // this assertion is superfluous, since we deref container in setUp()
       assertNotNull("did not create container", container);
+      assertEquals(new ClusterId("test", "test"),container.getClusterId());
       
       TestProcessor prototype = context.getBean(TestProcessor.class);
       assertEquals(1,prototype.startCalled.get());
