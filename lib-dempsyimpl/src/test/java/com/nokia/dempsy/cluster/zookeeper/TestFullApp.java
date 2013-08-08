@@ -283,17 +283,9 @@ public class TestFullApp
          // we are going to create another node of the MyMp via a test hack
          cluster = dempsy.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));
          Dempsy.Application.Cluster.Node mpnode = cluster.getNodes().get(0);
+         // this actually hoses the output schedule. It moves it to the new node due
+         //  to a second call to setOutputInvoker.
          cluster.instantiateAndStartAnotherNodeForTesting(); // the code for start instantiates a new node
-
-         // this checks that the throughput works.
-         assertTrue(poll(baseTimeoutMillis * 5, app, new Condition<Object>()
-         {
-            @Override
-            public boolean conditionMet(Object o)
-            {
-               return app.finalMessageCount.get() > 10;
-            }
-         }));
 
          assertNotNull(zookeeperCluster);
 
@@ -308,19 +300,7 @@ public class TestFullApp
          // but just to be sure actually stop the node.
          mpnode.stop();
 
-//         // we should be getting failures now ... 
-//         // but it's possible that it can reconnect prior to actually seeing an error so if this 
-//         //   fails frequently we need to remove this test.
-//         assertTrue(poll(baseTimeoutMillis, app, new Condition()
-//         {
-//            @Override
-//            public boolean conditionMet(Object o)
-//            {
-//               return collector.getMessageFailedCount() > 1;
-//            }
-//         }));
-
-         //... and then recover.
+         // we should be getting failures now ... and then recover.
 
          // get the MyMp prototype
          cluster = dempsy.getCluster(new ClusterId(FullApplication.class.getSimpleName(),MyMp.class.getSimpleName()));

@@ -19,21 +19,17 @@ package com.nokia.dempsy.output;
 import java.util.concurrent.TimeUnit;
 
 import org.quartz.JobDetail;
-import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.SimpleScheduleBuilder;
 import org.quartz.Trigger;
+import org.quartz.TriggerBuilder;
 import org.quartz.impl.StdSchedulerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
  
 /**
  * This is a default implementation of OutputExecuter. At fixed time interval,
  * this class will invoke the @Output method of MPs
  */
-public class RelativeOutputSchedule implements OutputExecuter {
-  
-  /** The logger. */
-  private static Logger logger = LoggerFactory.getLogger(RelativeOutputSchedule.class);
+public class RelativeOutputSchedule extends AbstractOutputSchedule {
   
   /** The interval. */
   private long interval;
@@ -41,25 +37,6 @@ public class RelativeOutputSchedule implements OutputExecuter {
   /** The time unit. */
   private TimeUnit timeUnit;
   
-  /** The output invoker. */
-  private OutputInvoker outputInvoker;
-  
-  /** The scheduler. */
-  private Scheduler scheduler;
-  
-  /** Contains the number of threads to set on the {@link OutputInvoker} */
-  private int concurrency = -1;
-
-  public int getConcurrency()
-  {
-     return concurrency;
-  }
-
-  public void setConcurrency(int concurrency)
-  {
-     this.concurrency = concurrency;
-  }
-
   /**
    * Instantiates a new relative output schedule.
    *
@@ -71,26 +48,14 @@ public class RelativeOutputSchedule implements OutputExecuter {
     this.timeUnit = timeUnit;
   }
 
-  /* (non-Javadoc)
-   * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
-   */
-  @Override
-  public void setOutputInvoker(OutputInvoker outputInvoker) {
-    this.outputInvoker = outputInvoker;
-
-    if (concurrency > 1)
-       outputInvoker.setConcurrency(concurrency);
-  }
- 
 /**
  * Container will invoke this method.
  */
   @Override
   public void start() {
     try {
-      OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
-      JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
-      Trigger trigger = outputQuartzHelper.getSimpleTrigger(timeUnit, (int) interval);
+      JobDetail jobDetail = super.getJobDetail();
+      Trigger trigger = getSimpleTrigger(timeUnit, (int) interval);
       scheduler = StdSchedulerFactory.getDefaultScheduler();
       scheduler.scheduleJob(jobDetail, trigger);
       scheduler.start();
@@ -98,18 +63,39 @@ public class RelativeOutputSchedule implements OutputExecuter {
       logger.error("Error occurred while starting the relative scheduler : " + se.getMessage(), se);
     }
   }
- 
 
   /**
-   * Container will invoke this method.
+   * Gets the simple trigger.
+   *
+   * @param timeUnit the time unit
+   * @param timeInterval the time interval
+   * @return the simple trigger
    */
-  @Override
-  public void stop() {
-    try {
-      // gracefully shutting down
-      scheduler.shutdown();
-    } catch (SchedulerException se) {
-      logger.error("Error occurred while stopping the relative scheduler : " + se.getMessage(), se);
+  private Trigger getSimpleTrigger(TimeUnit timeUnit, int timeInterval) {
+    SimpleScheduleBuilder simpleScheduleBuilder = null;
+    simpleScheduleBuilder = SimpleScheduleBuilder.simpleSchedule();
+
+    switch (timeUnit) {
+    case MILLISECONDS:
+      simpleScheduleBuilder.withIntervalInMilliseconds(timeInterval).repeatForever();
+      break;
+    case SECONDS:
+      simpleScheduleBuilder.withIntervalInSeconds(timeInterval).repeatForever();
+      break;
+    case MINUTES:
+      simpleScheduleBuilder.withIntervalInMinutes(timeInterval).repeatForever();
+      break;
+    case HOURS:
+      simpleScheduleBuilder.withIntervalInHours(timeInterval).repeatForever();
+      break;
+    case DAYS:
+      simpleScheduleBuilder.withIntervalInHours(timeInterval * 24).repeatForever();
+      break;
+    default:
+      throw new RuntimeException("The " + RelativeOutputSchedule.class.getSimpleName() + " cannot handle a time unit of " + timeUnit); //default 1 sec
     }
+    Trigger simpleTrigger = TriggerBuilder.newTrigger().withSchedule(simpleScheduleBuilder).build();
+    return simpleTrigger;
   }
+
 }

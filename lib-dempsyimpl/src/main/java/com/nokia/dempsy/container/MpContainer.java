@@ -1046,6 +1046,9 @@ public class MpContainer implements Listener, OutputInvoker, RoutingStrategy.Inb
       try { outputPass(); }
       finally { tctx.stop(); }
    }
+   
+   @Override
+   public ClusterId getClusterId() {  return clusterId;  }
 
    //----------------------------------------------------------------------------
    // Internals

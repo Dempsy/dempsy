@@ -144,7 +144,7 @@ public class FullApplication
       
       @Output
       public MyMessageCount outputMessageCount()
-      { 
+      {
          return new MyMessageCount(count);
       }
       
@@ -185,7 +185,7 @@ public class FullApplication
    {
       ApplicationDefinition ret = new ApplicationDefinition(FullApplication.class.getSimpleName()).
             add(new ClusterDefinition(MyAdaptor.class.getSimpleName()).setAdaptor(new MyAdaptor())).
-            add(new ClusterDefinition(MyMp.class.getSimpleName()).setMessageProcessorPrototype(new MyMp()).setOutputExecuter(new RelativeOutputSchedule(10, TimeUnit.MICROSECONDS))).
+            add(new ClusterDefinition(MyMp.class.getSimpleName()).setMessageProcessorPrototype(new MyMp()).setOutputExecuter(new RelativeOutputSchedule(1, TimeUnit.SECONDS))).
             add(new ClusterDefinition(MyRankMp.class.getSimpleName()).setMessageProcessorPrototype(new MyRankMp()));
       
       return ret;
