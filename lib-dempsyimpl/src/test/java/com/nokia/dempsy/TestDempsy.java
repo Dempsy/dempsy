@@ -111,9 +111,27 @@ public class TestDempsy
  
    private static InitZookeeperServerBean zkServer = null;
 
+   public static String onodes = null;
+   public static String oapp = null;
+   public static String ocluster = null;
+   public static String oslots = null;
+   
+   private static final void resetProp(String key, String val)
+   {
+      if (val != null)
+         System.setProperty(key, val);
+      else
+         System.clearProperty(key);
+   }
+   
    @BeforeClass
    public static void setupZookeeperSystemVars() throws IOException
    {
+      onodes = System.getProperty("min_nodes_for_cluster");
+      oslots = System.getProperty("total_slots_for_cluster");
+      oapp = System.getProperty("application");
+      ocluster = System.getProperty("cluster");
+      
       System.setProperty("application", "test-app");
       System.setProperty("cluster", "test-cluster2");
       zkServer = new InitZookeeperServerBean();
@@ -122,6 +140,11 @@ public class TestDempsy
    @AfterClass
    public static void shutdownZookeeper()
    {
+      resetProp("min_nodes_for_cluster",onodes);
+      resetProp("total_slots_for_cluster", oslots);
+      resetProp("application",oapp);
+      resetProp("cluster",ocluster);
+      
       zkServer.stop();
    }
    
@@ -158,6 +181,9 @@ public class TestDempsy
          return o == null ? false :
             String.valueOf(val).equals(String.valueOf(((TestMessage)o).val)); 
       }
+      
+      @Override
+      public String toString() { return "TestMessage:\"" + val + "\""; }
    }
    
    public static class TestKryoOptimizer implements KryoOptimizer
@@ -356,9 +382,11 @@ public class TestDempsy
       }
    }
    
-   public static interface Checker
+   public abstract class Checker
    {
-      public void check(ApplicationContext context) throws Throwable;
+      public abstract void check(ApplicationContext context) throws Throwable;
+      
+      public void setup() { init(); }
    }
    
    private static class WaitForShutdown implements Runnable
@@ -435,6 +463,12 @@ public class TestDempsy
                            logger.debug("*****************************************************************");
                            logger.debug(pass);
                            logger.debug("*****************************************************************");
+                           
+                           if (checker != null)
+                           {
+                              init(); // reset everything
+                              checker.setup(); // allow modification to defaults for this test.
+                           }
 
                            String[] ctx = { dempsyConfig, clusterManager, transport, serializer, "testDempsy/" + applicationContext };
 
@@ -908,7 +942,6 @@ public class TestDempsy
       // since the cron output message can only go to 1 second resolution,
       //  we need to drop the number of attempt to 3. Otherwise this test
       //  takes way too long.
-      TestMp.currentOutputCount = 3;
       runAllCombinations("SinglestageOutputApplicationActx.xml",
             new Checker()
             {
@@ -927,6 +960,9 @@ public class TestDempsy
                }
                
                public String toString() { return "testCronOutPutMessage"; }
+               
+               @Override
+               public void setup() { TestMp.currentOutputCount = 3; }
 
             });
    }
@@ -962,17 +998,16 @@ public class TestDempsy
    @Test
    public void testMpKeyStore() throws Throwable
    {
-      runMpKeyStoreTest("testMpKeyStore");
+      runMpKeyStoreTest("testMpKeyStore",false);
    }
    
    @Test
    public void testMpKeyStoreWithFailingClusterManager() throws Throwable
    {
-      KeySourceImpl.disruptSession = true;
-      runMpKeyStoreTest("testMpKeyStoreWithFailingClusterManager");
+      runMpKeyStoreTest("testMpKeyStoreWithFailingClusterManager",true);
    }
    
-   public void runMpKeyStoreTest(final String methodName) throws Throwable
+   public void runMpKeyStoreTest(final String methodName, final boolean disruptSession) throws Throwable
    {
       Checker checker = new Checker()   
       {
@@ -987,20 +1022,24 @@ public class TestDempsy
             // a way to given the code
             assertEquals(1, mp.startCalls.get());
 
-            // instead of the latch we are going to poll for the correct result
-            // wait for it to be received.
+            // wait for clone calls to reach at least 2
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==2; } }));
             
-            TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
-            adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
-
-            // instead of the latch we are going to poll for the correct result
-            // wait for it to be received.
-            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
+            final TestAdaptor adaptor = (TestAdaptor)context.getBean("adaptor");
             
-            adaptor.pushMessage(new TestMessage("test1")); // this causes the container to clone the Mp
+            // if the session has been disrupted then this may take some time to work again.
+            // wait until it works again.
+            assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) throws Throwable
+            {
+               adaptor.pushMessage(new TestMessage("output")); // this causes the container to clone the Mp
+               Thread.sleep(100); // wait for it to be received.
+               return mp.cloneCalls.get()==3; // this will not go past 3 as long as the same TestMessage is sent.
+            } }));
 
-            // instead of the latch we are going to poll for the correct result
+            adaptor.pushMessage(new TestMessage("test1")); // this WONT causes the container to clone the Mp because test1 was already pre-instantiated.
+            
+            Thread.sleep(100); // give it a little time.
+
             // wait for it to be received.
             assertTrue(poll(baseTimeoutMillis,mp,new Condition<TestMp>() { @Override public boolean conditionMet(TestMp mp) {  return mp.cloneCalls.get()==3; } }));
             List<Node> nodes = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes();
@@ -1013,6 +1052,9 @@ public class TestDempsy
          }
          
          public String toString() { return methodName; }
+         
+         @Override
+         public void setup() { KeySourceImpl.disruptSession = disruptSession; }
       };
 
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml", checker);
@@ -1022,10 +1064,6 @@ public class TestDempsy
    @Test
    public void testOverlappingKeyStoreCalls() throws Throwable
    {
-      KeySourceImpl.pause = new CountDownLatch(1);
-      KeySourceImpl.infinite = true;
-      KeySourceImpl.lastCreated = null;
-
       Checker checker = new Checker()   
       {
          @Override
@@ -1084,6 +1122,13 @@ public class TestDempsy
          }
          
          public String toString() { return "testOverlappingKeyStoreCalls"; }
+         
+         public void setup()
+         {
+            KeySourceImpl.pause = new CountDownLatch(1);
+            KeySourceImpl.infinite = true;
+            KeySourceImpl.lastCreated = null;
+         }
       };
       
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
@@ -1093,8 +1138,8 @@ public class TestDempsy
    @Test
    public void testFailedMessageHandlingWithKeyStore() throws Throwable
    {
-      KeySourceImpl.pause = new CountDownLatch(1);
-
+      final AtomicBoolean currentActivateCheckedException = new AtomicBoolean(false);
+      
       Checker checker = new Checker()   
       {
          @Override
@@ -1154,13 +1199,19 @@ public class TestDempsy
          }
          
          public String toString() { return "testFailedMessageHandlingWithKeyStore"; }
+         
+         public void setup() 
+         {
+            KeySourceImpl.pause = new CountDownLatch(1);
+            TestMp.activateCheckedException = currentActivateCheckedException.get();
+         }
       };
 
       // make sure both exceptions are handled since the logic in the container
       // actually varies depending on whether or not the exception is checked or not.
-      TestMp.activateCheckedException = true;
+      currentActivateCheckedException.set(true);
       runAllCombinations("SinglestageWithKeyStoreApplicationActx.xml",checker);
-      TestMp.activateCheckedException = false;
+      currentActivateCheckedException.set(false);
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
    }   
    
@@ -1169,10 +1220,6 @@ public class TestDempsy
    @Test
    public void testExpandingAndContractingKeySpace() throws Throwable
    {
-      KeySourceImpl.maxcount = 100000;
-      System.setProperty("min_nodes_for_cluster", "1");
-      System.setProperty("total_slots_for_cluster", "1");
-
       Checker checker = new Checker()   
       {
          @Override
@@ -1278,6 +1325,13 @@ public class TestDempsy
          }
          
          public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+         
+         public void setup() 
+         {
+            KeySourceImpl.maxcount = 100000;
+            System.setProperty("min_nodes_for_cluster", "1");
+            System.setProperty("total_slots_for_cluster", "1");
+         }
       };
 
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
@@ -1286,10 +1340,6 @@ public class TestDempsy
    @Test
    public void testFailedClusterManagerDuringKeyStoreCalls() throws Throwable
    {
-      KeySourceImpl.maxcount = 100000;
-      System.setProperty("min_nodes_for_cluster", "1");
-      System.setProperty("total_slots_for_cluster", "1");
-
       Checker checker = new Checker()   
       {
          @Override
@@ -1393,6 +1443,13 @@ public class TestDempsy
          }
          
          public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+         
+         public void setup() 
+         {
+            KeySourceImpl.maxcount = 100000;
+            System.setProperty("min_nodes_for_cluster", "1");
+            System.setProperty("total_slots_for_cluster", "1");
+         }
       };
 
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
