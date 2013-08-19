@@ -26,7 +26,7 @@ public interface StatsCollector {
    /**
     * A timer context is returned from start calls on the Stats collector
     * to provide a thread-safe context for stopping the started timer. This
-    * is analagous to Yammer Metrics use of Times. 
+    * is analogous to Yammer Metrics use of Times. 
     */
    public static interface TimerContext
    {
