@@ -219,6 +219,6 @@ public class TestStatsCollectorCoda {
       Thread.sleep(100);
       ctx.stop();
       long val = getStatValue(stats, StatsCollectorCoda.GAGE_LAST_OUTPUT_MILLIS);
-      assertTrue(val >= 100 && val <= 110);
+      assertTrue(val >= 100);
    }
 }

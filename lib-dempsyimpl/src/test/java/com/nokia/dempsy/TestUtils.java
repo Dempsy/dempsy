@@ -1,17 +1,26 @@
 package com.nokia.dempsy;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.junit.Assert;
 import org.junit.Ignore;
 
 import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
+import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
 import com.nokia.dempsy.cluster.DirMode;
+import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.internal.util.SafeString;
+import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.router.DecentralizedRoutingStrategy.DefaultRouterSlotInfo;
 import com.nokia.dempsy.router.Router;
 import com.nokia.dempsy.router.RoutingStrategy;
 
@@ -142,4 +151,85 @@ public class TestUtils
       return node.router.getClusterSession();
    }
    
+   public static class JunkDestination implements Destination {}
+
+   
+   /**
+    * This method will grab the slot requested. It requires that it is already held by 
+    * the session provided and that the entry there contains a valid DefaultRouterSlotInfo
+    * which it will extract, modify and use to replace.
+    * 
+    * This will be accomplished by disrupting the session and trying to grab the slot
+    * at the same time. It will try this over and over until it gets it, or until the
+    * number of tries is exceeded.
+    * 
+    * @param originalSession is the session that will be disrupted in order to grab the shard.
+    * @param factory is the {@link ClusterInfoSessionFactory} that will be used to create a new 
+    * session that can be used to grab the slot.
+    * @param shardPath is the path all the way to the directory containing the shard that you
+    * want stolen.
+    * 
+    * @throws Assert when one of the test condition fails or grabbing the slot fails.
+    */
+   public static ClusterInfoSession stealShard(final ClusterInfoSession originalSession, final ClusterInfoSessionFactory factory, 
+         final String shardPath, final long timeoutmillis) throws InterruptedException, ClusterInfoException
+   {
+      // get the current slot data to use as a template
+      final DefaultRouterSlotInfo newSlot = (DefaultRouterSlotInfo)originalSession.getData(shardPath, null);
+
+      final AtomicBoolean stillRunning = new AtomicBoolean(true);
+      final AtomicBoolean failed = new AtomicBoolean(false);
+
+      final ClusterInfoSession session = factory.createSession();
+      
+      Runnable slotGrabber = new Runnable()
+      {
+         @Override
+         public void run()
+         {
+            try
+            {
+               Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
+               boolean haveSlot = false;
+               while (!haveSlot && stillRunning.get())
+               {
+                  newSlot.setDestination(new JunkDestination());
+                  if (session.mkdir(shardPath,newSlot,DirMode.EPHEMERAL) != null)
+                     haveSlot = true;
+                  Thread.yield();
+               }
+            }
+            catch(ClusterInfoException e) { failed.set(true);  }
+            catch(RuntimeException re)
+            {
+               re.printStackTrace();
+               failed.set(true);
+            }
+            finally { stillRunning.set(false); }
+         }
+      };
+
+      try
+      {
+         new Thread(slotGrabber).start();
+
+         boolean onStandby = false;
+         long startTime = System.currentTimeMillis();
+         while (!onStandby && timeoutmillis >= (System.currentTimeMillis() - startTime))
+         {
+            ((DisruptibleSession)originalSession).disrupt();
+            Thread.sleep(100);
+            if (!stillRunning.get())
+               onStandby = true;
+         }
+
+         assertTrue(onStandby);
+         assertFalse(failed.get());
+      }
+      catch (InterruptedException ie) { session.stop(); throw ie; }
+      catch (Error cie) { session.stop(); throw cie; }
+      finally { stillRunning.set(false); }
+
+      return session;
+   }
 }

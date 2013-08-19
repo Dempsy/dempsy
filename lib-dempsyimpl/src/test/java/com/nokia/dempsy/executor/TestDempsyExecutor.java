@@ -154,12 +154,12 @@ public class TestDempsyExecutor
          assertTrue(TestUtils.poll(baseTimeoutMillis, executor, new TestUtils.Condition<DefaultDempsyExecutor>() {
             @Override public boolean conditionMet(DefaultDempsyExecutor executor) throws Throwable
             {   
-               return executor.getNumberPending() == 1;
+               return executor.getNumberPending() == 1 && executor.getNumberLimitedPending() == 1;
             }
          }));
 
          // and should stay there
-         Thread.sleep(10);
+         Thread.sleep(100);
          assertEquals(1,executor.getNumberPending());
 
          // this should also be reflected in the "limited" count.
@@ -177,7 +177,7 @@ public class TestDempsyExecutor
          }));
 
          // and should stay there
-         Thread.sleep(10);
+         Thread.sleep(100);
          assertEquals(2,executor.getNumberPending());
 
          // this should NOT be reflected in the "limited" count.
@@ -257,12 +257,12 @@ public class TestDempsyExecutor
          assertTrue(TestUtils.poll(baseTimeoutMillis, executor, new TestUtils.Condition<DefaultDempsyExecutor>() {
             @Override public boolean conditionMet(DefaultDempsyExecutor executor) throws Throwable
             {   
-               return executor.getNumberPending() == 1;
+               return executor.getNumberPending() == 1 && executor.getNumberLimitedPending() == 1;
             }
          }));
 
          // and should stay there
-         Thread.sleep(10);
+         Thread.sleep(100);
          assertEquals(1,executor.getNumberPending());
 
          // this should also be reflected in the "limited" count.
@@ -280,7 +280,7 @@ public class TestDempsyExecutor
          }));
 
          // and should stay there
-         Thread.sleep(10);
+         Thread.sleep(100);
          assertEquals(2,executor.getNumberPending());
 
          // this should NOT be reflected in the "limited" count.

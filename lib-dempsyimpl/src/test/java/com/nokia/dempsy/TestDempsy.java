@@ -51,23 +51,21 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.nokia.dempsy.Dempsy.Application.Cluster.Node;
 import com.nokia.dempsy.TestUtils.Condition;
+import com.nokia.dempsy.TestUtils.JunkDestination;
 import com.nokia.dempsy.annotations.Activation;
 import com.nokia.dempsy.annotations.MessageHandler;
 import com.nokia.dempsy.annotations.MessageKey;
 import com.nokia.dempsy.annotations.MessageProcessor;
 import com.nokia.dempsy.annotations.Output;
 import com.nokia.dempsy.annotations.Start;
-import com.nokia.dempsy.cluster.ClusterInfoException;
 import com.nokia.dempsy.cluster.ClusterInfoSession;
 import com.nokia.dempsy.cluster.ClusterInfoSessionFactory;
-import com.nokia.dempsy.cluster.DirMode;
 import com.nokia.dempsy.cluster.DisruptibleSession;
 import com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory;
 import com.nokia.dempsy.cluster.zookeeper.ZookeeperTestServer.InitZookeeperServerBean;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.container.MpContainer;
 import com.nokia.dempsy.executor.DefaultDempsyExecutor;
-import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiver;
 import com.nokia.dempsy.messagetransport.tcp.TcpReceiverAccess;
 import com.nokia.dempsy.monitoring.coda.MetricGetters;
@@ -151,6 +149,7 @@ public class TestDempsy
    @Before
    public void init()
    {
+      LocalClusterSessionFactory.completeReset();
       KeySourceImpl.disruptSession = false;
       KeySourceImpl.infinite = false;
       KeySourceImpl.pause = new CountDownLatch(0);
@@ -1215,8 +1214,6 @@ public class TestDempsy
       runAllCombinations("SinglestageWithKeyStoreAndExecutorApplicationActx.xml",checker);
    }   
    
-   public static class JunkDestination implements Destination {}
-
    @Test
    public void testExpandingAndContractingKeySpace() throws Throwable
    {
@@ -1225,106 +1222,60 @@ public class TestDempsy
          @Override
          public void check(ApplicationContext context) throws Throwable
          {
-            // start things and verify that the init method was called
-            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
-            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
-            final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
-                
-            // verify we haven't called it again, not that there's really
-            // a way to given the code
-            assertEquals(1, mp.startCalls.get());
+            ClusterInfoSession session = null;
             
-            // make sure that there are no Mps
-            MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
-
-            assertTrue(poll(baseTimeoutMillis, statsCollector, 
-                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
-                  {  return 100000 == sc.getMessageProcessorCount(); } }));
-            
-            // now push the cluster into backup node.
-            ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
-            assertNotNull(originalSession);
-            ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
-            
-            // get the current slot data to use as a template
-            final String slotPath = clusterId.asPath() + "/" + String.valueOf(0);
-            final DefaultRouterSlotInfo newSlot = (DefaultRouterSlotInfo)originalSession.getData(slotPath, null);
-            assertNotNull(newSlot);
-            
-            //-------------------------------------------------------------------------
-            // start a thread that continuously tries to grab the slot until it gets it.
-            final AtomicBoolean stillRunning = new AtomicBoolean(true);
-            final AtomicBoolean failed = new AtomicBoolean(false);
-            final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
-            
-            Runnable slotGrabber = new Runnable()
-            {
-               
-               @Override
-               public void run()
-               {
-                  ClusterInfoSession session = sessionRef.get();
-                  try
-                  {
-                     boolean haveSlot = false;
-                     while (!haveSlot && stillRunning.get())
-                     {
-                        newSlot.setDestination(new JunkDestination());
-                        if (session.mkdir(slotPath,newSlot,DirMode.EPHEMERAL) != null)
-                           haveSlot = true;
-                     }
-                  }
-                  catch(ClusterInfoException e) { failed.set(true);  }
-                  finally { stillRunning.set(false); }
-               }
-            };
-            
-            ClusterInfoSession session = factory.createSession();
-            sessionRef.set(session);
-
             try
             {
-               Thread thread = new Thread(slotGrabber);
+               // start things and verify that the init method was called
+               Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+               TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+               final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
 
-               thread.start();
+               // verify we haven't called it again, not that there's really
+               // a way to given the code
+               assertEquals(1, mp.startCalls.get());
 
-               boolean onStandby = false;
-               for (int i =0; i < 100 && !onStandby; i++) // try 100 times
-               {
-                  ((DisruptibleSession)originalSession).disrupt();
-                  Thread.sleep(100);
-                  if (!stillRunning.get())
-                     onStandby = true;
-               }
+               // make sure that there are no Mps
+               MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
 
-               assertTrue(onStandby);
+               // This will wait until the keySpace is up to the maxcount which is set (in the setup, below) to 100000
+               assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                     new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                     {  return 100000 == sc.getMessageProcessorCount(); } }));
 
+               // now push the cluster into backup node.
+               ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
+               ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+
+               session = TestUtils.stealShard(originalSession, factory, clusterId.asPath() + "/" + String.valueOf(0),baseTimeoutMillis);
+
+               // If we got here then the MpContainer is on standby and the number of Mps should
+               // drop to zero.
+               assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                     new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                     { return 0 == sc.getMessageProcessorCount(); } }));
+               Thread.sleep(10);
+               assertEquals(0,statsCollector.getMessageProcessorCount());
+
+               session.stop(); // this should give control back over to the original session.
+               session = null;
+
+               // If we got here then the MpContainer is no longer on standby and the number of Mps should
+               // go back to the original amount.
+               assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                     new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                     { return 100000 == sc.getMessageProcessorCount(); } }));
+               Thread.sleep(10);
+               assertEquals(100000,statsCollector.getMessageProcessorCount());
             }
             finally
             {
-               stillRunning.set(false);
-
-               assertFalse(failed.get());
+               if (session != null)
+                  session.stop();
             }
-            //-------------------------------------------------------------------------
-
-            // If we got here then the MpContainer is on standby and the number of Mps should
-            // drop to zero.
-            assertTrue(poll(baseTimeoutMillis, statsCollector, 
-                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
-                  { return 0 == sc.getMessageProcessorCount(); } }));
-            
-            // Now we need to bring it back up.
-            session.stop();
-
-            // If we got here then the MpContainer is on standby and the number of Mps should
-            // drop to zero.
-            assertTrue(poll(baseTimeoutMillis, statsCollector, 
-                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
-                  { return 100000 == sc.getMessageProcessorCount(); } }));
          }
          
-         public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }
+         public String toString() { return "testExpandingAndContractingKeySpace"; }
          
          public void setup() 
          {
@@ -1345,101 +1296,75 @@ public class TestDempsy
          @Override
          public void check(ApplicationContext context) throws Throwable
          {
-            // start things and verify that the init method was called
-            Dempsy dempsy = (Dempsy)context.getBean("dempsy");
-            TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
-            final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
-                
-            // verify we haven't called it again, not that there's really
-            // a way to given the code
-            assertEquals(1, mp.startCalls.get());
+            ClusterInfoSession session = null;
             
-            // make sure that there are no Mps
-            MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
-
-            assertTrue(poll(baseTimeoutMillis, statsCollector, 
-                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
-                  {  return 100000 == sc.getMessageProcessorCount(); } }));
-            
-            // now push the cluster into backup node.
-            ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
-            assertNotNull(originalSession);
-            ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
-            
-            // get the current slot data to use as a template
-            final String slotPath = clusterId.asPath() + "/" + String.valueOf(0);
-            final DefaultRouterSlotInfo newSlot = (DefaultRouterSlotInfo)originalSession.getData(slotPath, null);
-            assertNotNull(newSlot);
-            
-            //-------------------------------------------------------------------------
-            // start a thread that continuously tries to grab the slot until it gets it.
-            final AtomicBoolean stillRunning = new AtomicBoolean(true);
-            final AtomicBoolean failed = new AtomicBoolean(false);
-            final AtomicReference<ClusterInfoSession> sessionRef = new AtomicReference<ClusterInfoSession>(null);
-            
-            Runnable slotGrabber = new Runnable()
+            try
             {
+               // start things and verify that the init method was called
+               Dempsy dempsy = (Dempsy)context.getBean("dempsy");
+               TestMp mp = (TestMp) getMp(dempsy, "test-app","test-cluster1");
+               final ClusterId clusterId = new ClusterId("test-app","test-cluster1");
+
+               // verify we haven't called it again, not that there's really
+               // a way to given the code
+               assertEquals(1, mp.startCalls.get());
+
+               // make sure that there are no Mps
+               MetricGetters statsCollector = (MetricGetters)dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).getStatsCollector();
+
+               assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                     new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                     {  return 100000 == sc.getMessageProcessorCount(); } }));
                
-               @Override
-               public void run()
+               // now there's 100000 mps in the container created from the KeySource. So we steal the 
+               // shard and force if offline but continuously disrupt it while it tries to come
+               // back up.
+
+               // now push the cluster into backup node.
+               ClusterInfoSession originalSession = dempsy.getCluster(new ClusterId("test-app","test-cluster1")).getNodes().get(0).retouRteg().getClusterSession();
+               ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+
+               String path = clusterId.asPath() + "/" + String.valueOf(0);
+               session = TestUtils.stealShard(originalSession, factory, path,baseTimeoutMillis);
+               DefaultRouterSlotInfo si = (DefaultRouterSlotInfo)session.getData(path, null);
+               assertTrue(si.getDestination() instanceof JunkDestination); // checks to see who actually has the slot.
+
+               // we will keep disrupting the session but we should still end up with zero mps.
+               for (int i = 0; i < 100; i++)
                {
-                  ClusterInfoSession session = sessionRef.get();
-                  try
-                  {
-                     boolean haveSlot = false;
-                     while (!haveSlot && stillRunning.get())
-                     {
-                        newSlot.setDestination(new JunkDestination());
-                        if (session.mkdir(slotPath,newSlot,DirMode.EPHEMERAL) != null)
-                           haveSlot = true;
-                     }
-                  }
-                  catch(ClusterInfoException e) { failed.set(true);  }
-                  finally { stillRunning.set(false); }
+                  ((DisruptibleSession)originalSession).disrupt();
+                  Thread.sleep(1);
                }
-            };
-            
-            for (int j = 0; j < 100; j++)
-            {
-               ClusterInfoSession session = factory.createSession();
-               sessionRef.set(session);
                
-               try
+               // now wait until we get to zero.
+               assertTrue(poll(baseTimeoutMillis, statsCollector, 
+                     new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                     { return 0 == sc.getMessageProcessorCount(); } }));
+               Thread.sleep(10);
+               assertEquals(0,statsCollector.getMessageProcessorCount());
+               
+               // ok. Now we will close the session that's holding the shard and allow the container
+               // to re-establish control of that shard. During the KeyStore reinstantiation of the 
+               // MPs we will be disrupting the session.
+               session.stop();
+               for (int i = 0; i < 100; i++)
                {
-                  Thread thread = new Thread(slotGrabber);
-
-                  thread.start();
-
-                  boolean onStandby = false;
-                  for (int i =0; i < 100 && !onStandby; i++) // try 100 times
-                  {
-                     ((DisruptibleSession)originalSession).disrupt();
-                     Thread.sleep(100);
-                     if (!stillRunning.get())
-                        onStandby = true;
-                  }
-
-                  assertTrue(onStandby);
-
-                  // Now we need to bring it back up.
-                  session.stop();
+                  ((DisruptibleSession)originalSession).disrupt();
+                  Thread.sleep(1);
                }
-               finally
-               {
-                  stillRunning.set(false);
 
-                  assertFalse(failed.get());
-               }
+               // Now we should get back to 100000 Mps.
+               poll(baseTimeoutMillis, statsCollector, 
+                     new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
+                     { return 100000 == sc.getMessageProcessorCount(); } });
+
+               assertEquals(100000,statsCollector.getMessageProcessorCount());
             }
-            //-------------------------------------------------------------------------
-
-            // If we got here then the MpContainer is on standby and the number of Mps should
-            // drop to zero.
-            poll(baseTimeoutMillis, statsCollector, 
-                  new Condition<MetricGetters>() { @Override public boolean conditionMet(MetricGetters sc) 
-                  { return 100000 == sc.getMessageProcessorCount(); } });
-            
-            assertEquals(100000,statsCollector.getMessageProcessorCount());
+            finally
+            {
+               if (session != null)
+                  session.stop();
+            }
          }
          
          public String toString() { return "testFailedClusterManagerDuringKeyStoreCalls"; }

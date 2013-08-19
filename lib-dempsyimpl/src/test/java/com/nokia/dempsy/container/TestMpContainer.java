@@ -77,7 +77,7 @@ public class TestMpContainer
    private Serializer<Object> serializer = new JavaSerializer<Object>();
 
    private ClassPathXmlApplicationContext context;
-   private long baseTimeoutMillis = 2000;
+   private long baseTimeoutMillis = 20000;
 
    public static class DummyDispatcher implements Dispatcher
    {
@@ -301,12 +301,11 @@ public class TestMpContainer
    @Test
    public void testOutputInvoker() throws Exception {
      inputQueue.add(serializer.serialize(new ContainerTestMessage("foo")));
-        ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
-        assertTrue("messages received", (out1 != null) );
+     ContainerTestMessage out1 = (ContainerTestMessage)serializer.deserialize((byte[]) outputQueue.poll(1000, TimeUnit.MILLISECONDS));
+     assertTrue("messages received", (out1 != null) );
 
-        assertEquals("number of MP instances", 1, container.getProcessorCount());
-        assertTrue("queue is empty", outputQueue.isEmpty());
-
+     assertEquals("number of MP instances", 1, container.getProcessorCount());
+     assertTrue("queue is empty", outputQueue.isEmpty());
    }
    
    @Test
@@ -794,8 +793,8 @@ public class TestMpContainer
       CountDownLatch blockPassivate = new CountDownLatch(1);
       prototype.blockPassivate = blockPassivate;
       
-      final String[] keys = new String[1000000];
-      final String[] keys2 = new String[1000000];
+      final String[] keys = new String[10000];
+      final String[] keys2 = new String[10000];
       final String[] emptyKeys = new String[0];
       for (int i = 0; i < keys.length; i++)
       {

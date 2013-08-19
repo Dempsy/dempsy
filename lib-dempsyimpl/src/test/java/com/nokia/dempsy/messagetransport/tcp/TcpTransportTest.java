@@ -57,13 +57,13 @@ public class TcpTransportTest
    static Logger logger = LoggerFactory.getLogger(TcpTransportTest.class);
    private static final int numThreads = 4;
    
-//   private static final long baseTimeoutMillis = 20000;
-   private static final long baseTimeoutMillis = 9999999999999L;
+   private static final long baseTimeoutMillis = 20000;
    
    // 2 is the TcpTransport message overhead for any message whos size is <= Short.MAX_VALUE
    private static final int tcpTransportHeaderSize = 2;
    
    private static final String charSet = "ABCDEFGHIJKLMNOPabcdefghijklmnop0123456789";
+   private static final long maxOutboundQueueSize = 1000000;
    
 //-------------------------------------------------------------------------------------
 // Support code for multirun tests.
@@ -1390,7 +1390,7 @@ public class TcpTransportTest
    private TcpSenderFactory makeSenderFactory(final OutputStreamFactory osfactory, StatsCollector statsCollector, long batchOutgoingMessagesDelayMillis)
    {
       return osfactory != null ? 
-            new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis){
+            new TcpSenderFactory(statsCollector,maxOutboundQueueSize,10000,batchOutgoingMessagesDelayMillis){
          protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
          {
             return new TcpSender((TcpDestination)destination,statsCollector,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessagesDelayMillis,TcpTransport.defaultMtu)
@@ -1418,7 +1418,7 @@ public class TcpTransportTest
                }
             };
          }
-      } : new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis);
+      } : new TcpSenderFactory(statsCollector,maxOutboundQueueSize,10000,batchOutgoingMessagesDelayMillis);
    }
    
    private TcpSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector, long batchOutgoingMessagesDelayMillis)
@@ -1430,7 +1430,7 @@ public class TcpTransportTest
             return new DisruptibleOutputStream(socketOutputStream, socket);
          }
       }, statsCollector, batchOutgoingMessagesDelayMillis) 
-            : new TcpSenderFactory(statsCollector,-1,10000,batchOutgoingMessagesDelayMillis);
+            : new TcpSenderFactory(statsCollector,maxOutboundQueueSize,10000,batchOutgoingMessagesDelayMillis);
    }
    
    @Test

@@ -459,6 +459,13 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
 
             localEphemeralDirs.clear();
          }
+         // In some tests (and this method is only for tests) there is a race condition where
+         // the test has a thread trying to grab a shard while disrupting the session in order
+         // to knock out anyone currently holding the shard. On heavily loaded machines this 
+         // doesn't work because the callback is notified too quickly never giving the test
+         // enough opportunity to obtain the shard. So here we are going to sleep for some
+         // short amount of time before making the callback.
+         try { Thread.sleep(200); } catch (InterruptedException ie) {} 
          for (String path : parents)
          {
             try

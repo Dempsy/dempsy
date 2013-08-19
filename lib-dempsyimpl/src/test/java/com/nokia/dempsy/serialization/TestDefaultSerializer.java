@@ -399,7 +399,8 @@ public class TestDefaultSerializer
          synchronized(latch) { latch.notifyAll(); }
 
          // wait until so many message have been serialized
-         assertTrue(TestUtils.poll(baseTimeoutMillis, counts, new TestUtils.Condition<AtomicLong[]>()
+         //  This can be slow on cloudbees servers so we're going to double the wait time.
+         assertTrue(TestUtils.poll(baseTimeoutMillis * 2, counts, new TestUtils.Condition<AtomicLong[]>()
                {
             @Override
             public boolean conditionMet(AtomicLong[] cnts) throws Throwable

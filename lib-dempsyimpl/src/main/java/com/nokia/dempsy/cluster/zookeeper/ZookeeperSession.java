@@ -204,7 +204,20 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
    @Override
    public void disrupt()
    {
-      try { if (zkref != null) zkref.get().close(); } catch (Throwable th) { /* let it go otherwise */ }
+      if (logger.isTraceEnabled())
+         logger.trace("Disrupting Zookeeper session by closing the session.");
+      if (zkref != null)
+      {
+         try
+         {
+            ZooKeeper cur = zkref.get();
+            cur.close();
+         }
+         catch (Throwable th)
+         {
+           logger.error("Failed disrupting ZookeeperSession",th);
+         }
+      }
    }
    
    protected static class ZkWatcher implements Watcher

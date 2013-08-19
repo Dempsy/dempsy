@@ -156,6 +156,22 @@ public class TcpSender implements Sender
                   {
                      messageBytes = batchOutgoingMessages ? sendingQueue.poll(calcDelay(nextTimeToSend), TimeUnit.MILLISECONDS) : sendingQueue.take();
                      
+                     // Before we do anything else, we need to check if the queue is overflowed. The only way
+                     // the queue will have anything in it is if messageBytes != null, otherwise it's empty
+                     // so there's no need to check the current size.
+                     //
+                     // We want to do this prior to calling getDataOutputStream because a failure there will
+                     // cause an exception that skips the check and it may persist. If the failures are slow
+                     // (like they are with Windows tcp stack when the connection simply isn't there) then
+                     // this can overflow quickly unless we check prior to calling getDataOutputStream.
+                     //
+                     // maxNumberOfQueuedMessages < 0 means unbounded queue.
+                     if (messageBytes != null && maxNumberOfQueuedMessages >= 0 && sendingQueue.size() > maxNumberOfQueuedMessages)
+                     {
+                        if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                        continue; // skip the rest of the loop
+                     }
+                     
                      DataOutputStream localDataOutputStream = getDataOutputStream();
 
                      if (messageBytes == null) // this is only possible if we polled above ...
@@ -181,67 +197,61 @@ public class TcpSender implements Sender
                      // Examine the above logic. Once we get here messageBytes cannot be null.
                      //   Therefore we have a message to send (or discard if we're overflowed).
                   
-                     // If the queue is not overflowed, or we're unbounded, then we will send the message
-                     if (maxNumberOfQueuedMessages < 0 || sendingQueue.size() <= maxNumberOfQueuedMessages)
+                     int size = messageBytes.length;
+                     int curRawByteCount = size;
+                     if (size > Short.MAX_VALUE)
                      {
-                        int size = messageBytes.length;
-                        int curRawByteCount = size;
-                        if (size > Short.MAX_VALUE)
-                        {
-                           size = -1;
-                           curRawByteCount += 6; // this is the overhead of a short plus a long.... see below.
-                        }
-                        else
-                           curRawByteCount += 2; // this means the length will fit in a short.
-                        
-                        // This 'if' clause checks to see if the new message will overflow
-                        //   the packet meaning we should flush what's there.
-                        // if rawByteCount == 0 then there's nothing to flush.
-                        if (rawByteCount > 0 && (rawByteCount + curRawByteCount > mtu))
-                        {
-                           // we need to flush before sending.
-                           socketTimeout.begin();
-                           localDataOutputStream.flush();
-                           socketTimeout.end();
-                           rawByteCount = 0; // reset the rawByteCount since we flushed
-                           if (batchOutgoingMessages)
-                           {
-                              nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
-                              if (batching != null)
-                                 batching.update(batchCount);
-                              batchCount = 0;
-                           }
-                        }
-                        
-                        
-                        //===================================================
-                        // Do the write ... first the size
-                        localDataOutputStream.writeShort( size );
-                        rawByteCount += 2; // sizeof short
-                        if (size == -1)
-                        {
-                           localDataOutputStream.writeInt(size = messageBytes.length);
-                           rawByteCount += 4; // sizeof int
-                        }
-                        localDataOutputStream.write( messageBytes );
-                        rawByteCount += size; // sizeof message
-                        //===================================================
-
-                        if (!batchOutgoingMessages)
-                        {
-                           socketTimeout.begin();
-                           localDataOutputStream.flush(); // flush individual message
-                           socketTimeout.end();
-                           rawByteCount = 0; // reset the rawByteCount since we flushed
-                           // no need to reget the time since we're not 
-                        }
-                        else
-                           batchCount++;
-
-                        if (statsCollector != null) statsCollector.messageSent(messageBytes);
+                        size = -1;
+                        curRawByteCount += 6; // this is the overhead of a short plus a long.... see below.
                      }
                      else
-                        if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                        curRawByteCount += 2; // this means the length will fit in a short.
+
+                     // This 'if' clause checks to see if the new message will overflow
+                     //   the packet meaning we should flush what's there.
+                     // if rawByteCount == 0 then there's nothing to flush.
+                     if (rawByteCount > 0 && (rawByteCount + curRawByteCount > mtu))
+                     {
+                        // we need to flush before sending.
+                        socketTimeout.begin();
+                        localDataOutputStream.flush();
+                        socketTimeout.end();
+                        rawByteCount = 0; // reset the rawByteCount since we flushed
+                        if (batchOutgoingMessages)
+                        {
+                           nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
+                           if (batching != null)
+                              batching.update(batchCount);
+                           batchCount = 0;
+                        }
+                     }
+
+
+                     //===================================================
+                     // Do the write ... first the size
+                     localDataOutputStream.writeShort( size );
+                     rawByteCount += 2; // sizeof short
+                     if (size == -1)
+                     {
+                        localDataOutputStream.writeInt(size = messageBytes.length);
+                        rawByteCount += 4; // sizeof int
+                     }
+                     localDataOutputStream.write( messageBytes );
+                     rawByteCount += size; // sizeof message
+                     //===================================================
+
+                     if (!batchOutgoingMessages)
+                     {
+                        socketTimeout.begin();
+                        localDataOutputStream.flush(); // flush individual message
+                        socketTimeout.end();
+                        rawByteCount = 0; // reset the rawByteCount since we flushed
+                        // no need to reget the time since we're not 
+                     }
+                     else
+                        batchCount++;
+
+                     if (statsCollector != null) statsCollector.messageSent(messageBytes);
                   }
                   catch (IOException ioe)
                   {
