@@ -59,6 +59,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    public static final String GAGE_MPS = "message-processors";
    public static final String GAGE_MSG_PENDING = "messages-pending";
    public static final String GAGE_MSG_OUT_PENDING = "messages-out-pending";
+   public static final String GAGE_LAST_OUTPUT_MILLIS = "outputInvoke-lastCycleMillis";
    public static final String TM_MP_PREIN = "pre-instantiation-duration";
    public static final String TM_MP_HANDLE = "mp-handle-message-duration";
    public static final String TM_MP_OUTPUT = "outputInvoke-duration";
@@ -73,26 +74,28 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       MN_MSG_COLLISION,
       GAGE_MPS_IN_PROCESS, GAGE_MPS,
       GAGE_MSG_PENDING,    GAGE_MSG_OUT_PENDING,
+      GAGE_LAST_OUTPUT_MILLIS,
       TM_MP_PREIN,         TM_MP_HANDLE,
       TM_MP_OUTPUT,        TM_MP_EVIC
       
    };
 
-   private Meter messagesReceived;
-   private Histogram bytesReceived;
-   private Meter messagesDiscarded;
-   private Meter messagesCollisions;
-   private Meter messagesDispatched;
-   private Meter messagesFwFailed;
-   private Meter messagesMpFailed;
-   private Meter messagesProcessed;
-   private Meter messagesSent;
-   private Histogram bytesSent;
-   private Meter messagesUnsent;
-   private AtomicInteger inProcessMessages;
-   private AtomicLong numberOfMPs;
-   private Meter mpsCreated;
-   private Meter mpsDeleted;
+   private final Meter messagesReceived;
+   private final Histogram bytesReceived;
+   private final Meter messagesDiscarded;
+   private final Meter messagesCollisions;
+   private final Meter messagesDispatched;
+   private final Meter messagesFwFailed;
+   private final Meter messagesMpFailed;
+   private final Meter messagesProcessed;
+   private final Meter messagesSent;
+   private final Histogram bytesSent;
+   private final Meter messagesUnsent;
+   private final AtomicInteger inProcessMessages;
+   private final AtomicLong numberOfMPs;
+   private final AtomicLong lastOutputCycleMillis;
+   private final Meter mpsCreated;
+   private final Meter mpsDeleted;
    
    private Timer preInstantiationDuration;
    private Timer mpHandleMessageDuration;
@@ -105,7 +108,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
    private StatsCollectorFactoryCoda.MetricNamingStrategy namer;
    
    {
-      StatsCollector.Gauge tmp = new Gauge()
+      StatsCollector.Gauge zeroGauge = new Gauge()
       {
          @Override
          public long value()
@@ -114,8 +117,8 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
          }
       };
       
-      currentMessagesPendingGauge = tmp;
-      currentMessagesOutPendingGauge = tmp;
+      currentMessagesPendingGauge = zeroGauge;
+      currentMessagesOutPendingGauge = zeroGauge;
    }
 
    public StatsCollectorCoda(ClusterId clusterId, StatsCollectorFactoryCoda.MetricNamingStrategy namer)
@@ -143,6 +146,7 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
       });
 
       numberOfMPs = new AtomicLong();
+      lastOutputCycleMillis = new AtomicLong();
       mpsCreated = Metrics.newMeter(createName(MN_MP_CREATE), "instances", TimeUnit.SECONDS);
       mpsDeleted = Metrics.newMeter(createName(MN_MP_DELETE), "instances", TimeUnit.SECONDS);
       Metrics.newGauge(createName(GAGE_MPS), new com.yammer.metrics.core.Gauge<Long>() {
@@ -165,6 +169,14 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
          public Long value()
          {
             return StatsCollectorCoda.this.currentMessagesOutPendingGauge.value();
+         }
+      });
+      
+      Metrics.newGauge(createName(GAGE_LAST_OUTPUT_MILLIS), new com.yammer.metrics.core.Gauge<Long>() {
+         @Override
+         public Long value()
+         {
+            return StatsCollectorCoda.this.lastOutputCycleMillis.get();
          }
       });
 
@@ -333,7 +345,13 @@ public class StatsCollectorCoda implements StatsCollector, MetricGetters
 
    @Override
    public StatsCollector.TimerContext outputInvokeStarted() {
-      return new CodaTimerContext(outputInvokeDuration.time());
+      return new CodaTimerContext(outputInvokeDuration.time())
+      {
+         final long startTimeMillis = System.currentTimeMillis();
+         
+         @Override
+         public void stop() { super.stop(); lastOutputCycleMillis.set(System.currentTimeMillis() - startTimeMillis); }
+      };
    }
 
    @Override

@@ -28,6 +28,7 @@ import org.junit.Test;
 import com.nokia.dempsy.config.ClusterId;
 import com.nokia.dempsy.messagetransport.Destination;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.StatsCollector.TimerContext;
 import com.yammer.metrics.core.Metered;
 import com.yammer.metrics.core.MetricName;
 import com.yammer.metrics.core.MetricsRegistry;
@@ -209,5 +210,15 @@ public class TestStatsCollectorCoda {
       count.set(10);
       assertEquals("final value", 10L, getStatValue(stats, StatsCollectorCoda.GAGE_MSG_OUT_PENDING));
       assertEquals("final value", 10L, stats.getMessagesOutPending());
+   }
+   
+   @Test
+   public void testOutputCycleTiming() throws Throwable
+   {
+      TimerContext ctx = stats.outputInvokeStarted();
+      Thread.sleep(100);
+      ctx.stop();
+      long val = getStatValue(stats, StatsCollectorCoda.GAGE_LAST_OUTPUT_MILLIS);
+      assertTrue(val >= 100 && val <= 110);
    }
 }
