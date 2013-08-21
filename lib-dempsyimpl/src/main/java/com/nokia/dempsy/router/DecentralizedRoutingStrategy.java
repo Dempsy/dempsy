@@ -17,7 +17,6 @@
 package com.nokia.dempsy.router;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -260,6 +259,7 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             // we need to flatten out recursions
             if (alreadyHere)
             {
+               logger.trace("Recurse attempt. Delaying call.");
                recurseAttempt = true;
                return;
             }
@@ -279,56 +279,70 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             final int minNodeCount = defaultNumNodes;
             final int totalAddressNeeded = defaultTotalSlots;
             final Random random = new Random();
-            boolean moreResponsitiblity = false;
-            boolean lessResponsitiblity = false;
             
-            //==============================================================================
-            // need to verify that the existing slots in destinationsAcquired are still ours
+            // Get the current state of the entire cluster.
             Map<Integer,DefaultRouterSlotInfo> slotNumbersToSlots = new HashMap<Integer,DefaultRouterSlotInfo>();
             fillMapFromActiveSlots(slotNumbersToSlots, cluster, clusterId, this);
-            Collection<Integer> slotsToReaquire = new ArrayList<Integer>();
+            
+            // Create the set of slots that I already own.
+            Set<Integer> shardsIOwn = new HashSet<Integer>(); 
+            for (Map.Entry<Integer, DefaultRouterSlotInfo> entry: slotNumbersToSlots.entrySet())
+            {
+               if (thisDestination.equals(entry.getValue().getDestination()))
+                  shardsIOwn.add(entry.getKey());
+            }
+
+            //==============================================================================
+            // need to verify that the existing slots in destinationsAcquired are still ours
+            // and re-acquire the potentially lost ones
             for (int index = 0; index < totalAddressNeeded; index++)
             {
                if (destinationsAcquiredLookup[index])
                {
-                  // select the coresponding slot information
-                  DefaultRouterSlotInfo slotInfo = slotNumbersToSlots.get(index);
-                  if (slotInfo == null || !thisDestination.equals(slotInfo.getDestination()))
-                     slotsToReaquire.add(index);
+                  // select the corresponding slot information
+                  if(!shardsIOwn.contains(index))
+                  {
+                       if (acquireSlot(index, totalAddressNeeded,
+                             cluster, clusterId, messageTypes, thisDestination))
+                          shardsIOwn.add(index);
+                       else
+                           logger.info("Cannot reaquire the slot " + index + " for the cluster " + clusterId);
+                  }
                }
             }
             //==============================================================================
 
-            //==============================================================================
-            // Now re-acquire the potentially lost slots
-            for (Integer slotToReaquire : slotsToReaquire)
-            {
-               if (!acquireSlot(slotToReaquire, totalAddressNeeded,
-                     cluster, clusterId, messageTypes, thisDestination))
-               {
-                  logger.info("Cannot reaquire the slot " + slotToReaquire + " for the cluster " + clusterId);
-                  // I need to drop the slot from my list of destinations
-                  destinationsAcquiredLookup[slotToReaquire] = false;
-                  lessResponsitiblity = true;
-               }
-            }
-            //==============================================================================
-
-            while(needToGrabMoreSlots(cluster,minNodeCount,totalAddressNeeded))
+            while(needToGrabMoreSlots(clusterId.asPath(),cluster,shardsIOwn.size(),minNodeCount,totalAddressNeeded))
             {
                int randomValue = random.nextInt(totalAddressNeeded);
                if(destinationsAcquiredLookup[randomValue])
                   continue;
                if (acquireSlot(randomValue, totalAddressNeeded,
                      cluster, clusterId, messageTypes, thisDestination))
-               {
-                  destinationsAcquiredLookup[randomValue] = true;
-                  moreResponsitiblity = true;
-               }
+                  shardsIOwn.add(randomValue);
             }
             
-            if (lessResponsitiblity || moreResponsitiblity)
-               listener.keyspaceResponsibilityChanged(this,lessResponsitiblity, moreResponsitiblity);
+            //===============================================================================
+            // It's critical that this happen without an exception. We are going to now update the
+            // underlying destinationsAcquiredLookup array and once an entry is changed we must get to the 
+            // keyspaceResponsibilityChanged call or we will have missed either MP evictions
+            // or MP instantiations.
+            boolean moreResponsitiblity = false;
+            boolean lessResponsitiblity = false;
+            for (int i = 0; i < destinationsAcquiredLookup.length; i++)
+            {
+               if (destinationsAcquiredLookup[i] == false && shardsIOwn.contains(i))
+               {
+                  destinationsAcquiredLookup[i] = true;
+                  moreResponsitiblity = true;
+               }
+               else if (destinationsAcquiredLookup[i] == true && !shardsIOwn.contains(i) )
+               {
+                  destinationsAcquiredLookup[i] = false;
+                  lessResponsitiblity = true;
+               }
+            }
+            listener.keyspaceResponsibilityChanged(this,lessResponsitiblity, moreResponsitiblity);
 
             retry = false;
             
@@ -357,7 +371,11 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             {
                currentlyWaitingOn = scheduler.schedule(new Runnable(){
                   @Override
-                  public void run() { acquireSlots(fromProcess); }
+                  public void run() 
+                  {
+                     logger.trace("Kicking off scheduled acquireSlots");
+                     acquireSlots(fromProcess);
+                  }
                }, resetDelay, TimeUnit.MILLISECONDS);
             }
          }
@@ -369,23 +387,6 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
          scheduler.shutdown();
       }
       
-      private boolean needToGrabMoreSlots(ClusterInfoSession clusterHandle,
-            int minNodeCount, int totalAddressNeeded) throws ClusterInfoException
-      {
-         int addressInUse = clusterHandle.getSubdirs(clusterId.asPath(), null).size();
-         int maxSlotsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)minNodeCount);
-         return addressInUse < totalAddressNeeded && countDestinationsAcquired(totalAddressNeeded) < maxSlotsForOneNode;
-      }
-      
-      private final int countDestinationsAcquired(int totalAddressNeeded)
-      {
-         int ret = 0;
-         for (int i = 0; i < totalAddressNeeded; i++)
-            if (destinationsAcquiredLookup[i])
-               ret++;
-         return ret;
-      }
-      
       @Override
       public boolean doesMessageKeyBelongToNode(Object messageKey)
       {
@@ -393,6 +394,15 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
       }
 
    } // end Inbound class definition
+   
+   private static boolean needToGrabMoreSlots(String shardPath,
+         ClusterInfoSession clusterHandle, int numIOwn,
+         int minNodeCount, int totalAddressNeeded) throws ClusterInfoException
+   {
+      int addressInUse = clusterHandle.getSubdirs(shardPath, null).size();
+      int maxSlotsForOneNode = (int)Math.ceil((double)totalAddressNeeded / (double)minNodeCount);
+      return addressInUse < totalAddressNeeded && numIOwn < maxSlotsForOneNode;
+   }
    
    @Override
    public RoutingStrategy.Inbound createInbound(ClusterInfoSession cluster, ClusterId clusterId,
