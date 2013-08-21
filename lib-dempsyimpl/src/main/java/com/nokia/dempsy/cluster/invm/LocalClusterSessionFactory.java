@@ -180,7 +180,7 @@ public class LocalClusterSessionFactory implements ClusterInfoSessionFactory
    private static String parent(String path)
    {
       File f = new File(path);
-      return f.getParent();
+      return f.getParent().replace('\\', '/');
    }
 
    // This should only be called from a static synchronized method on the LocalClusterSessionFactory
