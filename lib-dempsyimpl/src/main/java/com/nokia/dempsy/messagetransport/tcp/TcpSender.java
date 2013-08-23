@@ -226,7 +226,6 @@ public class TcpSender implements Sender
                         }
                      }
 
-
                      //===================================================
                      // Do the write ... first the size
                      localDataOutputStream.writeShort( size );
@@ -239,17 +238,25 @@ public class TcpSender implements Sender
                      localDataOutputStream.write( messageBytes );
                      rawByteCount += size; // sizeof message
                      //===================================================
+                     batchCount++;
 
-                     if (!batchOutgoingMessages)
+                     // If we're not batching then we need to flush this message
+                     // If we are batching, but this message is bigger than the mtu
+                     //   then we need to flush.
+                     if (!batchOutgoingMessages || rawByteCount > mtu)
                      {
                         socketTimeout.begin();
                         localDataOutputStream.flush(); // flush individual message
                         socketTimeout.end();
                         rawByteCount = 0; // reset the rawByteCount since we flushed
-                        // no need to reget the time since we're not 
+                        if (batchOutgoingMessages)
+                        {
+                           nextTimeToSend = System.currentTimeMillis() + batchOutgoingMessagesDelayMillis;
+                           if (batching != null)
+                              batching.update(batchCount);
+                           batchCount = 0;
+                        }
                      }
-                     else
-                        batchCount++;
 
                      if (statsCollector != null) statsCollector.messageSent(messageBytes);
                   }
@@ -262,14 +269,16 @@ public class TcpSender implements Sender
                   }
                   catch (InterruptedException ie)
                   {
-                     socketTimeout.end();
+                     if (socketTimeout != null)
+                        socketTimeout.end();
                      if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
                      if (senderKeepRunning.get()) // if we're supposed to be running still, then we're not shutting down. Not sure why we reset.
                         logger.warn("Sending data to " + destination + " was interrupted for no good reason.",ie);
                   }
                   catch (Throwable th)
                   {
-                     socketTimeout.end();
+                     if (socketTimeout != null)
+                        socketTimeout.end();
                      if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
                      logger.error("Unknown exception thrown while trying to send a message to " + destination);
                   }
@@ -279,7 +288,8 @@ public class TcpSender implements Sender
             {
                senderThread.set(null);
                isSenderRunning.set(false);
-               socketTimeout.stop();
+               if (socketTimeout != null)
+                  socketTimeout.stop();
             }
          }
          
