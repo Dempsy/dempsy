@@ -179,16 +179,31 @@
 <li>Dempsy is a <em>Framework</em>. It is not an application container like a J2EE container, nor a simple library. Instead, like the <a href="http://www.springsource.org">Spring Framework</a> it is a collection of patterns, the libraries to enable those patterns, and the interfaces one must implement to use those libraries to implement the patterns.</li>
 </ul><h2>What Problem is Dempsy solving?</h2>
 
-<p>Dempsy is not designed to be a general purpose framework, but is intended to solve a certain class of problems while encouraging the use of the best software development practices.</p>
+<p>Dempsy is not designed to be a general purpose framework, but is intended to solve two specific classes of "stream processing" problems while encouraging the use of the best software development practices. These two classes include:</p>
 
-<p>Dempsy is meant to solve the problem of processing large amounts of "near real time" stream data with the lowest lag possible; problems where latency is more important that "guaranteed delivery." This class of problems includes use cases such as:</p>
+<h3>Statistical Analytics</h3>
+
+<p>Dempsy can be used to solve the problem of processing large amounts of "near real time" stream data with the lowest lag possible. <em>Statistical Analytics</em> are problems where latency is more important than "guaranteed delivery." This class of problems includes use cases such as:</p>
 
 <ul>
-<li>Real time monitoring of large distributed systems</li>
-<li>Processing complete rich streams of social networking data</li>
+<li>Real time statistical monitoring of large distributed systems</li>
+<li>Monitoring statistics on rich streams of social networking data</li>
 <li>Real time analytics on log information generated from widely distributed systems</li>
 <li>Statistical analytics on real-time vehicle traffic information on a global basis</li>
-</ul><p>It is meant to provide developers with a tool that allows them to solve these problems in a simple straightforward manner by allowing them to concentrate on the analytics themselves rather than the infrastructure. Dempsy heavily emphasizes "separation of concerns" through "dependency injection" and out of the box supports both Spring and Guice. It does all of this by supporting what can be (almost) described as a "distributed actor model."</p>
+<li>Large scale financial market trending analysis.</li>
+</ul>
+
+<h3>Deterministic Analytics <em>(Coming in April 2013)</em></h3>
+
+<p>In the case where guaranteed delivery is more important than lag reduction, Dempsy provides for the ability to run analytics where stream messages are processed with at-least-once semantics:</p>
+
+<ul>
+<li>Banking and Credit Card fraud detection.</li>
+<li>Widely distributed sensor/device monitoring.</li>
+<li>Individual customer based services.</li>
+</ul>
+
+<p>It is meant to provide developers with a tool that allows them to solve these problems in a simple straightforward manner by allowing them to concentrate on the analytics themselves rather than the infrastructure. Dempsy heavily emphasizes "separation of concerns" through "dependency injection" and out of the box supports both Spring and Guice. It does all of this by supporting what can be (almost) described as a "distributed actor model."</p>
 
 <p>In short Dempsy is a framework to enable decomposing a large class of message processing applications into flows of messages to relatively simple processing units implemented as <a href="http://en.wikipedia.org/wiki/Plain_Old_Java_Object">POJOs</a></p>
 
