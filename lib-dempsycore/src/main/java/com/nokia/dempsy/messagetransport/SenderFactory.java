@@ -33,4 +33,5 @@ public interface SenderFactory
     */
    public void stop();
    
+   public void reclaim(Destination destination);
 }

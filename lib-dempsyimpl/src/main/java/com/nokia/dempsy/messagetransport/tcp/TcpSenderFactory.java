@@ -27,6 +27,10 @@ import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.monitoring.StatsCollector;
+import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
+import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Histogram;
+import com.yammer.metrics.core.MetricName;
 
 public class TcpSenderFactory implements SenderFactory
 {
@@ -39,6 +43,9 @@ public class TcpSenderFactory implements SenderFactory
    protected final long maxNumberOfQueuedOutbound;
    protected final int mtu;
    
+   protected final Histogram batching;
+   protected final MetricName batchingMetricName;
+
    protected TcpSenderFactory(StatsCollector statsCollector, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, long batchOutgoingMessagesDelayMillis)
    {
       this.statsCollector = statsCollector;
@@ -46,6 +53,19 @@ public class TcpSenderFactory implements SenderFactory
       this.batchOutgoingMessagesDelayMillis = batchOutgoingMessagesDelayMillis;
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;
       this.mtu = TcpTransport.determineMtu();
+      
+      if (batchOutgoingMessagesDelayMillis >= 0 && statsCollector != null && 
+            StatsCollectorCoda.class.isAssignableFrom(statsCollector.getClass()))
+      {
+         batchingMetricName = ((StatsCollectorCoda)statsCollector).createName("messages-batched");
+         batching = Metrics.newHistogram(batchingMetricName);
+      }
+      else
+      {
+         batching = null;
+         batchingMetricName = null;
+      }
+
    }
 
    @Override
@@ -69,6 +89,20 @@ public class TcpSenderFactory implements SenderFactory
    }
    
    @Override
+   public void reclaim(Destination destination)
+   {
+      synchronized(senders)
+      {
+         TcpSender sender = senders.get(destination);
+         if (sender != null)
+         {
+            sender.stop();
+            senders.remove(destination);
+         }
+      }
+   }
+   
+   @Override
    public void stop() 
    {
       isStopped = true;
@@ -80,6 +114,9 @@ public class TcpSenderFactory implements SenderFactory
       }
       for (TcpSender sender : scol)
          sender.stop();
+      
+      if (batching != null)
+         Metrics.defaultRegistry().removeMetric(batchingMetricName);
    }
    
    /**
@@ -88,7 +125,7 @@ public class TcpSenderFactory implements SenderFactory
     */
    protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
    {
-      return new TcpSender( (TcpDestination)destination, statsCollector, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessagesDelayMillis, mtu );
+      return new TcpSender( (TcpDestination)destination, statsCollector, batching, maxNumberOfQueuedOutbound, socketWriteTimeoutMillis, batchOutgoingMessagesDelayMillis, mtu );
    }
 
 }

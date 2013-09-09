@@ -127,7 +127,7 @@ public class BasicStatsCollector implements StatsCollector, MetricGetters
    }
 
    @Override
-   public void messageNotSent(Object message)
+   public void messageNotSent()
    {
       messagesUnsent.incrementAndGet();
    }

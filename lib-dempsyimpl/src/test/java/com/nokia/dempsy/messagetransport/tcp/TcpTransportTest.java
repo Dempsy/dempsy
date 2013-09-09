@@ -943,9 +943,13 @@ public class TcpTransportTest
                //===========================================
 
                //===========================================
-               // check that ONLY one failed (the others didn't)
+               // check that ONLY one failed (the others didn't) when we're not batching. Otherwise
+               //  more may fail.
                Thread.sleep(10);
-               assertEquals(1,statsCollector.getMessagesNotSentCount());
+               if (batchOutgoingMessagesDelayMillis >= 0) // if we're batching then we only expect a failure but we don't know how many
+                  assertTrue(statsCollector.getMessagesNotSentCount() > 0);
+               else
+                  assertEquals(1,statsCollector.getMessagesNotSentCount());
                //===========================================
                
                // all of the counts should increase.
@@ -1393,7 +1397,7 @@ public class TcpTransportTest
             new TcpSenderFactory(statsCollector,maxOutboundQueueSize,10000,batchOutgoingMessagesDelayMillis){
          protected TcpSender makeTcpSender(TcpDestination destination) throws MessageTransportException
          {
-            return new TcpSender((TcpDestination)destination,statsCollector,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessagesDelayMillis,TcpTransport.defaultMtu)
+            return new TcpSender((TcpDestination)destination,statsCollector,batching,maxNumberOfQueuedOutbound, socketWriteTimeoutMillis,batchOutgoingMessagesDelayMillis,TcpTransport.defaultMtu)
             {
                boolean onceOnly = onlyOnce;
                boolean didItOnceAlready = false;

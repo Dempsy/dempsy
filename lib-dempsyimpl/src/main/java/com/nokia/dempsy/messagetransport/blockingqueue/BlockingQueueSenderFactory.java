@@ -52,7 +52,19 @@ public class BlockingQueueSenderFactory implements SenderFactory
       return blockingQueueSender;
    }
    
-   public void stop()
+   @Override
+   public synchronized void reclaim(Destination destination)
+   {
+      BlockingQueueSender sender = senders.get(destination);
+      if (sender != null)
+      {
+         sender.shuttingDown();
+         senders.remove(destination);
+      }
+   }
+   
+   @Override
+   public synchronized void stop()
    {
       for (BlockingQueueSender sender : senders.values())
          sender.shuttingDown();

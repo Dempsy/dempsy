@@ -122,6 +122,12 @@ public interface RoutingStrategy
           * cluster can handle.
           */
          public void unregisterOutbound(Outbound outbound);
+         
+         /**
+          * When the Strategy is done with the destinnation (since it knnows) then it should 
+          * indicate so to the Coordinator using this method.
+          */
+         public void finishedDestination(Outbound outbound, Destination destination);
 
       }
       

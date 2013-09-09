@@ -255,14 +255,14 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             }
             else
             {
-               if (statsCollector != null) statsCollector.messageNotSent(msg);
+               if (statsCollector != null) statsCollector.messageNotSent();
                logger.warn("No router found for message type \""+ SafeString.valueOf(msg) + 
                      (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
             }
          }
          else
          {
-            if (statsCollector != null) statsCollector.messageNotSent(msg);
+            if (statsCollector != null) statsCollector.messageNotSent();
             logger.warn("Null message key for \""+ SafeString.valueOf(msg) + 
                   (msg != null ? "\" of type \"" + SafeString.valueOf(msg.getClass()) : "") + "\"");
          }
@@ -348,6 +348,30 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
          }
       }
    }
+   
+   @Override
+   public void finishedDestination(Outbound outbound, Destination destination)
+   {
+      // find the ClusterRouter that corresponds to the outbound
+      
+      // First, make a uniqe set of ClusterRouters
+      Collection<Set<ClusterRouter>> ssrouters = routerMap.values();
+      Set<ClusterRouter> urouters = new HashSet<Router.ClusterRouter>();
+      for (Set<ClusterRouter> srouters : ssrouters)
+         urouters.addAll(srouters);
+      
+      // now go through the unique and find the one that corresponds to the outbound.
+      for (ClusterRouter r : urouters)
+      {
+         // "is" of identity
+         if (r.strategyOutbound == outbound)
+         {
+            r.senderFactory.reclaim(destination);
+            // There should be only one ClusterRouter for this outbound so we can stop.
+            break;
+         }
+      }
+   }
 
    // This should only be called from tests
    public Set<Outbound> dnuobtuOteg() { return outbounds; }
@@ -383,7 +407,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
             {
                if (logger.isInfoEnabled())
                   logger.info("Couldn't find a destination for " + SafeString.objectDescription(message));
-               if (statsCollector != null) statsCollector.messageNotSent(message);
+               if (statsCollector != null) statsCollector.messageNotSent();
                return false;
             }
 
@@ -420,7 +444,7 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator
                   "\" and using the sender " + SafeString.objectDescription(sender),e);
          }
          if (messageFailed)
-            statsCollector.messageNotSent(message);
+            statsCollector.messageNotSent();
          return !messageFailed;
       }
       

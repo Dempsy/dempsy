@@ -17,9 +17,12 @@
 package com.nokia.dempsy.router;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -64,6 +67,8 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
    
    private class Outbound implements RoutingStrategy.Outbound, ClusterInfoWatcher
    {
+      // This should be 'set' ONLY in setDestinatios. Id this changes then
+      //  we need to verify that cleanup is doe correctly
       private AtomicReference<Destination[]> destinations = new AtomicReference<Destination[]>();
       private RoutingStrategy.Outbound.Coordinator coordinator;
       private ClusterInfoSession clusterSession;
@@ -159,16 +164,16 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
                   }
                }
 
-               destinations.set(newDestinations);
+               setDestinations(newDestinations);
             }
             else
-               destinations.set(new Destination[0]);
+               setDestinations(new Destination[0]);
             
             return destinations.get() != null;
          }
          catch(ClusterInfoException e)
          {
-            destinations.set(null);
+            setDestinations(null);
             logger.warn("Failed to set up the Outbound for " + clusterId, e);
          }
          catch (Throwable rte)
@@ -176,6 +181,24 @@ public class DecentralizedRoutingStrategy implements RoutingStrategy
             logger.error("Failed to set up the Outbound for " + clusterId, rte);
          }
          return false;
+      }
+      
+      private final synchronized void setDestinations(Destination[] newDestinations)
+      {
+         // see what we're deleting so we can indicate to the Coordinator that
+         // a particular destination is no longer needed by this Outbound
+         Destination[] curDests = destinations.get();
+         if (curDests != null && curDests.length > 0)
+         {
+            List<Destination> ndests = newDestinations == null ? new ArrayList<Destination>(0) : Arrays.asList(newDestinations);
+            List<Destination> cdests = Arrays.asList(curDests);
+            for (Destination odest : cdests)
+            {
+               if (odest != null && !ndests.contains(odest))
+                  coordinator.finishedDestination(this,odest);
+            }
+         }
+         destinations.set(newDestinations);
       }
       
       private void execSetupDestinations()

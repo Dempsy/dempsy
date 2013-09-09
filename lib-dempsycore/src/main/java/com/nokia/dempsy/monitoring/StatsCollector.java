@@ -66,7 +66,7 @@ public interface StatsCollector {
     * Dispatcher calls this method when it fails to dispatch
     * a message
     */
-   void messageNotSent(Object message);
+   void messageNotSent();
 
    /**
     *  The dispatcher calls this method in its <code>onMessage</code> handler

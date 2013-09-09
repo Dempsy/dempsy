@@ -72,6 +72,10 @@ public class PassthroughTransport implements Transport
          
          @Override
          public void stop() { isStopped = true; }
+         
+         // There is no 'stop' on a PassthroughSender so there's nothing to do to reclaim it.
+         @Override
+         public void reclaim(Destination destination) { }
       };
    }
    

@@ -35,11 +35,8 @@ import org.slf4j.LoggerFactory;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.monitoring.StatsCollector;
-import com.nokia.dempsy.monitoring.coda.StatsCollectorCoda;
 import com.nokia.dempsy.util.SocketTimeout;
-import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Histogram;
-import com.yammer.metrics.core.MetricName;
 
 public class TcpSender implements Sender
 {
@@ -62,11 +59,11 @@ public class TcpSender implements Sender
    private final int mtu;
    
    private final Histogram batching;
-   private final MetricName batchingMetricName;
-
+   
    protected BlockingQueue<byte[]> sendingQueue = new LinkedBlockingQueue<byte[]>();
    
    protected TcpSender(TcpDestination destination, StatsCollector statsCollector, 
+         Histogram batching,
          long maxNumberOfQueuedOutgoing, long socketWriteTimeoutMillis, 
          long batchOutgoingMessagesDelayMillis, int mtu) throws MessageTransportException
    {
@@ -88,17 +85,7 @@ public class TcpSender implements Sender
          });
       }
       
-      if (batchOutgoingMessagesDelayMillis >= 0 && statsCollector != null && 
-            StatsCollectorCoda.class.isAssignableFrom(statsCollector.getClass()))
-      {
-         batchingMetricName = ((StatsCollectorCoda)statsCollector).createName("messages-batched");
-         batching = Metrics.newHistogram(batchingMetricName);
-      }
-      else
-      {
-         batching = null;
-         batchingMetricName = null;
-      }
+      this.batching = batching;
       
       this.start();
    }
@@ -119,7 +106,7 @@ public class TcpSender implements Sender
       try { sendingQueue.put(messageBytes); }
       catch (InterruptedException e)
       {
-         if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+         if (statsCollector != null) statsCollector.messageNotSent();
          throw new MessageTransportException("Failed to enqueue message to " + destination + ".",e);
       }
    }
@@ -128,6 +115,24 @@ public class TcpSender implements Sender
    {
       final long delay = nextTimeToSend - System.currentTimeMillis();
       return delay > 0 ? delay : 0;
+   }
+   
+   // This method is called from the middle of the processing loop to correctly
+   // increment the unsent count when an error occurs based on the current state
+   // of the messages.
+   private final void incrementMessageNotSent(final StatsCollector stats, final byte[] messageBytes,final long batchCount, final boolean batchOutgoingMessages)
+   {
+      if (stats != null)
+      {
+         if (!batchOutgoingMessages)
+            stats.messageNotSent();
+         else
+         {
+            final long count = batchCount + (messageBytes == null ? 0 : 1);
+            for (long i = 0; i  < count; i++)
+               stats.messageNotSent(); // increments this many times.
+         }
+      }
    }
    
    private void start()
@@ -150,6 +155,8 @@ public class TcpSender implements Sender
                isSenderRunning.set(true);
                senderKeepRunning.set(true);
                
+               DataOutputStream localDataOutputStream = null;
+               
                while (senderKeepRunning.get())
                {
                   try
@@ -168,11 +175,13 @@ public class TcpSender implements Sender
                      // maxNumberOfQueuedMessages < 0 means unbounded queue.
                      if (messageBytes != null && maxNumberOfQueuedMessages >= 0 && sendingQueue.size() > maxNumberOfQueuedMessages)
                      {
-                        if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                        if (statsCollector != null) statsCollector.messageNotSent();
                         continue; // skip the rest of the loop
                      }
                      
-                     DataOutputStream localDataOutputStream = getDataOutputStream();
+                     // The queue is not overflowed or we wouldn't get here.
+
+                     localDataOutputStream = null; // we want to reget the localDataOutputStream when we need it.
 
                      if (messageBytes == null) // this is only possible if we polled above ...
                                                //  which we only do if batchOutgoingMessages is true
@@ -182,6 +191,8 @@ public class TcpSender implements Sender
                         //  loop. After the first time through the main send loop this cant really be 0
                         if (rawByteCount > 0)
                         {
+                           localDataOutputStream = getDataOutputStream();
+                           
                            socketTimeout.begin();
                            localDataOutputStream.flush(); // we must be past the time because the poll above timed out.
                            socketTimeout.end();
@@ -212,6 +223,9 @@ public class TcpSender implements Sender
                      // if rawByteCount == 0 then there's nothing to flush.
                      if (rawByteCount > 0 && (rawByteCount + curRawByteCount > mtu))
                      {
+                        if (localDataOutputStream == null)
+                           localDataOutputStream = getDataOutputStream();
+
                         // we need to flush before sending.
                         socketTimeout.begin();
                         localDataOutputStream.flush();
@@ -225,6 +239,10 @@ public class TcpSender implements Sender
                            batchCount = 0;
                         }
                      }
+
+                     if (localDataOutputStream == null)
+                        localDataOutputStream = getDataOutputStream();
+                     // now localDataOutputStream cannot be null from here down.
 
                      //===================================================
                      // Do the write ... first the size
@@ -263,7 +281,7 @@ public class TcpSender implements Sender
                   catch (IOException ioe)
                   {
                      socketTimeout.end();
-                     if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                     incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);                     
                      close();
                      logger.warn("It appears the client " + destination + " is no longer taking calls.",ioe);
                   }
@@ -271,7 +289,7 @@ public class TcpSender implements Sender
                   {
                      if (socketTimeout != null)
                         socketTimeout.end();
-                     if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                     incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);                     
                      if (senderKeepRunning.get()) // if we're supposed to be running still, then we're not shutting down. Not sure why we reset.
                         logger.warn("Sending data to " + destination + " was interrupted for no good reason.",ie);
                   }
@@ -279,7 +297,7 @@ public class TcpSender implements Sender
                   {
                      if (socketTimeout != null)
                         socketTimeout.end();
-                     if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+                     incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);                     
                      logger.error("Unknown exception thrown while trying to send a message to " + destination);
                   }
                }
@@ -360,8 +378,6 @@ public class TcpSender implements Sender
       if (socketTimeout != null)
          socketTimeout.stop();
       
-      if (batching != null)
-         Metrics.defaultRegistry().removeMetric(batchingMetricName);
    }
    
    /**

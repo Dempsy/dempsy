@@ -77,7 +77,7 @@ public class BlockingQueueSender implements Sender
       {
          if (! queue.offer(messageBytes))
          {
-            if (statsCollector != null) statsCollector.messageNotSent(messageBytes);
+            if (statsCollector != null) statsCollector.messageNotSent();
             if (overflowHandler != null)
                overflowHandler.overflow(messageBytes);
             else
