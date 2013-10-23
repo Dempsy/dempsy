@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,6 +50,7 @@ import com.nokia.dempsy.messagetransport.Sender;
 import com.nokia.dempsy.messagetransport.SenderFactory;
 import com.nokia.dempsy.monitoring.StatsCollector;
 import com.nokia.dempsy.monitoring.basic.BasicStatsCollector;
+import com.nokia.dempsy.monitoring.coda.MetricGetters;
 import com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda;
 import com.yammer.metrics.core.Histogram;
 
@@ -686,6 +688,111 @@ public class TcpTransportTest
                Histogram histogram = ((TcpSender)sender).getBatchingHistogram();
                assertEquals(calcMean(1,2,1),histogram.mean(),0.0000001);
                assertEquals(3,histogram.count());
+            }
+            finally
+            {
+               if (factory != null)
+                  factory.stop();
+               
+               if (adaptor != null)
+                  adaptor.stop();
+               
+               statsCollector.stop();
+            }
+
+         }
+         
+         @Override
+         public String toString() { return "transportBatchingMessageLargerAndSmallerMixed"; }
+      });
+   }
+   
+   /**
+    * This test reproduces a problem where the unsent count spikes wildly when a 
+    * receiver disconnects.
+    */
+   @Test
+   public void transportBatchingUnsentMessageCountDuringReceiverFailure() throws Throwable
+   {
+      runAllCombinations(new Checker()
+      {
+         @Override
+         public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
+         {
+            final StatsCollector statsCollector = new StatsCollectorFactoryCoda().createStatsCollector(new ClusterId("test", "test-cluster"), new Destination(){});
+
+            // 200 millisecond time because of the poll time. We need a few failures to make sure this works.
+            batchOutgoingMessagesDelayMillis = 200;
+            
+            SenderFactory factory = null;
+            TcpReceiver adaptor = null;
+            
+            try
+            {
+               //===========================================
+               // setup the sender and receiver
+               adaptor = new TcpReceiver(null,getFailFast());
+               adaptor.setStatsCollector(statsCollector);
+               
+               // we want to keep track of the number of bytes written
+               factory = makeSenderFactory(new OutputStreamFactory() {
+                  @Override
+                  public OutputStream makeOutputStream(final OutputStream socketOutputStream, final Socket socket) throws IOException
+                  {
+                     return new OutputStream()
+                     {
+                        @Override
+                        public void write(int b) {  }
+                        
+                        public void write(byte b[], int off, int len) throws IOException { throw new IOException("Fake IOException"); }
+                     };
+                  }
+               }, statsCollector,batchOutgoingMessagesDelayMillis);
+
+               if (port > 0) adaptor.setPort(port);
+               if (localhost) adaptor.setUseLocalhost(localhost);
+               //===========================================
+
+               adaptor.start(); // start the adaptor
+               Destination destination = adaptor.getDestination(); // get the destination
+
+               // send a message
+               TcpSender sender = (TcpSender)factory.getSender(destination);
+               
+               BlockingQueue<byte[]> internalQueue = sender.sendingQueue;
+               
+               int mtu = sender.getMtu();
+               
+               // send enough messages to get one through
+               byte[] messageBytes = "Hello".getBytes();
+               int numMessagesSent = 0;
+               int numBytesSent = 0;
+               while (true)
+               {
+                  int nextBytesSent = numBytesSent + messageBytes.length + tcpTransportHeaderSize;
+                  if (nextBytesSent > mtu)
+                     break; // don't do the send if we're going to go over the mtu
+                  sender.send(messageBytes);
+                  numBytesSent += messageBytes.length + tcpTransportHeaderSize; 
+                  numMessagesSent++;
+               }
+               
+               // give the sender thread time to get the queued messages into the output buffer.
+               assertTrue(TestUtils.poll(baseTimeoutMillis, internalQueue, 
+                     new TestUtils.Condition<BlockingQueue<byte[]>> () { public boolean conditionMet(BlockingQueue<byte[]> o) { return o.size() == 0; }}));
+               
+               adaptor.stop(); // rip out the downstream to avoid reconnects
+               Thread.sleep(200); // give it some time to stop.
+               
+               // now make it do the send which should fail.
+               sender.send(messageBytes);
+               numMessagesSent++;
+               
+               // now wait for a few (potential) failures.
+               Thread.sleep(1000);
+               
+               // now make sure there wheren't any
+               assertEquals(numMessagesSent,(int)((MetricGetters)statsCollector).getMessagesNotSentCount());
             }
             finally
             {

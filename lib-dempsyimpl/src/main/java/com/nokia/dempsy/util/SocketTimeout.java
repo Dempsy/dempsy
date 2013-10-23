@@ -25,6 +25,7 @@ public class SocketTimeout implements Runnable
    private AtomicLong startTime = new AtomicLong(-1);
    private Thread thread = null;
    private AtomicBoolean done = new AtomicBoolean(false);
+   private boolean disrupted = false;
    
    private static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
    static {
@@ -79,5 +80,17 @@ public class SocketTimeout implements Runnable
 
       try { socket.close(); }
       catch (Throwable th) { logger.error("Couldn't close socket.",th); }
+
+      disrupted = true;
+   }
+   
+   /**
+    * This checks, then clears, the disrupted flag.
+    */
+   public boolean disrupted() 
+   {
+      final boolean ret = disrupted;
+      disrupted = false;
+      return ret;
    }
 }

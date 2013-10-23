@@ -280,24 +280,37 @@ public class TcpSender implements Sender
                   }
                   catch (IOException ioe)
                   {
-                     socketTimeout.end();
-                     incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);                     
+                     if (socketTimeout != null)
+                        socketTimeout.end();
+                     incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);
+                     batchCount = 0; // reset the batch count since we accounted for the messages with an unsent
                      close();
                      logger.warn("It appears the client " + destination + " is no longer taking calls.",ioe);
                   }
                   catch (InterruptedException ie)
                   {
+                     boolean disrupted = false;
                      if (socketTimeout != null)
+                     {
+                        disrupted = socketTimeout.disrupted();
                         socketTimeout.end();
-                     incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);                     
-                     if (senderKeepRunning.get()) // if we're supposed to be running still, then we're not shutting down. Not sure why we reset.
+                     }
+                     incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);
+                     batchCount = 0; // reset the batch count since we accounted for the messages with an unsent
+                     if (disrupted) // this is as good as a socket failure
+                        close();
+                     
+                     if (senderKeepRunning.get() && !disrupted) // if we're supposed to be running still, then we're not shutting down, and no socket timeout. Not sure why we reset.
                         logger.warn("Sending data to " + destination + " was interrupted for no good reason.",ie);
+                     else if (logger.isTraceEnabled())
+                        logger.trace("Sending data to " + destination + " was interrupted by a socketTimeout.",ie);
                   }
                   catch (Throwable th)
                   {
                      if (socketTimeout != null)
                         socketTimeout.end();
                      incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);                     
+                     batchCount = 0; // reset the batch count since we accounted for the messages with an unsent
                      logger.error("Unknown exception thrown while trying to send a message to " + destination);
                   }
                }
