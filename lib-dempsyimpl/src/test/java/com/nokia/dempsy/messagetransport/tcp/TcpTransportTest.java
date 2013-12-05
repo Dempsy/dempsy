@@ -719,11 +719,16 @@ public class TcpTransportTest
          @Override
          public void check(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
          {
+            // we want to run this always batching (since this is a batching test) but we want it
+            // to work from both extremes.
+            runCheck(port,localhost,2000);
+            runCheck(port,localhost,0);
+         }
+         
+         private void runCheck(int port, boolean localhost, long batchOutgoingMessagesDelayMillis) throws Throwable
+         {
             final StatsCollector statsCollector = new StatsCollectorFactoryCoda().createStatsCollector(new ClusterId("test", "test-cluster"), new Destination(){});
 
-            // 200 millisecond time because of the poll time. We need a few failures to make sure this works.
-            batchOutgoingMessagesDelayMillis = 200;
-            
             SenderFactory factory = null;
             TcpReceiver adaptor = null;
             
@@ -789,9 +794,15 @@ public class TcpTransportTest
                numMessagesSent++;
                
                // now wait for a few (potential) failures.
-               Thread.sleep(1000);
+               assertTrue(TestUtils.poll(baseTimeoutMillis, numMessagesSent, new TestUtils.Condition<Integer>()
+               {
+                  @Override public boolean conditionMet(Integer numMessagesSent) { return numMessagesSent == (int)((MetricGetters)statsCollector).getMessagesNotSentCount();  }
+               }));
                
-               // now make sure there wheren't any
+               // wait some time, then double check
+               Thread.sleep(200);
+               
+               // now make sure there wheren't any changes that came in after
                assertEquals(numMessagesSent,(int)((MetricGetters)statsCollector).getMessagesNotSentCount());
             }
             finally
@@ -804,7 +815,6 @@ public class TcpTransportTest
                
                statsCollector.stop();
             }
-
          }
          
          @Override

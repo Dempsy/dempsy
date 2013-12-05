@@ -284,6 +284,7 @@ public class TcpSender implements Sender
                         socketTimeout.end();
                      incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);
                      batchCount = 0; // reset the batch count since we accounted for the messages with an unsent
+                     rawByteCount = 0;
                      close();
                      logger.warn("It appears the client " + destination + " is no longer taking calls.",ioe);
                   }
@@ -297,12 +298,13 @@ public class TcpSender implements Sender
                      }
                      incrementMessageNotSent(statsCollector,messageBytes,batchCount,batchOutgoingMessages);
                      batchCount = 0; // reset the batch count since we accounted for the messages with an unsent
+                     rawByteCount = 0;
                      if (disrupted) // this is as good as a socket failure
                         close();
                      
                      if (senderKeepRunning.get() && !disrupted) // if we're supposed to be running still, then we're not shutting down, and no socket timeout. Not sure why we reset.
                         logger.warn("Sending data to " + destination + " was interrupted for no good reason.",ie);
-                     else if (logger.isTraceEnabled())
+                     else if (senderKeepRunning.get() && logger.isTraceEnabled())
                         logger.trace("Sending data to " + destination + " was interrupted by a socketTimeout.",ie);
                   }
                   catch (Throwable th)
