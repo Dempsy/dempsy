@@ -74,7 +74,7 @@ public class TestDefaultSerializer
             new KryoSerializer<MockClass>(new Registration(MockClass.class.getName(),10));
       runSerializer(ser2);
       
-      MessageBufferOutput mb = new MessageBufferOutput();
+      MessageBufferOutput mb = new MessageBufferOutput(){};
       
       ser1.serialize(o1,mb);
       byte[] d1 = Arrays.copyOf(mb.getBuffer(),mb.getPosition());
@@ -98,7 +98,7 @@ public class TestDefaultSerializer
       KryoSerializer<MockClass> ser1 = new KryoSerializer<MockClass>();
       KryoSerializer<MockClass> ser2 = new KryoSerializer<MockClass>();
       ser2.setKryoRegistrationRequired(true);
-      MessageBufferOutput mb = new MessageBufferOutput();
+      MessageBufferOutput mb = new MessageBufferOutput(){};
       ser1.serialize(new MockClass(),mb);
       
       MessageBufferInput data = new MessageBufferInput(mb.getBuffer());
@@ -107,7 +107,7 @@ public class TestDefaultSerializer
 
    private void runSerializer(Serializer<MockClass> serializer) throws Throwable
    {
-      MessageBufferOutput mb = new MessageBufferOutput();
+      MessageBufferOutput mb = new MessageBufferOutput(){};
       serializer.serialize(o1,mb);
       byte[] data = mb.getBuffer();
       assertNotNull(data);
@@ -173,7 +173,7 @@ public class TestDefaultSerializer
    {
       KryoSerializer<Object> ser = new KryoSerializer<Object>();
       Mock2 o = new Mock2(1, new MockClass(2, "Hello"));
-      MessageBufferOutput mb = new MessageBufferOutput();
+      MessageBufferOutput mb = new MessageBufferOutput(){};
       ser.serialize(o,mb);
       byte[] data = mb.getBuffer();
       Mock2 o2 = (Mock2)ser.deserialize(new MessageBufferInput(data));
@@ -226,7 +226,7 @@ public class TestDefaultSerializer
       KryoSerializer<Object> ser = new KryoSerializer<Object>(defaultMock3Optimizer);
       
       Mock2 o = new Mock3(1, new MockClass(2, "Hello"));
-      MessageBufferOutput mb = new MessageBufferOutput();
+      MessageBufferOutput mb = new MessageBufferOutput(){};
       ser.serialize(o,mb);
       byte[] data = mb.getBuffer();
       Mock2 o2 = (Mock2)ser.deserialize(new MessageBufferInput(data));
@@ -239,7 +239,7 @@ public class TestDefaultSerializer
    @SuppressWarnings({"rawtypes","unchecked"})
    private static byte[] serialize(Serializer ser, Object m) throws SerializationException
    {
-      MessageBufferOutput mb = new MessageBufferOutput();
+      MessageBufferOutput mb = new MessageBufferOutput(){};
       ser.serialize(m, mb);
       return Arrays.copyOf(mb.getBuffer(),mb.getPosition());
    }

@@ -85,7 +85,7 @@ public class TestMpContainer
       
       public MessageBufferInput serialize(Object o) throws SerializationException
       {
-         MessageBufferOutput buf = new MessageBufferOutput();
+         MessageBufferOutput buf = new MessageBufferOutput() {};
          ser.serialize(o,buf);
          return new MessageBufferInput(buf.toByteArray());
       }
@@ -114,7 +114,7 @@ public class TestMpContainer
          this.lastDispatched = message;
          try
          {
-            MessageBufferOutput buffer = new MessageBufferOutput();
+            MessageBufferOutput buffer = new MessageBufferOutput() {};
             serializer.serialize(message,buffer);
             sender.send(buffer);
          }

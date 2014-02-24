@@ -62,6 +62,8 @@ public class BlockingQueueSenderFactory implements SenderFactory
          sender.shuttingDown();
    }
 
-   @Override public MessageBufferOutput prepareMessage() { return new MessageBufferOutput(); }
+   private static class ConstructableMessageBufferOutput extends MessageBufferOutput { public ConstructableMessageBufferOutput() { } }
+   
+   @Override public MessageBufferOutput prepareMessage() { return new ConstructableMessageBufferOutput(); }
 
 }

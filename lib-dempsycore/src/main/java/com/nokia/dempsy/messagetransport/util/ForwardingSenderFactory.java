@@ -119,13 +119,15 @@ public abstract class ForwardingSenderFactory implements SenderFactory
       return new ForwardingSender(connection, destination, statsCollector,thisNodeDescription);
    }
    
+   private static class ConstructableMessageBufferOutput extends MessageBufferOutput { public ConstructableMessageBufferOutput() { super(32); } }
+   
    @Override
    public MessageBufferOutput prepareMessage()
    {
 //      final MessageBufferOutput ret = pool.poll();
 //      if (ret == null)
 //      {
-         final MessageBufferOutput tret = new MessageBufferOutput(32);
+         final MessageBufferOutput tret = new ConstructableMessageBufferOutput();
          tret.setPosition(1);
          return tret;
 //      }

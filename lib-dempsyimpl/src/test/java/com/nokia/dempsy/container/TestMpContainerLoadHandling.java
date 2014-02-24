@@ -137,7 +137,7 @@ public class TestMpContainerLoadHandling
          try
          {
             final Serializer<Object> serializer = new JavaSerializer<Object>();
-            final MessageBufferOutput mb = new MessageBufferOutput();
+            final MessageBufferOutput mb = new MessageBufferOutput(){};
             serializer.serialize(message,mb);
             final MessageBufferInput data = new MessageBufferInput(mb.toByteArray());
             mpc.onMessage(data,!block); // onmessage is "failfast" which is !block

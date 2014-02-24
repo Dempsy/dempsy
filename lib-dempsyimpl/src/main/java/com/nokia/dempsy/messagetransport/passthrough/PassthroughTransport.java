@@ -52,6 +52,8 @@ public class PassthroughTransport implements Transport
 {
    private boolean failFast = true;
    
+   private static class ConstructableMessageBufferOutput extends MessageBufferOutput { public ConstructableMessageBufferOutput() { } }
+
    @Override
    public SenderFactory createOutbound(DempsyExecutor executor, final StatsCollector statsCollector, String desc)
    {
@@ -81,7 +83,7 @@ public class PassthroughTransport implements Transport
             ((PassthroughSender)(((PassthroughDestination)destination).sender)).isRunning = false;
          }
 
-         @Override public MessageBufferOutput prepareMessage() { return new MessageBufferOutput(); }
+         @Override public MessageBufferOutput prepareMessage() { return new ConstructableMessageBufferOutput(); }
       };
    }
    

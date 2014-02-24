@@ -46,8 +46,11 @@ public class MessageBufferOutput extends OutputStream
    /**
     * Creates a new byte array output stream. The buffer capacity is 
     * initially 32 bytes, though its size increases if necessary. 
+    * 
+    * NOTE: THESE SHOULD BE CONSTUCTED THROUGH
+    *  {@link com.nokia.dempsy.messagetransport.SenderFactory#prepareMessage()}
     */
-   public MessageBufferOutput() { this(32); }
+   protected MessageBufferOutput() { this(32); }
    
    /**
     * Creates a new byte array output stream, with a buffer capacity of 
@@ -56,7 +59,7 @@ public class MessageBufferOutput extends OutputStream
     * @param   size   the initial size.
     * @exception  IllegalArgumentException if size is negative.
     */
-   public MessageBufferOutput(int size) {
+   protected MessageBufferOutput(int size) {
       if (size < 0) {
          throw new IllegalArgumentException("Negative initial size: "
                + size);

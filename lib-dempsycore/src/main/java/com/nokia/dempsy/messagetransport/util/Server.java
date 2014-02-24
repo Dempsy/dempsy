@@ -91,7 +91,7 @@ public abstract class Server
    protected abstract void closeServer();
    protected abstract void closeClient(Object acceptReturn, boolean fromClientThread);
    protected abstract ReceiverIndexedDestination getAndBindDestination() throws MessageTransportException;
-   protected abstract void readNextMessage(Object acceptReturn, ReceivedMessage messageToFill) throws EOFException, IOException;
+   protected abstract byte[] readNextMessage(Object acceptReturn) throws EOFException, IOException;
    protected abstract String getClientDescription(Object acceptReturn);
 
    protected synchronized void start() throws MessageTransportException
@@ -280,7 +280,13 @@ public abstract class Server
                      int receiverToCall = -1;
                      try
                      {
-                        readNextMessage(clientSocket,receivedMessage);
+                        byte[] rawMessage = readNextMessage(clientSocket);
+                        
+                        @SuppressWarnings("resource") // mb has no real close.
+                        final MessageBufferInput mb = new MessageBufferInput(rawMessage);
+                        receivedMessage.message = mb;
+                        receivedMessage.receiverIndex = mb.read();
+
                         receiverToCall = receivedMessage.receiverIndex;
                      }
                      // either a problem with the socket OR a thread interruption (InterruptedIOException)

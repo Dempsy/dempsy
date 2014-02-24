@@ -96,7 +96,7 @@ public class BlockingQueueTest
    
    private static MessageBufferOutput makeMessageBuffer(byte[] data)
    {
-      final MessageBufferOutput buffer = new MessageBufferOutput(0);
+      final MessageBufferOutput buffer = new MessageBufferOutput(0){};
       buffer.replace(data);
       buffer.setPosition(data.length);
       return buffer;

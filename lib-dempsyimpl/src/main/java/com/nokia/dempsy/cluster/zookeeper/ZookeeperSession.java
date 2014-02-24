@@ -148,6 +148,8 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          }
       });
    }
+   
+   private static class ConstructableMessageBufferOutput extends MessageBufferOutput { public ConstructableMessageBufferOutput() { super(128); } }
 
    @Override
    public void setData(String path, Object info) throws ClusterInfoException
@@ -157,7 +159,7 @@ public class ZookeeperSession implements ClusterInfoSession, DisruptibleSession
          @Override
          public Object call(ZooKeeper cur, String path, WatcherProxy watcher, Object info) throws KeeperException, InterruptedException, SerializationException
          {
-            MessageBufferOutput buf = new MessageBufferOutput(128);
+            MessageBufferOutput buf = new ConstructableMessageBufferOutput();
             if (info != null)
                // Serialize to a byte array
                serializer.serialize(info,buf);

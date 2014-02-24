@@ -28,7 +28,6 @@ import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nokia.dempsy.message.MessageBufferInput;
 import com.nokia.dempsy.messagetransport.MessageTransportException;
 import com.nokia.dempsy.messagetransport.util.ReceiverIndexedDestination;
 import com.nokia.dempsy.messagetransport.util.Server;
@@ -136,7 +135,7 @@ public class TcpServer extends Server
    }
    
    @Override
-   protected final void readNextMessage(Object acceptReturn, ReceivedMessage messageToFill) throws EOFException, IOException
+   protected final byte[] readNextMessage(Object acceptReturn) throws EOFException, IOException
    {
       final ClientHolder h = (ClientHolder)acceptReturn;
       final DataInputStream dataInputStream = h.dataInputStream;
@@ -151,11 +150,7 @@ public class TcpServer extends Server
       // always create a new buffer since the old buffer will be on a queue
       final byte[] rawMessage = new byte[size];
       dataInputStream.readFully(rawMessage, 0, size);
-      
-      @SuppressWarnings("resource") // mb has no real close.
-      final MessageBufferInput mb = new MessageBufferInput(rawMessage);
-      messageToFill.message = mb;
-      messageToFill.receiverIndex = mb.read();
+      return rawMessage;
    }
 
    @Override
