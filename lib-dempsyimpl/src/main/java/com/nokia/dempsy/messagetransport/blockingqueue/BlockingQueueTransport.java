@@ -37,7 +37,7 @@ public class BlockingQueueTransport implements Transport
    private BlockingQueueFactory queueSource = null;
 
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String desc)
+   public SenderFactory createOutbound(StatsCollector statsCollector, String desc)
    {
       return new BlockingQueueSenderFactory(statsCollector);
    }

@@ -168,7 +168,7 @@ public class Dempsy
                   }
                   
                   String senderFactoryDescription = currentClusterId.toString() + (thisDestination == null ? "" : ("[" + thisDestination + "]")); 
-                  senderFactory = transport.createOutbound(executor, statsCollector,senderFactoryDescription);
+                  senderFactory = transport.createOutbound(statsCollector,senderFactoryDescription);
                   router.setDefaultSenderFactory(senderFactory);
 
                   RoutingStrategy strategy = (RoutingStrategy)clusterDefinition.getRoutingStrategy();

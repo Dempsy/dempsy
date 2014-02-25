@@ -55,7 +55,7 @@ public class PassthroughTransport implements Transport
    private static class ConstructableMessageBufferOutput extends MessageBufferOutput { public ConstructableMessageBufferOutput() { } }
 
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor, final StatsCollector statsCollector, String desc)
+   public SenderFactory createOutbound(final StatsCollector statsCollector, String desc)
    {
       return new SenderFactory()
       {

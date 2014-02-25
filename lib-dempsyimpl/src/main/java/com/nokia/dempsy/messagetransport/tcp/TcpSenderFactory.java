@@ -15,10 +15,10 @@ public class TcpSenderFactory extends ForwardingSenderFactory
    protected final long maxNumberOfQueuedOutbound;
    protected final boolean blocking;
    
-   public TcpSenderFactory(Map<Destination,SenderConnection> connections, StatsCollector statsCollector,
+   public TcpSenderFactory(Map<Destination,SenderConnection> connections, StatsCollector statsCollector, String desc,
          boolean blocking, long maxNumberOfQueuedOutbound, long socketWriteTimeoutMillis, boolean batchOutgoingMessages)
    {
-      super(connections,statsCollector,null);
+      super(connections,statsCollector,desc);
       this.socketWriteTimeoutMillis = socketWriteTimeoutMillis;
       this.batchOutgoingMessages = batchOutgoingMessages;
       this.maxNumberOfQueuedOutbound = maxNumberOfQueuedOutbound;

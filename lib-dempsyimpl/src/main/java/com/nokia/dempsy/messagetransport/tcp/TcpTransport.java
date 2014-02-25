@@ -50,9 +50,9 @@ public class TcpTransport implements Transport
    private boolean blocking = false;
 
    @Override
-   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String desc) throws MessageTransportException
+   public SenderFactory createOutbound(StatsCollector statsCollector, String desc) throws MessageTransportException
    {
-      return new TcpSenderFactory(connections,statsCollector, blocking, maxNumberOfQueuedOutbound, 
+      return new TcpSenderFactory(connections,statsCollector, desc, blocking, maxNumberOfQueuedOutbound, 
             socketWriteTimeoutMillis, batchOutgoingMessages);
    }
 

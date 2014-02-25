@@ -36,22 +36,23 @@ public interface Transport
     * Receivers instantiated from the getInbound call by using the Destinations
     * the Reciever generates.
     * 
-    * The executor is the centralized Executor for worker threads in Dempsy. The
-    * implementor of the transport may or may not choose to use it. It MAY be
-    * null. The executor will have already been started and should not be started
-    * by the transport.
+    * @param thisNodeDescription is the descrption of the Senders created by this
+    * factory for the purposes of thread naming and log messages.
     */
-   public SenderFactory createOutbound(DempsyExecutor executor, StatsCollector statsCollector, String thisNodeDescription) throws MessageTransportException;
+   public SenderFactory createOutbound(StatsCollector statsCollector, String thisNodeDescription) throws MessageTransportException;
    
    /**
     * Create a new instance of the Receiver for this transport.This
     * Receiver should be able to create Destinations from which the SenderFactory
     * instantiated from the createOutbound can then instantiate Senders. 
     * 
-    * The executor is the centralized Executor for worker threads in Dempsy. The
+    * @param executor is the centralized Executor for worker threads in Dempsy. The
     * implementor of the transport may or may not choose to use it. It MAY be
     * null. The executor will have already been started and should not be started
     * by the transport.
+    * 
+    * @param thisNodeDescription is the descrption of the Receiver created by this
+    * factory for the purposes of thread naming and log messages.
     */
    public Receiver createInbound(DempsyExecutor executor, String thisNodeDescription) throws MessageTransportException;
    

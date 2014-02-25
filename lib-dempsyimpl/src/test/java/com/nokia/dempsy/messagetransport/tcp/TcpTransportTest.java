@@ -1017,7 +1017,7 @@ public class TcpTransportTest
    private ForwardingSenderFactory makeSenderFactory(boolean disruptible, StatsCollector statsCollector)
    {
       return disruptible ? 
-            new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,false,-1,10000,false){
+            new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,"test", false,-1,10000,false){
          protected ForwardingSender makeTcpSender(ReceiverIndexedDestination destination) throws MessageTransportException
          {
             TcpSenderConnection connection = 
@@ -1047,7 +1047,7 @@ public class TcpTransportTest
             
             return new ForwardingSender(connection,(TcpDestination)destination,statsCollector,null);
          }
-      } : new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,false,-1,10000,false);
+      } : new TcpSenderFactory(new HashMap<Destination, SenderConnection>(),statsCollector,"test",false,-1,10000,false);
    }
    
    @Test
