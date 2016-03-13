@@ -3,6 +3,7 @@ net.dempsy.cluster.local
 net.dempsy.cluster.zookeeper
 net.dempsy.distconfig
 net.dempsy.distconfig.apahcevfs
+net.dempsy.distconfig.classpath
 net.dempsy.distconfig.clusterinfo
 net.dempsy.ringbuffer
 net.dempsy.serialization
