@@ -1,0 +1,16 @@
+net.dempsy.cluster
+net.dempsy.cluster.local
+net.dempsy.cluster.zookeeper
+net.dempsy.distconfig
+net.dempsy.distconfig.apahcevfs
+net.dempsy.distconfig.classpath
+net.dempsy.distconfig.clusterinfo
+net.dempsy.ringbuffer
+net.dempsy.serialization
+net.dempsy.serialization.jackson
+net.dempsy.serialization.java
+net.dempsy.serialization.kryo
+net.dempsy.util
+net.dempsy.util.executor
+net.dempsy.util.io
+net.dempsy.utils.test
