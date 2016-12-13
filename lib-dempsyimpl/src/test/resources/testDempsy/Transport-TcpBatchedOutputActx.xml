@@ -6,7 +6,7 @@
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
 	<bean name="transport"
-		class="com.nokia.dempsy.messagetransport.tcp.TcpTransport" >
+		class="net.dempsy.messagetransport.tcp.TcpTransport" >
 		<property name="batchOutgoingMessagesDelayMillis" value="100" />
 	</bean>
 </beans>

@@ -9,27 +9,27 @@
    <bean id="properties"
       class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" />
 
-   <bean id="localVMContainerClusterSessionFactory" class="com.nokia.dempsy.cluster.invm.LocalClusterSessionFactory"/>
+   <bean id="localVMContainerClusterSessionFactory" class="net.dempsy.cluster.local.LocalClusterSessionFactory"/>
 
-   <bean id="Dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType" destroy-method="stop">
+   <bean id="Dempsy" class="net.dempsy.Dempsy" autowire="byType" destroy-method="stop">
       <property name="clusterSessionFactory" ref="localVMContainerClusterSessionFactory"/>
       <property name="clusterCheck">
-         <bean class="com.nokia.dempsy.router.AlwaysInCurrentCluster" />
+         <bean class="net.dempsy.router.AlwaysInCurrentCluster" />
       </property>
       <property name="defaultRoutingStrategy">
-         <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
+         <bean class="net.dempsy.router.DecentralizedRoutingStrategy" >
             <constructor-arg type="int" value="1" />
             <constructor-arg type="int" value="1" />
          </bean>
       </property>
       <property name="defaultSerializer">
-         <bean class="com.nokia.dempsy.serialization.kryo.KryoSerializer" />
+         <bean class="net.dempsy.serialization.kryo.KryoSerializer" />
       </property>
       <property name="defaultStatsCollectorFactory">
-      	<bean class="com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda" />
+      	<bean class="net.dempsy.monitoring.coda.StatsCollectorFactoryCoda" />
       </property>
       <property name="defaultTransport">
-         <bean class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTransport" />
+         <bean class="net.dempsy.messagetransport.blockingqueue.BlockingQueueTransport" />
       </property>
    </bean>
 </beans>

@@ -11,13 +11,13 @@
    <bean
        class="org.springframework.context.annotation.CommonAnnotationBeanPostProcessor" />
 
-	<bean name="dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType"
+	<bean name="dempsy" class="net.dempsy.Dempsy" autowire="byType"
 		init-method="start" destroy-method="stop" >
 		<property name="clusterSessionFactory" ref="clusterSessionFactory" />
 		<property name="clusterCheck">
-			<bean class="com.nokia.dempsy.router.SpecificClusterCheck">
+			<bean class="net.dempsy.router.SpecificClusterCheck">
 				<constructor-arg>
-					<bean class="com.nokia.dempsy.config.ClusterId">
+					<bean class="net.dempsy.config.ClusterId">
 						<constructor-arg value="test-app" />
 						<constructor-arg value="test-cluster4" />
 					</bean>
@@ -25,14 +25,14 @@
 			</bean>
 		</property>
       <property name="defaultRoutingStrategy">
-         <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
+         <bean class="net.dempsy.router.DecentralizedRoutingStrategy" >
             <constructor-arg name="defaultTotalSlots" type="int" value="20" />
             <constructor-arg name="defaultNumNodes" type="int" value="1" />
          </bean>
       </property>
       <property name="defaultSerializer" ref="serializer" />
       <property name="defaultStatsCollectorFactory">
-      	<bean class="com.nokia.dempsy.monitoring.coda.StatsCollectorFactoryCoda" />
+      	<bean class="net.dempsy.monitoring.coda.StatsCollectorFactoryCoda" />
       </property>
       <property name="defaultTransport" ref="transport" />
    </bean>

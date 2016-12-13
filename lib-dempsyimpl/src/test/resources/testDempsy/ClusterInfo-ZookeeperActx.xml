@@ -10,11 +10,14 @@
  
    <bean id="properties"
       class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" />
+      
+   <bean id="zk_serializer" class="net.dempsy.serialization.jackson.JsonSerializer" />
 
 	<bean name="clusterSessionFactory"
-		class="com.nokia.dempsy.cluster.zookeeper.ZookeeperSessionFactory" >
+		class="net.dempsy.cluster.zookeeper.ZookeeperSessionFactory" >
 		<constructor-arg type="java.lang.String" value="${zk_connect}" />
 		<constructor-arg type="int" value="5000" />
+        <constructor-arg ref="zk_serializer" />
 	</bean>
 	
 </beans>

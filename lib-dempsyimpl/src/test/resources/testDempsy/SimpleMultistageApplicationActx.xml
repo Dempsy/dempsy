@@ -5,32 +5,32 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-   <bean class="com.nokia.dempsy.config.ApplicationDefinition">
+   <bean class="net.dempsy.config.ApplicationDefinition">
       <constructor-arg name="applicationName" value="test-app" />
       <property name="clusterDefinitions">
          <list>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster0" />
                <property name="adaptor">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestAdaptor" />
+                  <bean class="net.dempsy.TestDempsy$TestAdaptor" />
                </property>
             </bean>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster1" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+                  <bean class="net.dempsy.TestDempsy$TestMp" />
                </property>
             </bean>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster2" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+                  <bean class="net.dempsy.TestDempsy$TestMp" />
                </property>
             </bean>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster3" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+                  <bean class="net.dempsy.TestDempsy$TestMp" />
                </property>
             </bean>
          </list>

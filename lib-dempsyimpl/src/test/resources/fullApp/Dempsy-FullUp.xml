@@ -8,22 +8,22 @@
    <bean id="properties"
       class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer" />
       
-   <bean name="dempsy" class="com.nokia.dempsy.Dempsy" autowire="byType">
+   <bean name="dempsy" class="net.dempsy.Dempsy" autowire="byType">
       <property name="clusterSessionFactory" ref="clusterSessionFactory" />
       <property name="clusterCheck">
-         <bean class="com.nokia.dempsy.cluster.zookeeper.TestFullApp.CheckCluster" />
+         <bean class="net.dempsy.cluster.zookeeper.TestFullApp.CheckCluster" />
       </property>
       <property name="defaultRoutingStrategy">
-         <bean class="com.nokia.dempsy.router.DecentralizedRoutingStrategy" >
+         <bean class="net.dempsy.router.DecentralizedRoutingStrategy" >
             <constructor-arg name="defaultTotalSlots" type="int" value="20" />
             <constructor-arg name="defaultNumNodes" type="int" value="1" />
          </bean>
       </property>
       <property name="defaultSerializer">
-         <bean class="com.nokia.dempsy.serialization.kryo.KryoSerializer" />
+         <bean class="net.dempsy.serialization.kryo.KryoSerializer" />
       </property>
       <property name="defaultStatsCollectorFactory">
-      	<bean class="com.nokia.dempsy.monitoring.basic.BasicStatsCollectorFactory" />
+      	<bean class="net.dempsy.monitoring.basic.BasicStatsCollectorFactory" />
       </property>
       <property name="defaultTransport" ref="transport" />
    </bean>

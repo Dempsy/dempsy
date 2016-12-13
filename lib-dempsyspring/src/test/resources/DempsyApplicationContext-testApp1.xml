@@ -5,27 +5,27 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-   <bean name="adaptor" class="com.nokia.dempsy.spring.SimpleAppForTesting$TestAdaptor" />
+   <bean name="adaptor" class="net.dempsy.spring.SimpleAppForTesting$TestAdaptor" />
    
-   <bean class="com.nokia.dempsy.config.ApplicationDefinition">
+   <bean class="net.dempsy.config.ApplicationDefinition">
       <constructor-arg name="applicationName" value="testApp1" />
       <property name="clusterDefinitions">
          <list>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster0" />
                <property name="adaptor" ref="adaptor" />
             </bean>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.spring.SimpleAppForTesting$TestMp" />
+                  <bean class="net.dempsy.spring.SimpleAppForTesting$TestMp" />
                </property>
             </bean>
          </list>
       </property>
    </bean>
    
-   <bean class="com.nokia.dempsy.spring.SimpleAppForTesting$DempsyGrabber" >
+   <bean class="net.dempsy.spring.SimpleAppForTesting$DempsyGrabber" >
    		<property name="dempsy" ref="Dempsy" />
    </bean>
 </beans>

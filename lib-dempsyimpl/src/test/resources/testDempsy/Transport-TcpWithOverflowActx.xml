@@ -6,9 +6,9 @@
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
 	<bean name="transport"
-		class="com.nokia.dempsy.messagetransport.tcp.TcpTransport" >
+		class="net.dempsy.messagetransport.tcp.TcpTransport" >
 		<property name="overflowHandler" >
-		  <bean class="com.nokia.dempsy.TestDempsy$OverflowHandler" />
+		  <bean class="net.dempsy.TestDempsy$OverflowHandler" />
 		</property>
     </bean>
 </beans>

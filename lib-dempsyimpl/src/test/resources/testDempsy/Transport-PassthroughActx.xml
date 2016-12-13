@@ -6,5 +6,5 @@
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
    <bean name="transport"
-      class="com.nokia.dempsy.messagetransport.passthrough.PassthroughTransport" />
+      class="net.dempsy.messagetransport.passthrough.PassthroughTransport" />
 </beans>

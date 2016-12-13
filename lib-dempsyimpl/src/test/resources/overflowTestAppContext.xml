@@ -14,7 +14,7 @@
            http://www.springframework.org/schema/context
            http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-  <bean name="statsCollector" class="com.nokia.dempsy.monitoring.basic.BasicStatsCollector" />
+  <bean name="statsCollector" class="net.dempsy.monitoring.basic.BasicStatsCollector" />
   
   <!--  wire up a blocking queue -->
   <bean id="transportBlockingQueue" class="java.util.concurrent.LinkedBlockingQueue" >
@@ -26,22 +26,22 @@
     <constructor-arg type="int" value="1" />
   </bean>
 
-  <bean id="receiver" class="com.nokia.dempsy.messagetransport.util.QueuingReceiver" destroy-method="shuttingDown">
+  <bean id="receiver" class="net.dempsy.messagetransport.util.QueuingReceiver" destroy-method="shuttingDown">
      <property name="queue" ref="receiveBlockingQueue" />
   </bean>
    
-  <bean id="adaptor" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="stop">
+  <bean id="adaptor" class="net.dempsy.messagetransport.blockingqueue.BlockingQueueAdaptor" init-method="start" destroy-method="stop">
      <property name="queue" ref="transportBlockingQueue" />
      <property name="listener" ref="receiver" />
   </bean>
    
-  <bean id="testPojo" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyPojo">
+  <bean id="testPojo" class="net.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyPojo">
    <property name="queue" ref="receiveBlockingQueue" />
   </bean>
   
-  <bean id="testOverflowHandler" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyOverflowHandler" />
+  <bean id="testOverflowHandler" class="net.dempsy.messagetransport.blockingqueue.BlockingQueueTest$MyOverflowHandler" />
     
-  <bean id="sender" class="com.nokia.dempsy.messagetransport.blockingqueue.BlockingQueueSender" destroy-method="shuttingDown">
+  <bean id="sender" class="net.dempsy.messagetransport.blockingqueue.BlockingQueueSender" destroy-method="shuttingDown">
      <constructor-arg ref="statsCollector" />
      <property name="queue" ref="transportBlockingQueue" />
      <property name="overflowHandler" ref="testOverflowHandler" />

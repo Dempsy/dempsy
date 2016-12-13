@@ -5,36 +5,36 @@
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
                            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
 
-   <bean name="adaptor" class="com.nokia.dempsy.TestDempsy$TestAdaptor" />
+   <bean name="adaptor" class="net.dempsy.TestDempsy$TestAdaptor" />
    
-   <bean class="com.nokia.dempsy.config.ApplicationDefinition">
+   <bean class="net.dempsy.config.ApplicationDefinition">
       <constructor-arg name="applicationName" value="test-app" />
       <property name="clusterDefinitions">
          <list>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster0" />
                <property name="adaptor" ref="adaptor" />
             </bean>
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster1" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+                  <bean class="net.dempsy.TestDempsy$TestMp" />
                </property>
                <property name="outputExecuter">
-                  <bean class="com.nokia.dempsy.output.RelativeOutputSchedule">
+                  <bean class="net.dempsy.output.RelativeOutputSchedule">
                         <constructor-arg index="0" value="100" />
                         <constructor-arg index="1" value="MILLISECONDS" type="java.util.concurrent.TimeUnit" />
                   </bean>
                </property>
             </bean>
             <!--  CRON JOB -->
-            <bean class="com.nokia.dempsy.config.ClusterDefinition">
+            <bean class="net.dempsy.config.ClusterDefinition">
                <constructor-arg name="clusterName" value="test-cluster2" />
                <property name="messageProcessorPrototype">
-                  <bean class="com.nokia.dempsy.TestDempsy$TestMp" />
+                  <bean class="net.dempsy.TestDempsy$TestMp" />
                </property>
                <property name="outputExecuter">
-                  <bean class="com.nokia.dempsy.output.CronOutputSchedule">
+                  <bean class="net.dempsy.output.CronOutputSchedule">
                         <constructor-arg index="0" value="0/1 * * * * ?" />
                   </bean>
                </property>

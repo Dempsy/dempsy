@@ -5,7 +5,7 @@
   <parent>
     <groupId>net.dempsy</groupId>
     <artifactId>dempsy-parent</artifactId>
-    <version>0.7.10-SNAPSHOT</version>
+    <version>0.9-SNAPSHOT</version>
   </parent>
 
   <artifactId>lib-dempsyimpl</artifactId>
@@ -16,6 +16,43 @@
       <groupId>net.dempsy</groupId>
       <artifactId>lib-dempsycore</artifactId>
     </dependency>
+    
+    <dependency>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-cluster.api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-cluster.local</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-cluster.zookeeper</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-serialization.jackson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-serialization.java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-serialization.kryo</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-cluster.zookeeper</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-test-utils</artifactId>
+        <scope>test</scope>
+    </dependency>
+    
     <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
@@ -41,10 +78,6 @@
     <dependency>
       <groupId>com.yammer.metrics</groupId>
       <artifactId>metrics-graphite</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.esotericsoftware.kryo</groupId>
-      <artifactId>kryo</artifactId>
     </dependency>
     <dependency>
       <groupId>com.yammer.metrics</groupId>
