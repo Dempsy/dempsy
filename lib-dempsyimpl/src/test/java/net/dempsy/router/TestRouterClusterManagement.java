@@ -16,6 +16,11 @@
 
 package net.dempsy.router;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
 import java.util.List;
 import java.util.Set;
 
@@ -24,7 +29,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-import junit.framework.Assert;
 import net.dempsy.Dempsy;
 import net.dempsy.TestUtils;
 import net.dempsy.annotations.MessageHandler;
@@ -107,34 +111,35 @@ public class TestRouterClusterManagement {
     @Test
     public void testGetRouterNotFound() {
         final Set<ClusterRouter> router = routerFactory.getRouter(java.lang.String.class);
-        Assert.assertNull(router);
-        Assert.assertTrue(routerFactory.missingMsgTypes.containsKey(java.lang.String.class));
+        assertNull(router);
+        assertTrue(routerFactory.missingMsgTypes.containsKey(java.lang.String.class));
     }
 
     @Test
     public void testGetRouterFound() {
         final Set<ClusterRouter> routers = routerFactory.getRouter(java.lang.Exception.class);
-        Assert.assertNotNull(routers);
-        Assert.assertEquals(false, routerFactory.missingMsgTypes.containsKey(java.lang.Exception.class));
+        assertNotNull(routers);
+        assertEquals(false, routerFactory.missingMsgTypes.containsKey(java.lang.Exception.class));
         final Set<ClusterRouter> routers1 = routerFactory.getRouter(ClassNotFoundException.class);
-        Assert.assertEquals(routers, routers1);
-        Assert.assertEquals(new ClusterId("test", "test-slot"), routerFactory.getThisClusterId());
+        assertEquals(routers, routers1);
+        assertEquals(new ClusterId("test", "test-slot"), routerFactory.getThisClusterId());
     }
 
     @Test
     public void testChangingClusterInfo() throws Throwable {
         // check that the message didn't go through.
-        final ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
+        try (final ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
                 "testDempsy/Dempsy.xml", "testDempsy/ClusterInfo-LocalActx.xml", "testDempsy/Serializer-KryoActx.xml",
-                "testDempsy/Transport-PassthroughActx.xml", "testDempsy/SimpleMultistageApplicationActx.xml");
-        final Dempsy dempsy = (Dempsy) context.getBean("dempsy");
-        final ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
-        final ClusterInfoSession session = factory.createSession();
-        final ClusterId curCluster = new ClusterId("test-app", "test-cluster1");
-        TestUtils.createClusterLevel(curCluster, session);
-        session.setData(curCluster.asPath(), new DecentralizedRoutingStrategy.DefaultRouterClusterInfo(20, 2));
-        session.stop();
-        dempsy.stop();
+                "testDempsy/Transport-PassthroughActx.xml", "testDempsy/SimpleMultistageApplicationActx.xml");) {
+            final Dempsy dempsy = (Dempsy) context.getBean("dempsy");
+            final ClusterInfoSessionFactory factory = dempsy.getClusterSessionFactory();
+            final ClusterInfoSession session = factory.createSession();
+            final ClusterId curCluster = new ClusterId("test-app", "test-cluster1");
+            TestUtils.createClusterLevel(curCluster, session);
+            session.setData(curCluster.asPath(), new DecentralizedRoutingStrategy.DefaultRouterClusterInfo(20, 2));
+            session.stop();
+            dempsy.stop();
+        }
     }
 
 }

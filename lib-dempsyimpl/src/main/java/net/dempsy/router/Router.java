@@ -294,7 +294,6 @@ public class Router implements Dispatcher, RoutingStrategy.Outbound.Coordinator 
 
                 if (curClusterDef != null) {
                     // create a corresponding ClusterRouter
-                    @SuppressWarnings("unchecked")
                     final ClusterRouter clusterRouter = new ClusterRouter((Serializer) curClusterDef.getSerializer(), outbound);
 
                     for (final Class<?> clazz : classes) {

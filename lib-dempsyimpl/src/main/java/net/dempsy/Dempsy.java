@@ -76,7 +76,6 @@ public class Dempsy {
                     this.clusterDefinition = clusterDefinition;
                 }
 
-                @SuppressWarnings("unchecked")
                 private void start() throws DempsyException {
                     try {
                         final DempsyExecutor executor = (DempsyExecutor) clusterDefinition.getExecutor(); // this can be null

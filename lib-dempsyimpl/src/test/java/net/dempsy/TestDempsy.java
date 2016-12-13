@@ -48,7 +48,6 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 
-import junit.framework.Assert;
 import net.dempsy.Dempsy.Application.Cluster.Node;
 import net.dempsy.TestUtils.Condition;
 import net.dempsy.TestUtils.JunkDestination;
@@ -499,58 +498,54 @@ public class TestDempsy {
 
     @Test
     public void testIndividualClusterStart() throws Throwable {
-        final ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(
+        try (final ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(
                 "testDempsy/Dempsy-IndividualClusterStart.xml",
                 "testDempsy/Transport-PassthroughActx.xml",
                 "testDempsy/ClusterInfo-LocalActx.xml",
                 "testDempsy/Serializer-KryoActx.xml",
-                "testDempsy/SimpleMultistageApplicationActx.xml");
-        actx.registerShutdownHook();
+                "testDempsy/SimpleMultistageApplicationActx.xml");) {
+            actx.registerShutdownHook();
 
-        final Dempsy dempsy = (Dempsy) actx.getBean("dempsy");
-        assertNotNull(dempsy);
+            final Dempsy dempsy = (Dempsy) actx.getBean("dempsy");
+            assertNotNull(dempsy);
 
-        Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster0"));
-        assertNull(cluster);
+            Dempsy.Application.Cluster cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster0"));
+            assertNull(cluster);
 
-        cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster1"));
-        assertNull(cluster);
+            cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster1"));
+            assertNull(cluster);
 
-        cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster2"));
-        assertNotNull(cluster);
-        assertEquals(1, cluster.getNodes().size());
+            cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster2"));
+            assertNotNull(cluster);
+            assertEquals(1, cluster.getNodes().size());
 
-        cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster3"));
-        assertNull(cluster);
+            cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster3"));
+            assertNull(cluster);
 
-        cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster4"));
-        assertNull(cluster);
-
-        actx.stop();
-        actx.destroy();
+            cluster = dempsy.getCluster(new ClusterId("test-app", "test-cluster4"));
+            assertNull(cluster);
+        }
     }
 
     @Test(expected = BeanCreationException.class)
     public void testInValidClusterStart() throws Throwable {
-        new ClassPathXmlApplicationContext(
+        try (ClassPathXmlApplicationContext ctx = new ClassPathXmlApplicationContext(
                 "testDempsy/Dempsy-InValidClusterStart.xml",
                 "testDempsy/Transport-PassthroughActx.xml",
                 "testDempsy/ClusterInfo-LocalActx.xml",
                 "testDempsy/Serializer-KryoActx.xml",
-                "testDempsy/SimpleMultistageApplicationActx.xml");
+                "testDempsy/SimpleMultistageApplicationActx.xml");) {}
     }
 
     @Test
     public void testTcpTransportExecutorConfigurationThroughApplication() throws Throwable {
-        ClassPathXmlApplicationContext actx = null;
         DefaultDempsyExecutor executor = null;
-        try {
-            actx = new ClassPathXmlApplicationContext(
-                    "testDempsy/Dempsy-IndividualClusterStart.xml",
-                    "testDempsy/Transport-TcpNoBatchingActx.xml",
-                    "testDempsy/ClusterInfo-LocalActx.xml",
-                    "testDempsy/Serializer-KryoActx.xml",
-                    "testDempsy/SimpleMultistageApplicationWithExecutorActx.xml");
+        try (ClassPathXmlApplicationContext actx = new ClassPathXmlApplicationContext(
+                "testDempsy/Dempsy-IndividualClusterStart.xml",
+                "testDempsy/Transport-TcpNoBatchingActx.xml",
+                "testDempsy/ClusterInfo-LocalActx.xml",
+                "testDempsy/Serializer-KryoActx.xml",
+                "testDempsy/SimpleMultistageApplicationWithExecutorActx.xml");) {
             actx.registerShutdownHook();
 
             final Dempsy dempsy = (Dempsy) actx.getBean("dempsy");
@@ -561,13 +556,6 @@ public class TestDempsy {
                 assertEquals(123456, executor.getMaxNumberOfQueuedLimitedTasks());
                 assertTrue(executor.isRunning());
             }
-        } finally {
-            try {
-                actx.stop();
-            } catch (final Throwable th) {}
-            try {
-                actx.destroy();
-            } catch (final Throwable th) {}
         }
 
         assertNotNull(executor);
@@ -1025,12 +1013,12 @@ public class TestDempsy {
                     }
                 }));
                 final List<Node> nodes = dempsy.getCluster(new ClusterId("test-app", "test-cluster1")).getNodes();
-                Assert.assertNotNull(nodes);
-                Assert.assertTrue(nodes.size() > 0);
+                assertNotNull(nodes);
+                assertTrue(nodes.size() > 0);
                 final Node node = nodes.get(0);
-                Assert.assertNotNull(node);
+                assertNotNull(node);
                 final double duration = ((MetricGetters) node.getStatsCollector()).getPreInstantiationDuration();
-                Assert.assertTrue(duration > 0.0);
+                assertTrue(duration > 0.0);
             }
 
             @Override
