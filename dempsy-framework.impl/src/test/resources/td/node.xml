@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans.xsd 
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context.xsd ">
+
+   <context:property-placeholder system-properties-mode="OVERRIDE"/>
+ 
+   <bean name="nodeStatsCollector" class="net.dempsy.monitoring.basic.BasicNodeStatsCollector" />
+   
+   <bean class="net.dempsy.config.Node" autowire="byType">
+     <constructor-arg value="${test-name}" />
+     <property name="clusterStatsCollectorFactoryId" value="net.dempsy.monitoring.basic" />
+     <property name="nodeStatsCollector" ref="nodeStatsCollector" />
+     <property name="defaultRoutingStrategyId" value="${routing-strategy}" />
+     <property name="receiver" ref="inputTransport" />
+     <property name="containerTypeId" value="${container-type}" />
+     
+     <property name="configuration">
+       <map>
+         <entry key="net.dempsy.router.microshard.min_node_count" value="${min_nodes:1}" />
+         <entry key="net.dempsy.router.microshard.total_shards" value="${total_shards:300}" />
+       </map>
+     </property>
+   </bean>
+
+</beans>

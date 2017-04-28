@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans.xsd 
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context.xsd ">
+
+
+    <bean class="net.dempsy.config.Cluster">
+        <constructor-arg value="test-cluster" />
+        <property name="messageProcessor">
+            <bean class="net.dempsy.lifecycle.annotation.MessageProcessor">
+                <constructor-arg ref="testMp" />
+            </bean>
+        </property>
+    </bean>
+
+   <!-- in a real app, these would be inner beans; for testing, we want to access them -->
+   <bean id="testMp" class="net.dempsy.container.TestContainer$TestProcessor" />
+   
+</beans>
