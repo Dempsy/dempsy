@@ -31,9 +31,7 @@
 
   <properties>
     <spring.version>4.2.5.RELEASE</spring.version>
-    <metrics.version>2.0.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <mockito.version>1.9.0</mockito.version>
     <quartz.version>2.0.1</quartz.version>
     <kryo.version>2.20</kryo.version>
     <jackson.version>2.2.3</jackson.version>
@@ -72,29 +70,7 @@
        The versions should be defined in the parent "product" pom -->
   <dependencyManagement>
     <dependencies>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyimpl</artifactId>
-        <type>test-jar</type>
-        <version>${project.version}</version>
-      </dependency>
-
       <!-- Project -->
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyapi</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsycore</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyimpl</artifactId>
-        <version>${project.version}</version>
-      </dependency> 
       <dependency>
         <groupId>net.dempsy</groupId>
         <artifactId>dempsy-framework.api</artifactId>
@@ -181,12 +157,6 @@
         <version>${quartz.version}</version>
       </dependency> 
       <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-core</artifactId>
-        <version>${mockito.version}</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-log4j12</artifactId>
         <version>1.6.4</version>
@@ -212,11 +182,6 @@
         <artifactId>zookeeper</artifactId>
         <version>3.4.6</version>
       </dependency>
-    <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-        <version>${jackson.version}</version>
-    </dependency>
 
       <dependency>
         <groupId>org.springframework</groupId>
@@ -227,21 +192,6 @@
         <groupId>org.springframework</groupId>
         <artifactId>spring-context</artifactId>
         <version>${spring.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.yammer.metrics</groupId>
-        <artifactId>metrics-core</artifactId>
-        <version>${metrics.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.yammer.metrics</groupId>
-        <artifactId>metrics-graphite</artifactId>
-        <version>${metrics.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.yammer.metrics</groupId>
-        <artifactId>metrics-ganglia</artifactId>
-        <version>${metrics.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
