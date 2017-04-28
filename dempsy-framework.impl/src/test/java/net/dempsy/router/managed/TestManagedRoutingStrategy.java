@@ -33,7 +33,6 @@ import net.dempsy.router.RoutingStrategy;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
 import net.dempsy.router.RoutingStrategyManager;
 import net.dempsy.router.managed.Utils.ShardAssignment;
-import net.dempsy.router.microshard.MicroshardingInbound;
 import net.dempsy.transport.NodeAddress;
 import net.dempsy.util.TestInfrastructure;
 
@@ -216,7 +215,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
                 // poll(o -> ob.selectDestinationForMessage(km) == null);
 
                 try (ClusterInfoSession ses3 = sessFact.createSession();
-                        RoutingStrategy.Inbound ib2 = manager.getAssociatedInstance(MicroshardingInbound.class.getPackage().getName())) {
+                        RoutingStrategy.Inbound ib2 = manager.getAssociatedInstance(ManagedInbound.class.getPackage().getName())) {
                     ib2.setContainerDetails(cid, ca, (l, m, i) -> {});
                     ib2.start(makeInfra(ses3, sched));
 

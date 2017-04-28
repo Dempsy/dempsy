@@ -19,8 +19,8 @@
      
      <property name="configuration">
        <map>
-         <entry key="net.dempsy.router.microshard.min_node_count" value="${min_nodes:1}" />
-         <entry key="net.dempsy.router.microshard.total_shards" value="${total_shards:300}" />
+         <entry key="net.dempsy.router.managed.min_node_count" value="${min_nodes:1}" />
+         <entry key="net.dempsy.router.managed.total_shards" value="${total_shards:300}" />
        </map>
      </property>
    </bean>

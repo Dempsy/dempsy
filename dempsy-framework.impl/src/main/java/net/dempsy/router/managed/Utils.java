@@ -15,7 +15,6 @@ import net.dempsy.cluster.ClusterInfoWatcher;
 import net.dempsy.cluster.DirMode;
 import net.dempsy.config.ClusterId;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
-import net.dempsy.router.microshard.MicroshardingInbound;
 
 public class Utils {
     // we multiply by an arbitrary large (not 31) prime in order to
@@ -85,14 +84,14 @@ public class Utils {
         this.clusterId = clusterId;
 
         totalNumShards = Integer
-                .parseInt(infra.getConfigValue(MicroshardingInbound.class, CONFIG_KEY_TOTAL_SHARDS, DEFAULT_TOTAL_SHARDS));
+                .parseInt(infra.getConfigValue(ManagedInbound.class, CONFIG_KEY_TOTAL_SHARDS, DEFAULT_TOTAL_SHARDS));
 
         if (Integer.bitCount(totalNumShards) != 1)
             throw new IllegalArgumentException("The configuration property \"" + CONFIG_KEY_TOTAL_SHARDS
                     + "\" must be set to a power of 2. It's currently set to " + totalNumShards);
 
         mask = totalNumShards - 1;
-        minNumberOfNodes = Integer.parseInt(infra.getConfigValue(MicroshardingInbound.class, CONFIG_KEY_MIN_NODES, DEFAULT_MIN_NODES));
+        minNumberOfNodes = Integer.parseInt(infra.getConfigValue(ManagedInbound.class, CONFIG_KEY_MIN_NODES, DEFAULT_MIN_NODES));
     }
 
     public Collection<String> persistentGetSubdir(final String path, final ClusterInfoWatcher watcher)
