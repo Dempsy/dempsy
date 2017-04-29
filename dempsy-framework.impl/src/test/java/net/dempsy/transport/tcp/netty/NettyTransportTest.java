@@ -5,7 +5,9 @@ import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -106,6 +108,7 @@ public class NettyTransportTest {
             }, tr.track(new DefaultThreadingModel(NettyTransportTest.class.getSimpleName() + ".testReceiverStart")));
 
             try (final NettySenderFactory sf = new NettySenderFactory();) {
+                sf.start(new TestInfrastructure(null, null));
                 final NettySender sender = sf.getSender(addr);
                 sender.send(new RoutedMessage(new int[] { 0 }, "Hello", huge));
 
@@ -138,6 +141,16 @@ public class NettyTransportTest {
             final AtomicBoolean letMeGo = new AtomicBoolean(false);
             final List<Thread> threads = IntStream.range(0, numThreads).mapToObj(threadNum -> new Thread(() -> {
                 try (final NettySenderFactory sf = new NettySenderFactory();) {
+                    sf.start(new TestInfrastructure(null, null) {
+
+                        @Override
+                        public Map<String, String> getConfiguration() {
+                            final Map<String, String> ret = new HashMap<>();
+                            ret.put(NettySenderFactory.class.getPackage().getName() + "." + NettySenderFactory.CONFIG_KEY_SENDER_THREADS, "2");
+                            return ret;
+                        }
+
+                    });
                     final NettySender sender = sf.getSender(addr);
                     while (!letMeGo.get())
                         Thread.yield();

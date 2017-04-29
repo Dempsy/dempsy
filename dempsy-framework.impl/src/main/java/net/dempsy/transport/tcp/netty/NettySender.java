@@ -2,8 +2,6 @@ package net.dempsy.transport.tcp.netty;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -20,7 +18,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.MessageToMessageEncoder;
@@ -44,14 +41,17 @@ public final class NettySender implements Sender {
     private final Serializer serializer;
     private final NettySenderFactory owner;
     private final AtomicReference<Internal> connection = new AtomicReference<>(null);
+    private final EventLoopGroup group;
+
     private boolean isRunning = true;
 
     NettySender(final TcpAddress addr, final NettySenderFactory parent, final NodeStatsCollector statsCollector,
-            final Manager<Serializer> serializerManger) {
+            final Manager<Serializer> serializerManger, final EventLoopGroup group) {
         this.addr = addr;
         serializer = serializerManger.getAssociatedInstance(addr.serializerId);
         this.statsCollector = statsCollector;
         this.owner = parent;
+        this.group = group;
         reset();
     }
 
@@ -111,26 +111,15 @@ public final class NettySender implements Sender {
 
     private class Internal {
         Channel ch = null;
-        EventLoopGroup group = null;
 
         Internal() {
             reset();
         }
 
         synchronized void reset() {
-            final EventLoopGroup lgroup;
-            if (group != null) {
-                final EventLoopGroup tmp = group;
-                group = null; // in case the shutdown throws.
-                tmp.shutdownGracefully();
-            }
-            group = new NioEventLoopGroup(1,
-                    (ThreadFactory) r -> new Thread(r,
-                            "netty-sender-" + threadNum.getAndIncrement() + "-to(" + addr.getGuid() + ") from (" + owner.nodeId + ")"));
-            lgroup = group;
             try {
                 final Bootstrap b = new Bootstrap();
-                b.group(lgroup)
+                b.group(group)
                         .channel(NioSocketChannel.class)
                         // .option(ChannelOption.ALLOCATOR, new PooledByteBufAllocator(false))
                         .handler(new ChannelInitializer<SocketChannel>() {
@@ -197,54 +186,25 @@ public final class NettySender implements Sender {
         synchronized void stop() {
             final Channel tmpCh = ch; // in case close throws.
             ch = null;
-            final EventLoopGroup tmpGr = group;
-            group = null; // in case the shutdown throws.
             try {
                 if (tmpCh != null) {
                     if (!tmpCh.close().await(1000)) {
                         LOGGER.warn("Had an issue closing the sender socket.");
-                        startCloseThread(tmpCh, tmpGr,
+                        startCloseThread(tmpCh,
                                 "netty-sender-closer" + threadNum.getAndIncrement() + "-to(" + addr.getGuid() + ") from (" + owner.nodeId + ")");
                     }
                 }
             } catch (final Exception e) {
                 LOGGER.warn("Unexpected exception closing sender socket connection", e);
-                startCloseThread(tmpCh, tmpGr,
+                startCloseThread(tmpCh,
                         "netty-sender-closer" + threadNum.getAndIncrement() + "-to(" + addr.getGuid() + ") from (" + owner.nodeId + ")");
                 return;
             }
 
-            if (tmpGr != null) {
-                try {
-                    if (!tmpGr.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).await(1000)) {
-                        LOGGER.warn("Couldn't stop netty group for sender. Will try again.");
-                        startGroupStopThread(tmpGr, "netty-sender-group-closer" + threadNum.getAndIncrement() + "-to(" + addr.getGuid() + ") from ("
-                                + owner.nodeId + ")");
-                    }
-                } catch (final Exception e) {
-                    LOGGER.warn("Unexpected exception shutting down netty group", e);
-                    startGroupStopThread(tmpGr, "netty-sender-group-closer" + threadNum.getAndIncrement() + "-to(" + addr.getGuid() + ") from ("
-                            + owner.nodeId + ")");
-                }
-            }
         }
     }
 
-    private static void persistentStopGroup(final EventLoopGroup tmpGr) {
-        if (tmpGr == null)
-            return;
-
-        while (!tmpGr.isShutdown()) {
-            try {
-                if (!tmpGr.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).await(1000))
-                    LOGGER.warn("Couldn't stop netty group for sender. Will try again.");
-            } catch (final Exception ee) {
-                LOGGER.warn("Unexpected exception shutting down netty group", ee);
-            }
-        }
-    }
-
-    private static void startCloseThread(final Channel tmpCh, final EventLoopGroup tmpGr, final String threadName) {
+    private static void startCloseThread(final Channel tmpCh, final String threadName) {
         // close the damn thing in another thread insistently
         new Thread(() -> {
             while (tmpCh.isOpen()) {
@@ -255,16 +215,6 @@ public final class NettySender implements Sender {
                     LOGGER.warn("Had an issue closing the sender socket.", ee);
                 }
             }
-
-            persistentStopGroup(tmpGr);
-
-        }, threadName).start();
-    }
-
-    private static void startGroupStopThread(final EventLoopGroup tmpGr, final String threadName) {
-        // close the damn thing in another thread insistently
-        new Thread(() -> {
-            persistentStopGroup(tmpGr);
         }, threadName).start();
     }
 }
