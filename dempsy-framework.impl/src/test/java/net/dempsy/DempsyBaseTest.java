@@ -33,7 +33,7 @@ public abstract class DempsyBaseTest {
     * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
     * every runAllCombinations call. This can make tests run for a loooooong time.
     */
-    public static boolean hardcore = true;
+    public static boolean hardcore = false;
 
     protected Logger LOGGER;
 
