@@ -31,7 +31,7 @@ import net.dempsy.utils.test.SystemPropertyManager;
 public abstract class DempsyBaseTest {
     /**
     * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
-    * every runAllCombinations call. This can make tests run for a loooooong time.
+    * every runCombos call. This can make tests run for a loooooong time.
     */
     public static boolean hardcore = false;
 
@@ -94,7 +94,8 @@ public abstract class DempsyBaseTest {
         }
     }
 
-    public static List<String> elasticRouterIds = Arrays.asList("microshard", "managed");
+    public static List<String> elasticRouterIds = Arrays.asList("managed");
+    public static String[] transportsThatRequireSerializer = { "netty" };
 
     public static Combos hardcore() {
         return new Combos(
@@ -114,8 +115,6 @@ public abstract class DempsyBaseTest {
                 new String[] { "kryo" });
 
     }
-
-    public static String[] transportsThatRequireSerializer = { "netty" };
 
     public static boolean requiresSerialization(final String transport) {
         return Arrays.asList(transportsThatRequireSerializer).contains(transport);
