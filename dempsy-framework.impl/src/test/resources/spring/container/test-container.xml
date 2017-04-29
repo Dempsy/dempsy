@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans.xsd 
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context.xsd ">
+
+ <context:property-placeholder system-properties-mode="OVERRIDE"/>
+ 
+   <bean name="nodeStatsCollector" class="net.dempsy.monitoring.basic.BasicNodeStatsCollector" />
+   
+   <!-- input: test adds messages directly to queue, they get delivered to container -->
+   <bean id="inputQueue" class="java.util.concurrent.ArrayBlockingQueue">
+      <constructor-arg value="16" />
+   </bean>
+   
+   <bean class="net.dempsy.config.Node" autowire="byType" >
+     <constructor-arg value="test-app" />
+     <property name="clusterStatsCollectorFactoryId" value="net.dempsy.monitoring.basic" />
+     <property name="nodeStatsCollector" ref="nodeStatsCollector" />
+     <property name="defaultRoutingStrategyId" value="net.dempsy.router.simple" />
+     <property name="receiver" ref="inputTransport" />
+     <property name="containerTypeId" value="${container-type}" />
+   </bean>
+
+   <bean id="inputTransport" class="net.dempsy.transport.blockingqueue.BlockingQueueReceiver">
+      <constructor-arg ref="inputQueue" />
+   </bean>
+
+</beans>

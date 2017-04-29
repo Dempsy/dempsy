@@ -1,0 +1,78 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+   <modelVersion>4.0.0</modelVersion>
+
+   <parent>
+      <groupId>net.dempsy</groupId>
+      <artifactId>dempsy-parent</artifactId>
+      <version>0.9-SNAPSHOT</version>
+   </parent>
+
+   <artifactId>dempsy-framework.impl</artifactId>
+   <name>Distributed Message Processing Framework - Default Implementation classes</name>
+   
+   <dependencies>
+     <dependency>
+       <groupId>net.dempsy</groupId>
+       <artifactId>dempsy-framework.core</artifactId>
+     </dependency>
+     <dependency>
+       <groupId>io.netty</groupId>
+       <artifactId>netty-all</artifactId>
+     </dependency>
+     
+     <!-- Test dependencies -->
+     <dependency>
+       <groupId>org.springframework</groupId>
+       <artifactId>spring-context</artifactId>
+       <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>net.dempsy</groupId>
+       <artifactId>dempsy-test-utils</artifactId>
+       <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-log4j12</artifactId>
+       <scope>test</scope>
+     </dependency>
+    <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-cluster.local</artifactId>
+        <scope>test</scope>
+    </dependency>
+     <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <scope>test</scope>
+     </dependency>
+     <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-cluster.zookeeper</artifactId>
+        <type>test-jar</type>
+        <scope>test</scope>
+     </dependency>
+     <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-cluster.zookeeper</artifactId>
+        <scope>test</scope>
+     </dependency>
+     <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-serialization.jackson</artifactId>
+        <scope>test</scope>
+     </dependency>
+     <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-serialization.java</artifactId>
+        <scope>test</scope>
+     </dependency>
+     <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-serialization.kryo</artifactId>
+        <scope>test</scope>
+     </dependency>
+   </dependencies>
+   
+</project>

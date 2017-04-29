@@ -5,7 +5,7 @@
 
   <groupId>net.dempsy</groupId>
   <artifactId>dempsy-parent</artifactId>
-  <version>0.7.10-SNAPSHOT</version>
+  <version>0.9-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>
 
@@ -30,23 +30,17 @@
   </scm>
 
   <properties>
-    <spring.version>3.0.6.RELEASE</spring.version>
-    <guice.version>3.0</guice.version>
-    <metrics.version>2.0.2</metrics.version>
+    <spring.version>4.2.5.RELEASE</spring.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <mockito.version>1.9.0</mockito.version>
     <quartz.version>2.0.1</quartz.version>
     <kryo.version>2.20</kryo.version>
     <jackson.version>2.2.3</jackson.version>
   </properties>
 
   <modules>
-    <module>lib-dempsyapi</module>
-    <module>lib-dempsycore</module>
-    <module>lib-dempsyimpl</module>
-    <module>lib-dempsyspring</module> 
-    <!-- The sign on the door says: Out Of Order -->
-    <!--      <module>lib-dempsyguice</module> -->
+    <module>dempsy-framework.api</module>
+    <module>dempsy-framework.core</module>
+    <module>dempsy-framework.impl</module>
   </modules>
 
   <!--  Default dependencies that all Dempsy modules use -->
@@ -76,57 +70,92 @@
        The versions should be defined in the parent "product" pom -->
   <dependencyManagement>
     <dependencies>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyimpl</artifactId>
-        <type>test-jar</type>
-        <version>${project.version}</version>
-      </dependency>
-
       <!-- Project -->
       <dependency>
         <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyapi</artifactId>
+        <artifactId>dempsy-framework.api</artifactId>
         <version>${project.version}</version>
+      </dependency> 
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-framework.core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    
+      <!-- Commons -->
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-utils</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsycore</artifactId>
-        <version>${project.version}</version>
+        <artifactId>dempsy-cluster.api</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyimpl</artifactId>
-        <version>${project.version}</version>
+        <artifactId>dempsy-serialization.api</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyspring</artifactId>
-        <version>${project.version}</version>
+        <artifactId>dempsy-serialization.jackson</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>net.dempsy</groupId>
-        <artifactId>lib-dempsyguice</artifactId>
-        <version>${project.version}</version>
+        <artifactId>dempsy-serialization.java</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-serialization.kryo</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-cluster.local</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-cluster.zookeeper</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-cluster.zookeeper</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
+        <type>test-jar</type>
+      </dependency>
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-test-utils</artifactId>
+        <version>2.0.1-SNAPSHOT</version>
       </dependency>
 
       <!-- Third party -->
+      <dependency>
+         <groupId>org.reflections</groupId>
+         <artifactId>reflections</artifactId>
+         <version>0.9.11</version>
+      </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
         <version>1.6.4</version>
       </dependency>
+     <dependency>
+       <groupId>io.netty</groupId>
+       <artifactId>netty-all</artifactId>
+        <version>4.1.9.Final</version>
+     </dependency>
       <dependency>
         <groupId>org.quartz-scheduler</groupId>
         <artifactId>quartz</artifactId>
         <version>${quartz.version}</version>
       </dependency> 
-      <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-core</artifactId>
-        <version>${mockito.version}</version>
-        <scope>test</scope>
-      </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-log4j12</artifactId>
@@ -140,7 +169,7 @@
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
-        <version>4.4</version>
+        <version>4.12</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -153,11 +182,6 @@
         <artifactId>zookeeper</artifactId>
         <version>3.4.6</version>
       </dependency>
-    <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-        <version>${jackson.version}</version>
-    </dependency>
 
       <dependency>
         <groupId>org.springframework</groupId>
@@ -168,31 +192,6 @@
         <groupId>org.springframework</groupId>
         <artifactId>spring-context</artifactId>
         <version>${spring.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.inject</groupId>
-        <artifactId>guice</artifactId>
-        <version>${guice.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.yammer.metrics</groupId>
-        <artifactId>metrics-core</artifactId>
-        <version>${metrics.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.esotericsoftware.kryo</groupId>
-        <artifactId>kryo</artifactId>
-        <version>${kryo.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.yammer.metrics</groupId>
-        <artifactId>metrics-graphite</artifactId>
-        <version>${metrics.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.yammer.metrics</groupId>
-        <artifactId>metrics-ganglia</artifactId>
-        <version>${metrics.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -279,8 +278,8 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <configuration>
-          <source>1.6</source>
-          <target>1.6</target>
+          <source>1.8</source>
+          <target>1.8</target>
           <debug>true</debug>
         </configuration>
       </plugin>
