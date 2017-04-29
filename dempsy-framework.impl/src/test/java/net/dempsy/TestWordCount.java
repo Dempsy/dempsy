@@ -12,7 +12,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +19,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.io.IOUtils;
@@ -161,10 +161,13 @@ public class TestWordCount extends DempsyBaseTest {
                 try {
                     dispatcher.dispatch(ke.extract(new Word(wordString)));
                     numDispatched++;
+                    if (numDispatched % 10000 == 0)
+                        System.out.print(".");
                 } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
                     LOGGER.error("Failed to dispatch", e);
                 }
             }
+            System.out.println();
         }
 
         @Override
@@ -340,19 +343,25 @@ public class TestWordCount extends DempsyBaseTest {
                 @SuppressWarnings("unchecked")
                 final WordRank prototype = ((MessageProcessor<WordRank>) mp).getPrototype();
                 final List<Rank> ranks = prototype.getPairs();
-                Collections.sort(ranks, new Comparator<Rank>() {
-
-                    @Override
-                    public int compare(final Rank o1, final Rank o2) {
-                        return o2.rank.compareTo(o1.rank);
-                    }
-
-                });
+                Collections.sort(ranks, (o1, o2) -> o2.rank.compareTo(o1.rank));
 
                 final List<Rank> top10 = ranks.subList(0, 10);
                 top10.forEach(r -> assertTrue(finalResults.contains(r.word)));
             });
         }
+    }
+
+    public boolean waitForAllSent(final WordProducer adaptor) throws InterruptedException {
+        // as long as it's progressing we keep waiting.
+        int previous = -1;
+        int next = adaptor.numDispatched;
+        while (next > previous && !adaptor.done.get()) {
+            if (poll(1000, o -> adaptor.done.get()))
+                break;
+            previous = next;
+            next = adaptor.numDispatched;
+        }
+        return poll(o -> adaptor.done.get());
     }
 
     @Test
@@ -384,7 +393,7 @@ public class TestWordCount extends DempsyBaseTest {
                         (ClusterMetricGetters) manager[1].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
                         .toArray(new ClusterMetricGetters[2]);
 
-                assertTrue(poll(o -> adaptor.done.get()));
+                assertTrue(waitForAllSent(adaptor));
                 assertTrue(poll(o -> {
                     // System.out.println(stats[0].getProcessedMessageCount() + ", " + stats[1].getProcessedMessageCount());
                     return adaptor.numDispatched == Arrays.stream(stats).map(c -> c.getProcessedMessageCount())
@@ -403,31 +412,36 @@ public class TestWordCount extends DempsyBaseTest {
                     { "classpath:/word-count/adaptor-kjv.xml", }, // adaptor only node
                     { "classpath:/word-count/mp-word-count.xml", },
                     { "classpath:/word-count/mp-word-count.xml", },
+                    { "classpath:/word-count/mp-word-count.xml", },
+                    { "classpath:/word-count/mp-word-count.xml", },
+                    { "classpath:/word-count/mp-word-count.xml", },
             };
+
+            final int NUM_WC = ctxs.length - 1; // the adaptor is the first one.
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> !r.equals("simple"), ctxs, n -> {
                 final List<NodeManagerWithContext> nodes = n.nodes;
-                final NodeManager[] manager = Arrays.asList(nodes.get(1).manager, nodes.get(2).manager).toArray(new NodeManager[2]);
+                final NodeManager[] managers = nodes.stream().map(nm -> nm.manager).toArray(NodeManager[]::new);
 
                 // wait until I can reach the cluster from the adaptor.
-                assertTrue(poll(o -> manager[0].getRouter().allReachable("test-cluster1").size() == 2));
-
-                final ClassPathXmlApplicationContext[] ctx = Arrays.asList(nodes.get(0).ctx, nodes.get(1).ctx)
-                        .toArray(new ClassPathXmlApplicationContext[2]);
+                assertTrue(poll(o -> managers[0].getRouter().allReachable("test-cluster1").size() == NUM_WC));
 
                 WordProducer.latch.countDown();
 
-                final WordProducer adaptor = ctx[0].getBean(WordProducer.class);
-                final ClusterMetricGetters[] stats = Arrays.asList(
-                        (ClusterMetricGetters) manager[0].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")),
-                        (ClusterMetricGetters) manager[1].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
-                        .toArray(new ClusterMetricGetters[2]);
+                final WordProducer adaptor = nodes.get(0).ctx.getBean(WordProducer.class);
+                final List<ClusterMetricGetters> stats = Arrays.asList(managers)
+                        .subList(1, managers.length)
+                        .stream()
+                        .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
+                        .map(sc -> (ClusterMetricGetters) sc)
+                        .collect(Collectors.toList());
 
+                waitForAllSent(adaptor);
                 assertTrue(poll(o -> adaptor.done.get()));
                 assertTrue(poll(o -> {
                     // System.out.println(stats[0].getProcessedMessageCount() + ", " + stats[1].getProcessedMessageCount());
-                    return adaptor.numDispatched == Arrays.stream(stats).map(c -> c.getProcessedMessageCount())
+                    return adaptor.numDispatched == stats.stream().map(c -> c.getProcessedMessageCount())
                             .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
             });
