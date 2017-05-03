@@ -96,7 +96,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     }
 
     private static Container makeContainer(final String containerTypeId) {
-        return new Manager<Container>(Container.class).getAssociatedInstance(containerTypeId);
+        return new Manager<>(Container.class).getAssociatedInstance(containerTypeId);
     }
 
     public NodeManager start() throws DempsyException {
@@ -105,12 +105,12 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         nodeStatsCollector = tr.track((NodeStatsCollector) node.getNodeStatsCollector());
 
         // TODO: cleaner?
-        statsCollectorFactory = tr.track(new Manager<ClusterStatsCollectorFactory>(ClusterStatsCollectorFactory.class)
+        statsCollectorFactory = tr.track(new Manager<>(ClusterStatsCollectorFactory.class)
                 .getAssociatedInstance(node.getClusterStatsCollectorFactoryId()));
 
         // =====================================
         // set the dispatcher on adaptors and create containers for mp clusters
-        final AtomicReference<String> firstAdaptorClusterName = new AtomicReference<String>(null);
+        final AtomicReference<String> firstAdaptorClusterName = new AtomicReference<>(null);
         node.getClusters().forEach(c -> {
             if (c.isAdaptor()) {
                 if (firstAdaptorClusterName.get() == null)
@@ -122,7 +122,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                         .setClusterId(c.getClusterId());
 
                 // TODO: This is a hack for now.
-                final Manager<RoutingStrategy.Inbound> inboundManager = new Manager<RoutingStrategy.Inbound>(RoutingStrategy.Inbound.class);
+                final Manager<RoutingStrategy.Inbound> inboundManager = new Manager<>(RoutingStrategy.Inbound.class);
                 final RoutingStrategy.Inbound is = inboundManager.getAssociatedInstance(c.getRoutingStrategyId());
                 containers.add(new PerContainer(con, is, c));
             }
@@ -148,6 +148,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         }
 
         nodeId = Optional.ofNullable(nodeAddress).map(n -> n.getGuid()).orElse(firstAdaptorClusterName.get());
+        nodeStatsCollector.setNodeId(nodeId);
 
         if (nodeAddress == null && node.getReceiver() != null)
             LOGGER.warn("The node at " + nodeId + " contains no message processors but has a Reciever set. The receiver will never be started.");

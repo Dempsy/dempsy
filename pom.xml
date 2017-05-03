@@ -31,6 +31,7 @@
 
   <properties>
     <spring.version>4.2.5.RELEASE</spring.version>
+    <metrics.version>3.2.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <quartz.version>2.0.1</quartz.version>
     <kryo.version>2.20</kryo.version>
@@ -81,58 +82,13 @@
         <artifactId>dempsy-framework.core</artifactId>
         <version>${project.version}</version>
       </dependency>
-    
-      <!-- Commons -->
+
       <dependency>
         <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-utils</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-cluster.api</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-serialization.api</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-serialization.jackson</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-serialization.java</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-serialization.kryo</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-cluster.local</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-cluster.zookeeper</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-cluster.zookeeper</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
-        <type>test-jar</type>
-      </dependency>
-      <dependency>
-        <groupId>net.dempsy</groupId>
-        <artifactId>dempsy-test-utils</artifactId>
-        <version>2.0.1-SNAPSHOT</version>
+        <artifactId>dempsy-commons-bom</artifactId>
+        <version>2.1.1</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
 
       <!-- Third party -->
@@ -192,6 +148,21 @@
         <groupId>org.springframework</groupId>
         <artifactId>spring-context</artifactId>
         <version>${spring.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.dropwizard.metrics</groupId>
+        <artifactId>metrics-core</artifactId>
+        <version>${metrics.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.dropwizard.metrics</groupId>
+        <artifactId>metrics-graphite</artifactId>
+        <version>${metrics.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.dropwizard.metrics</groupId>
+        <artifactId>metrics-ganglia</artifactId>
+        <version>${metrics.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

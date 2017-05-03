@@ -19,6 +19,13 @@ package net.dempsy.monitoring;
 public interface NodeStatsCollector extends StatsCollector {
 
     /**
+     * Sets a unique identifier for this node, used by certain stats collectors when publishing.
+     */
+    default void setNodeId(final String nodeId) {
+        // Does nothing by default. Must override.
+    }
+
+    /**
      * The dispatcher calls this method in its <code>onMessage</code> handler.
      */
     void messageReceived(Object message);
