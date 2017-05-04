@@ -138,7 +138,6 @@ public class TestInvocation {
     @Mp
     public static class InvocationTestMp implements Cloneable {
         public boolean isActivated;
-        public String activationValue;
         public boolean isPassivated;
         public String lastStringHandlerValue;
         public Number lastNumberHandlerValue;
@@ -150,15 +149,13 @@ public class TestInvocation {
         }
 
         @Activation
-        public void activate(final byte[] data) {
+        public void activate() {
             isActivated = true;
-            activationValue = new String(data);
         }
 
         @Passivation
-        public byte[] passivate() {
+        public void passivate() {
             isPassivated = true;
-            return activationValue.getBytes();
         }
 
         @MessageHandler
@@ -246,14 +243,12 @@ public class TestInvocation {
         assertNotSame("instantiation failed; returned prototype", prototype, instance);
 
         assertFalse("instance activated before activation method called", instance.isActivated);
-        invoker.activate(instance, null, "ABC".getBytes());
+        invoker.activate(instance, null);
         assertTrue("instance was not activated", instance.isActivated);
-        assertEquals("ABC", instance.activationValue);
 
         assertFalse("instance passivated before passivation method called", instance.isPassivated);
-        final byte[] data = invoker.passivate(instance);
+        invoker.passivate(instance);
         assertTrue("instance was not passivated", instance.isPassivated);
-        assertEquals("ABC", new String(data));
     }
 
     @Test(expected = IllegalStateException.class)

@@ -32,6 +32,7 @@ import net.dempsy.container.ClusterMetricGetters;
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
 import net.dempsy.container.locking.LockingContainer.InstanceWrapper;
+import net.dempsy.container.mocks.DummyInbound;
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.MessageHandler;
 import net.dempsy.lifecycle.annotation.MessageKey;
@@ -50,7 +51,7 @@ import net.dempsy.util.TestInfrastructure;
 
 public class TestInstanceManager {
 
-    private LockingContainer manager;
+    private LockingContainer container;
 
     // ----------------------------------------------------------------------------
     // Test classes -- must be static/public for introspection
@@ -244,9 +245,10 @@ public class TestInstanceManager {
         statsCollector = new BasicClusterStatsCollector();
         nodeStats = new BasicNodeStatsCollector();
 
-        manager = (LockingContainer) new LockingContainer().setMessageProcessor(prototype).setClusterId(new ClusterId("test", "test"));
-        manager.setDispatcher(dispatcher);
-        manager.start(new TestInfrastructure(null, null) {
+        container = (LockingContainer) new LockingContainer().setMessageProcessor(prototype).setClusterId(new ClusterId("test", "test"));
+        container.setDispatcher(dispatcher);
+        container.setInbound(new DummyInbound());
+        container.start(new TestInfrastructure(null, null) {
 
             @Override
             public BasicClusterStatsCollector getClusterStatsCollector(final ClusterId clusterId) {
@@ -258,7 +260,7 @@ public class TestInstanceManager {
                 return nodeStats;
             }
         });
-        return manager;
+        return container;
     }
 
     @Test

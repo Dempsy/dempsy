@@ -204,8 +204,20 @@ public class LockingContainer extends Container {
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
     public void dispatch(final KeyedMessage message, final boolean block) throws IllegalArgumentException, ContainerException {
+        if (!isRunningLazy) {
+            LOGGER.debug("Dispacth called on stopped container");
+            statCollector.messageFailed(false);
+        }
+
         if (message == null)
             return; // No. We didn't process the null message
+
+        if (!inbound.doesMessageKeyBelongToNode(message.key)) {
+            if (LOGGER.isDebugEnabled())
+                LOGGER.debug("Message with key " + SafeString.objectDescription(message.key) + " sent to wrong container. ");
+            statCollector.messageFailed(false);
+            return;
+        }
 
         boolean evictedAndBlocking;
 
@@ -282,7 +294,7 @@ public class LockingContainer extends Container {
             while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
                 // store off anything that passes for later removal. This is to avoid a
                 // ConcurrentModificationException.
-                final Set<Object> keysToRemove = new HashSet<Object>();
+                final Set<Object> keysProcessed = new HashSet<Object>();
 
                 for (final Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet()) {
                     if (check.shouldStopEvicting())
@@ -298,7 +310,7 @@ public class LockingContainer extends Container {
                             // since we got here we're done with this instance,
                             // so add it's key to the list of keys we plan don't
                             // need to return to.
-                            keysToRemove.add(key);
+                            keysProcessed.add(key);
 
                             boolean removeInstance = false;
 
@@ -322,6 +334,8 @@ public class LockingContainer extends Container {
                             // even if passivate throws an exception, if the eviction check returned 'true' then
                             // we need to remove the instance.
                             if (removeInstance) {
+                                if (LOGGER.isTraceEnabled())
+                                    LOGGER.trace("Evicting Mp with key " + SafeString.objectDescription(key) + " from " + clusterId.toString());
                                 instances.remove(key);
                                 statCollector.messageProcessorDeleted(key);
                             }
@@ -334,7 +348,7 @@ public class LockingContainer extends Container {
                 }
 
                 // now clean up everything we managed to get hold of
-                for (final Object key : keysToRemove)
+                for (final Object key : keysProcessed)
                     instancesToEvict.remove(key);
 
             }
@@ -499,15 +513,13 @@ public class LockingContainer extends Container {
                         ". The value returned from the clone call appears to be null.");
 
             // activate
-            final byte[] data = null;
             if (LOGGER.isTraceEnabled())
                 LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                        + " with " + ((data != null) ? data.length : 0) + " bytes of data"
                         + " via " + SafeString.valueOf(prototype));
 
             boolean activateSuccessful = false;
             try {
-                prototype.activate(instance, key, data);
+                prototype.activate(instance, key);
                 activateSuccessful = true;
             } catch (final IllegalArgumentException e) {
                 throw new ContainerException(
@@ -592,7 +604,8 @@ public class LockingContainer extends Container {
                 try {
                     dispatcher.dispatch(result);
                 } catch (final Exception de) {
-                    LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
+                    if (isRunning.get())
+                        LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
                 }
             }
         }

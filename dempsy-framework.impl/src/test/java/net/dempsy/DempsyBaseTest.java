@@ -34,6 +34,7 @@ public abstract class DempsyBaseTest {
     * every runCombos call. This can make tests run for a loooooong time.
     */
     public static boolean hardcore = false;
+    public static boolean butRotateSerializer = true;
 
     protected Logger LOGGER;
 
@@ -95,14 +96,14 @@ public abstract class DempsyBaseTest {
     }
 
     public static List<String> elasticRouterIds = Arrays.asList("managed");
-    public static String[] transportsThatRequireSerializer = { "netty" };
+    public static String[] transportsThatRequireSerializer = { "nio" };
 
     public static Combos hardcore() {
         return new Combos(
                 new String[] { "simple", "managed" },
                 new String[] { "locking", "nonlocking", "altnonlocking" },
                 new String[] { "local", "zookeeper" },
-                new String[] { "bq", "passthrough", "netty" },
+                new String[] { "bq", "passthrough", "nio" },
                 new String[] { "json", "java", "kryo" });
     }
 
@@ -111,7 +112,7 @@ public abstract class DempsyBaseTest {
                 new String[] { "managed" },
                 new String[] { "altnonlocking" },
                 new String[] { "zookeeper" },
-                new String[] { "netty" },
+                new String[] { "nio" },
                 new String[] { "kryo" });
 
     }
@@ -124,14 +125,24 @@ public abstract class DempsyBaseTest {
     public static Collection<Object[]> combos() {
         final Combos combos = (hardcore) ? hardcore() : production();
 
+        // since serialization is orthogonal to the transport we wont test every transport
+        // with every serializer. Instead we'll rotate the serializers if that's requested.
+        int serializerIndex = 0;
+
         final List<Object[]> ret = new ArrayList<>();
         for (final String router : combos.routers) {
             for (final String container : combos.containers) {
                 for (final String sessFact : combos.sessions) {
                     for (final String tp : combos.transports) {
                         if (requiresSerialization(tp)) {
-                            for (final String ser : combos.serializers)
-                                ret.add(new Object[] { router, container, sessFact, tp, ser });
+                            if (butRotateSerializer) {
+                                ret.add(new Object[] { router, container, sessFact, tp,
+                                        combos.serializers[(serializerIndex % combos.serializers.length)] });
+                                serializerIndex++;
+                            } else {
+                                for (final String ser : combos.serializers)
+                                    ret.add(new Object[] { router, container, sessFact, tp, ser });
+                            }
                         } else
                             ret.add(new Object[] { router, container, sessFact, tp, "none" });
                     }

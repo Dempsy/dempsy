@@ -17,7 +17,6 @@ import net.dempsy.cluster.ClusterInfoException;
 import net.dempsy.cluster.ClusterInfoSession;
 import net.dempsy.cluster.DirMode;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
-import net.dempsy.router.RoutingStrategy.Inbound;
 import net.dempsy.router.managed.Utils.ShardAssignment;
 import net.dempsy.utils.PersistentTask;
 
@@ -28,18 +27,15 @@ public class Subscriber extends PersistentTask {
     private final ContainerAddress thisNode;
     private final AtomicReference<boolean[]> iOwn = new AtomicReference<boolean[]>(null);
     private final KeyspaceChangeListener listener;
-    private final Inbound inbound;
     private String nodeDirectory = null;
     private final ClusterInfoSession session;
 
-    public Subscriber(final Utils msutils, final Infrastructure infra, final AtomicBoolean isRunning, final KeyspaceChangeListener listener,
-            final Inbound inbound) {
+    public Subscriber(final Utils msutils, final Infrastructure infra, final AtomicBoolean isRunning, final KeyspaceChangeListener listener) {
         super(LOGGER, isRunning, infra.getScheduler(), 500);
         this.utils = msutils;
         this.session = msutils.session;
         this.thisNode = utils.thisNodeAddress;
         this.listener = listener;
-        this.inbound = inbound;
     }
 
     public boolean isReady() {
@@ -185,7 +181,7 @@ public class Subscriber extends PersistentTask {
         }
 
         try {
-            listener.keyspaceChanged(shrink, grow, inbound);
+            listener.keyspaceChanged(shrink, grow);
         } catch (final RuntimeException rte) {
             LOGGER.error("Exception while notifying " + KeyspaceChangeListener.class.getSimpleName() + " of a change (" +
                     (grow && shrink ? "gained and lost some shards)" : (grow ? "gained some shards)" : "lost some shards)")), rte);

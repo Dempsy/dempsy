@@ -8,7 +8,7 @@ import net.dempsy.transport.Receiver;
  * map internal ports bound to, to external ports.
  */
 @FunctionalInterface
-public interface TcpAddressResolver {
+public interface TcpAddressResolver<T extends TcpAddress> {
 
-    public TcpAddress getExternalAddresses(final TcpAddress addr) throws DempsyException;
+    public T getExternalAddresses(final T addr) throws DempsyException;
 }

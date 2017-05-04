@@ -7,8 +7,8 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import net.dempsy.config.ClusterId;
-import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.KeyedMessage;
+import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.MessageProcessorLifecycle;
 
 public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
@@ -40,13 +40,13 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
     }
 
     @Override
-    public void activate(final Mp instance, final Object key, final byte[] activationData) throws IllegalArgumentException {
-        instance.activate(activationData, key);
+    public void activate(final Mp instance, final Object key) throws IllegalArgumentException {
+        instance.activate(key);
     }
 
     @Override
-    public byte[] passivate(final Mp instance) throws IllegalArgumentException {
-        return instance.passivate();
+    public void passivate(final Mp instance) throws IllegalArgumentException {
+        instance.passivate();
     }
 
     @Override

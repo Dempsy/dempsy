@@ -56,7 +56,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
             assertNotNull(ib);
             assertTrue(ManagedInbound.class.isAssignableFrom(ib.getClass()));
 
-            ib.setContainerDetails(clusterId, new ContainerAddress(new DummyNodeAddress("testInboundSimpleHappyPathRegister"), 0), (l, m, i) -> {});
+            ib.setContainerDetails(clusterId, new ContainerAddress(new DummyNodeAddress("testInboundSimpleHappyPathRegister"), 0), (l, m) -> {});
             ib.start(infra);
 
             assertTrue(waitForShards(session, msutils, numShardsToExpect));
@@ -124,12 +124,12 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
             final ContainerAddress node1Ca = new ContainerAddress(new DummyNodeAddress("node1"), 0);
             final Utils utils = new Utils(infra, clusterId, node1Ca);
 
-            ib1.setContainerDetails(clusterId, node1Ca, (l, m, i) -> {});
+            ib1.setContainerDetails(clusterId, node1Ca, (l, m) -> {});
             ib1.start(infra);
 
             final ContainerAddress node2Ca = new ContainerAddress(new DummyNodeAddress("node2"), 0);
 
-            ib2.setContainerDetails(clusterId, node2Ca, (l, m, i) -> {});
+            ib2.setContainerDetails(clusterId, node2Ca, (l, m) -> {});
             try (final ClusterInfoSession session2 = sessFact.createSession();) {
                 ib2.start(new TestInfrastructure(session2, infra.getScheduler()));
 
@@ -163,7 +163,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
             final Infrastructure infra = makeInfra(session, sched);
             final Utils msutils = new Utils(infra, clusterId, ca);
 
-            ib.setContainerDetails(clusterId, ca, (l, m, i) -> {});
+            ib.setContainerDetails(clusterId, ca, (l, m) -> {});
             ib.start(infra);
 
             checkForShardDistribution(session, msutils, numShardsToExpect, 1);
@@ -184,7 +184,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
             final Infrastructure infra = makeInfra(session, sched);
             final Utils msutils = new Utils(infra, cid, oca);
 
-            ib.setContainerDetails(cid, oca, (l, m, i) -> {});
+            ib.setContainerDetails(cid, oca, (l, m) -> {});
             ib.start(infra);
 
             checkForShardDistribution(session, msutils, numShardsToExpect, 1);
@@ -216,7 +216,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
 
                 try (ClusterInfoSession ses3 = sessFact.createSession();
                         RoutingStrategy.Inbound ib2 = manager.getAssociatedInstance(ManagedInbound.class.getPackage().getName())) {
-                    ib2.setContainerDetails(cid, ca, (l, m, i) -> {});
+                    ib2.setContainerDetails(cid, ca, (l, m) -> {});
                     ib2.start(makeInfra(ses3, sched));
 
                     assertTrue(poll(o -> ob.selectDestinationForMessage(km) != null));

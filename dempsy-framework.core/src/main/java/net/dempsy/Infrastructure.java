@@ -6,9 +6,10 @@ import net.dempsy.cluster.ClusterInfoSession;
 import net.dempsy.config.ClusterId;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.NodeStatsCollector;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.executor.AutoDisposeSingleThreadScheduler;
 
-public interface Infrastructure {
+public interface Infrastructure extends AutoCloseable {
     ClusterInfoSession getCollaborator();
 
     AutoDisposeSingleThreadScheduler getScheduler();
@@ -22,6 +23,11 @@ public interface Infrastructure {
     Map<String, String> getConfiguration();
 
     String getNodeId();
+
+    ThreadingModel getThreadingModel();
+
+    @Override
+    void close();
 
     public default String getConfigValue(final Class<?> clazz, final String key, final String defaultValue) {
         final Map<String, String> conf = getConfiguration();
@@ -56,4 +62,5 @@ public interface Infrastructure {
     public static String clusters(final String application) {
         return root(application) + "/clusters";
     }
+
 }

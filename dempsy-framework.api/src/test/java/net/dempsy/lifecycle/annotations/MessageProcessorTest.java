@@ -16,9 +16,7 @@
 
 package net.dempsy.lifecycle.annotations;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -40,12 +38,11 @@ public class MessageProcessorTest {
         helper.validate();
         final TestMp mp = helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final String ret = new String(helper.passivate(mp));
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertEquals("passivate", ret);
     }
 
     @Test
@@ -54,12 +51,11 @@ public class MessageProcessorTest {
         helper.validate();
         final TestMpEmptyActivate mp = helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
     @Test
@@ -68,12 +64,11 @@ public class MessageProcessorTest {
         helper.validate();
         final TestMpOnlyKey mp = helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final String ret = new String(helper.passivate(mp));
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertEquals("passivate", ret);
     }
 
     @Test
@@ -82,12 +77,11 @@ public class MessageProcessorTest {
         helper.validate();
         final TestMpExtraParameters mp = helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final String ret = new String(helper.passivate(mp));
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertEquals("passivate", ret);
     }
 
     @Test
@@ -97,12 +91,11 @@ public class MessageProcessorTest {
         helper.validate();
         final TestMpExtraParametersChangedOrder mp = helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
     @Test
@@ -111,12 +104,11 @@ public class MessageProcessorTest {
         helper.validate();
         final TestMpNoActivation mp = helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertFalse(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertFalse(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
     @Test
@@ -124,12 +116,11 @@ public class MessageProcessorTest {
         final MessageProcessor<TestMpNoKey> helper = new MessageProcessor<TestMpNoKey>(new TestMpNoKey());
         final TestMpNoKey mp = helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertFalse(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertFalse(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
 }

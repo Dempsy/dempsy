@@ -4,7 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-import net.dempsy.threading.ThreadingModel;
+import net.dempsy.Infrastructure;
 import net.dempsy.transport.Listener;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.NodeAddress;
@@ -33,7 +33,7 @@ public class PassthroughReceiver implements Receiver {
      */
     @SuppressWarnings("unchecked")
     @Override
-    public void start(final Listener<?> listener, final ThreadingModel threadingModel) throws MessageTransportException {
+    public void start(final Listener<?> listener, final Infrastructure infra) throws MessageTransportException {
         this.listener = (Listener<Object>) listener;
     }
 

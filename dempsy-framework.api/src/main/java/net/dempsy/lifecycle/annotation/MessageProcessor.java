@@ -102,16 +102,16 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
      * Invokes the activation method of the passed instance.
      */
     @Override
-    public void activate(final T instance, final Object key, final byte[] activationData) throws IllegalArgumentException, DempsyException {
-        wrap(() -> activationMethod.invoke(instance, key, activationData));
+    public void activate(final T instance, final Object key) throws IllegalArgumentException, DempsyException {
+        wrap(() -> activationMethod.invoke(instance, key));
     }
 
     /**
      * Invokes the passivation method of the passed instance. Will return the object's passivation data, <code>null</code> if there is none.
      */
     @Override
-    public byte[] passivate(final T instance) throws IllegalArgumentException, DempsyException {
-        return wrap(() -> (byte[]) passivationMethod.invoke(instance));
+    public void passivate(final T instance) throws IllegalArgumentException, DempsyException {
+        wrap(() -> (byte[]) passivationMethod.invoke(instance));
     }
 
     /**
@@ -318,7 +318,6 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
     protected class MethodHandle {
         private final Method method;
         private int keyPosition = -1;
-        private int binayPosition = -1;
         private int totalArguments = 0;
 
         public MethodHandle(final Method method) {
@@ -332,30 +331,26 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
                 this.totalArguments = parameterTypes.length;
                 for (int i = 0; i < parameterTypes.length; i++) {
                     final Class<?> parameter = parameterTypes[i];
-                    if (parameter.isArray() && parameter.getComponentType().isAssignableFrom(byte.class)) {
-                        this.binayPosition = i;
-                    } else if (keyClass != null && parameter.isAssignableFrom(keyClass)) {
+                    if (keyClass != null && parameter.isAssignableFrom(keyClass)) {
                         this.keyPosition = i;
                     }
                 }
             }
         }
 
-        public Object invoke(final Object instance, final Object key, final byte[] data)
+        public Object invoke(final Object instance, final Object key)
                 throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
             if (this.method != null) {
                 final Object[] parameters = new Object[this.totalArguments];
                 if (this.keyPosition > -1)
                     parameters[this.keyPosition] = key;
-                if (this.binayPosition > -1)
-                    parameters[this.binayPosition] = data;
                 return this.method.invoke(instance, parameters);
             }
             return null;
         }
 
         public Object invoke(final Object instance) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
-            return this.invoke(instance, null, null);
+            return this.invoke(instance, null);
         }
 
         public Method getMethod() {

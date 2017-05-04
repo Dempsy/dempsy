@@ -16,10 +16,6 @@
        <groupId>net.dempsy</groupId>
        <artifactId>dempsy-framework.core</artifactId>
      </dependency>
-     <dependency>
-       <groupId>io.netty</groupId>
-       <artifactId>netty-all</artifactId>
-     </dependency>
 
      <dependency>
        <groupId>io.dropwizard.metrics</groupId>

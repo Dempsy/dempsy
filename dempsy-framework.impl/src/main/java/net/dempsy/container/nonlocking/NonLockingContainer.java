@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -63,29 +62,8 @@ public class NonLockingContainer extends Container {
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     private final AtomicInteger numBeingWorked = new AtomicInteger(0);
 
-    private static class CountedLinkedList<T> {
-        private final LinkedList<T> list = new LinkedList<>();
-        private int size = 0;
-
-        public void forEach(final Consumer<T> c) {
-            list.forEach(c);
-        }
-
-        public T removeFirst() {
-            size--;
-            return list.removeFirst();
-        }
-
-        public boolean add(final T v) {
-            final boolean ret = list.add(v);
-            if (ret)
-                size++;
-            return ret;
-        }
-    }
-
     private static class WorkingQueueHolder {
-        CountedLinkedList<KeyedMessage> queue = null;
+        LinkedList<KeyedMessage> queue = null;
     }
 
     protected static class WorkingPlaceholder {
@@ -166,15 +144,13 @@ public class NonLockingContainer extends Container {
                     ". The value returned from the clone call appears to be null.");
 
         // activate
-        final byte[] data = null;
         if (LOGGER.isTraceEnabled())
             LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                    + " with " + ((data != null) ? data.length : 0) + " bytes of data"
                     + " via " + SafeString.valueOf(prototype));
 
         boolean activateSuccessful = false;
         try {
-            prototype.activate(instance, key, data);
+            prototype.activate(instance, key);
             activateSuccessful = true;
         } catch (final IllegalArgumentException e) {
             throw new ContainerException(
@@ -242,6 +218,11 @@ public class NonLockingContainer extends Container {
 
     @Override
     public void dispatch(final KeyedMessage message, final boolean block) throws IllegalArgumentException, ContainerException {
+        if (!isRunningLazy) {
+            LOGGER.debug("Dispacth called on stopped container");
+            statCollector.messageFailed(false);
+        }
+
         if (message == null)
             return; // No. We didn't process the null message
 
@@ -250,6 +231,13 @@ public class NonLockingContainer extends Container {
 
         if (message.key == null)
             throw new ContainerException("Message " + objectDescription(message.message) + " contains no key.");
+
+        if (!inbound.doesMessageKeyBelongToNode(message.key)) {
+            if (LOGGER.isDebugEnabled())
+                LOGGER.debug("Message with key " + SafeString.objectDescription(message.key) + " sent to wrong container. ");
+            statCollector.messageFailed(false);
+            return;
+        }
 
         final Object key = message.key;
 
@@ -298,7 +286,7 @@ public class NonLockingContainer extends Container {
                         if (instance != null) {
                             // work off the queue.
                             final WorkingQueueHolder mailbox = getQueue(wp); // spin until I have it.
-                            if (mailbox.queue != null && mailbox.queue.size > 0) { // if there are messages in the queue
+                            if (mailbox.queue != null && mailbox.queue.size() > 0) { // if there are messages in the queue
                                 curMessage = mailbox.queue.removeFirst(); // take a message off the queue
                                 // curMessage CAN'T be NULL!!!!
 
@@ -320,7 +308,7 @@ public class NonLockingContainer extends Container {
                     }
                 } finally {
                     if (working.remove(key) == null)
-                        System.out.println("WTF?");
+                        LOGGER.error("IMPOSSIBLE! Null key removed from working set.", new RuntimeException());
                 }
             } else { // ... we didn't get the lock
                 if (!block) { // blocking means no collisions allowed.
@@ -338,7 +326,7 @@ public class NonLockingContainer extends Container {
                             // drop a message in the mailbox queue and mark it as being worked.
                             numBeingWorked.incrementAndGet();
                             if (mailbox.queue == null)
-                                mailbox.queue = new CountedLinkedList<>();
+                                mailbox.queue = new LinkedList<>();
                             mailbox.queue.add(message);
                         } finally {
                             // put it back - releasing the lock
@@ -366,6 +354,11 @@ public class NonLockingContainer extends Container {
             keys.addAll(instances.keySet());
 
             while (keys.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
+
+                // store off anything that passes for later removal. This is to avoid a
+                // ConcurrentModificationException.
+                final Set<Object> keysProcessed = new HashSet<Object>();
+
                 for (final Object key : keys) {
 
                     final WorkingPlaceholder wp = new WorkingPlaceholder();
@@ -380,6 +373,8 @@ public class NonLockingContainer extends Container {
                             final Object instance = instances.get(key);
 
                             if (instance != null) {
+                                keysProcessed.add(key); // track this key to remove it from the keys set later.
+
                                 boolean evictMe;
                                 try {
                                     evictMe = check.shouldEvict(key, instance);
@@ -410,6 +405,8 @@ public class NonLockingContainer extends Container {
                         }
                     }
                 }
+
+                keys.removeAll(keysProcessed); // remove the keys we already checked
             }
         }
     }

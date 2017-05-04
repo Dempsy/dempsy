@@ -16,16 +16,14 @@
 
 package net.dempsy.lifecycle.simple;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 import net.dempsy.lifecycle.annotation.MessageKey;
-import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.KeyedMessage;
+import net.dempsy.messages.KeyedMessageWithType;
 
 public class SimpleMessageProcessorTest {
     @Test
@@ -33,12 +31,11 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMp());
         final TestMp mp = (TestMp) helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final String ret = new String(helper.passivate(mp));
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertEquals("passivate", ret);
     }
 
     @Test
@@ -46,12 +43,11 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpEmptyActivate());
         final TestMpEmptyActivate mp = (TestMpEmptyActivate) helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
     @Test
@@ -59,12 +55,11 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpOnlyKey());
         final TestMpOnlyKey mp = (TestMpOnlyKey) helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final String ret = new String(helper.passivate(mp));
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertEquals("passivate", ret);
     }
 
     @Test
@@ -72,12 +67,11 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParameters());
         final TestMpExtraParameters mp = (TestMpExtraParameters) helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final String ret = new String(helper.passivate(mp));
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertEquals("passivate", ret);
     }
 
     @Test
@@ -85,12 +79,11 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParametersChangedOrder());
         final TestMpExtraParametersChangedOrder mp = (TestMpExtraParametersChangedOrder) helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertTrue(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
     @Test
@@ -98,12 +91,11 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoActivation());
         final TestMpNoActivation mp = (TestMpNoActivation) helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertFalse(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertFalse(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
     @Test
@@ -111,12 +103,11 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoKey());
         final TestMpNoKey mp = (TestMpNoKey) helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate", null);
+        helper.activate(mp, "activate");
         assertFalse(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
-        final Object ret = helper.passivate(mp);
+        helper.passivate(mp);
         assertFalse(mp.ispassivateCalled());
-        assertNull(ret);
     }
 
     private class TestMp implements Mp {
@@ -129,14 +120,13 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final byte[] data, final Object key) {
+        public void activate(final Object key) {
             this.activated = true;
         }
 
         @Override
-        public byte[] passivate() {
+        public void passivate() {
             passivateCalled = true;
-            return "passivate".getBytes();
         }
 
         public boolean isActivated() {
@@ -158,14 +148,13 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final byte[] data, final Object key) {
+        public void activate(final Object key) {
             this.activated = true;
         }
 
         @Override
-        public byte[] passivate() {
+        public void passivate() {
             passivateCalled = true;
-            return null;
         }
 
         public boolean isActivated() {
@@ -187,14 +176,13 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final byte[] data, final Object key) {
+        public void activate(final Object key) {
             this.activated = true;
         }
 
         @Override
-        public byte[] passivate() {
+        public void passivate() {
             passivateCalled = true;
-            return "passivate".getBytes();
         }
 
         public boolean isActivated() {
@@ -216,14 +204,13 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final byte[] data, final Object key) {
+        public void activate(final Object key) {
             this.activated = true;
         }
 
         @Override
-        public byte[] passivate() {
+        public void passivate() {
             passivateCalled = true;
-            return "passivate".getBytes();
         }
 
         public boolean isActivated() {
@@ -245,14 +232,13 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final byte[] data, final Object key) {
+        public void activate(final Object key) {
             this.activated = true;
         }
 
         @Override
-        public byte[] passivate() {
+        public void passivate() {
             passivateCalled = true;
-            return null;
         }
 
         public boolean isActivated() {

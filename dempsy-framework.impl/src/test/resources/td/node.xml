@@ -21,6 +21,9 @@
        <map>
          <entry key="net.dempsy.router.managed.min_node_count" value="${min_nodes:1}" />
          <entry key="net.dempsy.router.managed.total_shards" value="${total_shards:300}" />
+         <entry key="net.dempsy.transport.tcp.nio.send_threads" value="${send_threads:2}" />
+         <entry key="net.dempsy.transport.tcp.netty.send_threads" value="${send_threads:2}" />
+         <entry key="net.dempsy.threading.max_pending" value="${max_pending:-1}" />
        </map>
      </property>
    </bean>

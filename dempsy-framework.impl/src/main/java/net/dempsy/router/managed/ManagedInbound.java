@@ -29,7 +29,7 @@ public class ManagedInbound implements Inbound {
         utils = new Utils(infra, clusterId, address);
         // subscriber first because it registers as a node. If there's no nodes
         // there's nothing for the leader to do.
-        subscriber = new Subscriber(utils, infra, isRunning, listener, this);
+        subscriber = new Subscriber(utils, infra, isRunning, listener);
         subscriber.process();
         leader = new Leader(utils, infra, isRunning);
         leader.process();
