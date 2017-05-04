@@ -57,11 +57,6 @@ public interface ThreadingModel extends AutoCloseable {
     }
 
     /**
-     * How many pending tasks are there.
-     */
-    public int getNumberPending();
-
-    /**
      * How many pending limited tasks are there
      */
     public int getNumberLimitedPending();

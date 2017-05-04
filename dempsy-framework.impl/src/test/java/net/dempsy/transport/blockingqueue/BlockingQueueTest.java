@@ -28,14 +28,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 
+import net.dempsy.Infrastructure;
 import net.dempsy.threading.DefaultThreadingModel;
-import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.Receiver;
 import net.dempsy.transport.Sender;
 import net.dempsy.transport.SenderFactory;
 import net.dempsy.transport.TransportManager;
-import net.dempsy.transport.blockingqueue.BlockingQueueReceiver;
 import net.dempsy.util.TestInfrastructure;
 
 public class BlockingQueueTest {
@@ -49,15 +48,15 @@ public class BlockingQueueTest {
     public void testBlockingQueue() throws Exception {
         final AtomicReference<String> message = new AtomicReference<String>(null);
         final ArrayBlockingQueue<Object> input = new ArrayBlockingQueue<>(16);
-        try (final ThreadingModel tm = new DefaultThreadingModel("BQTest-testBlockingQueue-");
-                final Receiver r = new BlockingQueueReceiver(input);
-                final TransportManager tranMan = chain(new TransportManager(), c -> c.start(new TestInfrastructure(null, null)));
+        try (final Receiver r = new BlockingQueueReceiver(input);
+                final Infrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueue-"));
+                final TransportManager tranMan = chain(new TransportManager(), c -> c.start(infra));
                 SenderFactory sf = tranMan.getAssociatedInstance(transportTypeId);) {
             final Sender sender = sf.getSender(r.getAddress());
             r.start((final String msg) -> {
                 message.set(new String(msg));
                 return true;
-            }, tm);
+            }, infra);
             sender.send("Hello");
             assertTrue(poll(o -> "Hello".equals(message.get())));
         }
@@ -73,9 +72,9 @@ public class BlockingQueueTest {
     public void testBlockingQueueOverflow() throws Throwable {
         final AtomicReference<String> message = new AtomicReference<String>(null);
         final ArrayBlockingQueue<Object> input = new ArrayBlockingQueue<>(1);
-        try (final ThreadingModel tm = new DefaultThreadingModel("BQTest-testBlockingQueueOverflow-");
+        try (final Infrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueueOverflow-"));
                 final Receiver r = new BlockingQueueReceiver(input);
-                final TransportManager tranMan = chain(new TransportManager(), c -> c.start(new TestInfrastructure(null, null)));
+                final TransportManager tranMan = chain(new TransportManager(), c -> c.start(infra));
                 final SenderFactory sf = tranMan.getAssociatedInstance(transportTypeId);) {
             final Sender sender = sf.getSender(r.getAddress());
 
@@ -102,7 +101,7 @@ public class BlockingQueueTest {
                 message.set(new String(msg));
                 receiveCount.incrementAndGet();
                 return true;
-            }, tm);
+            }, infra);
 
             // 2 messages should have been read and the 2nd should be "Hello again"
             assertTrue(poll(o -> "Hello again".equals(message.get())));

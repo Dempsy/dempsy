@@ -51,6 +51,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
+import net.dempsy.DempsyException;
 import net.dempsy.NodeManager;
 import net.dempsy.cluster.local.LocalClusterSessionFactory;
 import net.dempsy.config.ClusterId;
@@ -73,6 +74,8 @@ import net.dempsy.lifecycle.annotation.Start;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
+import net.dempsy.messages.KeyedMessage;
+import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
 import net.dempsy.transport.blockingqueue.BlockingQueueReceiver;
@@ -112,6 +115,7 @@ public class TestContainer {
 
     public static Map<String, TestProcessor> cache = null;
     public static Set<OutputMessage> outputMessages = null;
+    public static RuntimeException justThrowMe = null;
 
     public TestContainer(final String containerId) {
         this.containerId = containerId;
@@ -124,6 +128,7 @@ public class TestContainer {
 
     @Before
     public void setUp() throws Exception {
+        justThrowMe = null;
         track(new SystemPropertyManager()).set("container-type", containerId);
         context = track(new ClassPathXmlApplicationContext(ctx));
         sessionFactory = new LocalClusterSessionFactory();
@@ -138,6 +143,7 @@ public class TestContainer {
     public void tearDown() throws Exception {
         cache = null;
         outputMessages = null;
+        justThrowMe = null;
         recheck(() -> toClose.forEach(v -> uncheck(() -> v.close())), Exception.class);
         toClose.clear();
         LocalClusterSessionFactory.completeReset();
@@ -273,6 +279,9 @@ public class TestContainer {
 
         @MessageHandler
         public ContainerTestMessage handle(final MyMessage message) throws InterruptedException {
+            if (justThrowMe != null)
+                throw justThrowMe;
+
             myKey = message.getKey();
 
             if (cache != null)
@@ -334,6 +343,33 @@ public class TestContainer {
     // ----------------------------------------------------------------------------
     // Test Cases
     // ----------------------------------------------------------------------------
+    public static final KeyExtractor ke = new KeyExtractor();
+
+    @Test
+    public void testWrongTypeMessage() throws Exception {
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
+        container.dispatch(new KeyedMessage(kmwt.key, new Object()), true);
+        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+    }
+
+    @Test
+    public void testMpThrowsDempsyException() throws Exception {
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        justThrowMe = new DempsyException("JustThrowMe!");
+        final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
+        container.dispatch(kmwt, true);
+        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+    }
+
+    @Test
+    public void testMpThrowsException() throws Exception {
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        justThrowMe = new RuntimeException("JustThrowMe!");
+        final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
+        container.dispatch(kmwt, true);
+        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+    }
 
     @Test
     public void testConfiguration() throws Exception {

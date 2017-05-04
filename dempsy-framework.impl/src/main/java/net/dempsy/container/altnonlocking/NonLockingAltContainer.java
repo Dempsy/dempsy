@@ -118,35 +118,11 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     // Internals
     // ----------------------------------------------------------------------------
 
-    private static class CountedLinkedList<T> {
-        private final LinkedList<T> list = new LinkedList<>();
-        private int size = 0;
-
-        public T removeFirst() {
-            size--;
-            return list.removeFirst();
-        }
-
-        public boolean add(final T v) {
-            final boolean ret = list.add(v);
-            if (ret)
-                size++;
-            return ret;
-        }
-
-        public T pushPop(final T toPush) {
-            if (size == 0)
-                return toPush;
-            list.add(toPush);
-            return list.removeFirst();
-        }
-    }
-
     private static class WorkingQueueHolder {
-        final AtomicReference<CountedLinkedList<KeyedMessage>> queue;
+        final AtomicReference<LinkedList<KeyedMessage>> queue;
 
         WorkingQueueHolder(final boolean locked) {
-            queue = locked ? new AtomicReference<>(null) : new AtomicReference<>(new CountedLinkedList<>());
+            queue = locked ? new AtomicReference<>(null) : new AtomicReference<>(new LinkedList<>());
         }
     }
 
@@ -201,21 +177,40 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         throw new DempsyException("Not running.");
     }
 
-    private CountedLinkedList<KeyedMessage> getQueue(final WorkingQueueHolder wp) {
+    private LinkedList<KeyedMessage> getQueue(final WorkingQueueHolder wp) {
         return waitFor(() -> wp.queue.getAndSet(null));
+    }
+
+    private static <T> T pushPop(final LinkedList<T> q, final T toPush) {
+        if (q.size() == 0)
+            return toPush;
+        q.add(toPush);
+        return q.removeFirst();
     }
 
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
     public void dispatch(final KeyedMessage message, final boolean block) throws IllegalArgumentException, ContainerException {
+        if (!isRunningLazy) {
+            LOGGER.debug("Dispacth called on stopped container");
+            statCollector.messageFailed(false);
+        }
+
         if (message == null)
             return; // No. We didn't process the null message
 
-        if (message == null || message.message == null)
+        if (message.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
         if (message.key == null)
             throw new ContainerException("Message " + objectDescription(message.message) + " contains no key.");
+
+        if (!inbound.doesMessageKeyBelongToNode(message.key)) {
+            if (LOGGER.isDebugEnabled())
+                LOGGER.debug("Message with key " + SafeString.objectDescription(message.key) + " sent to wrong container. ");
+            statCollector.messageFailed(false);
+            return;
+        }
 
         numBeingWorked.incrementAndGet();
 
@@ -236,8 +231,8 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                     // if mailbox is null then I got it.
                     if (mailbox == null) {
                         final WorkingQueueHolder box = mref.ref; // can't be null if I got the mailbox
-                        final CountedLinkedList<KeyedMessage> q = getQueue(box); // spin until I get the queue
-                        KeyedMessage toProcess = q.pushPop(message);
+                        final LinkedList<KeyedMessage> q = getQueue(box); // spin until I get the queue
+                        KeyedMessage toProcess = pushPop(q, message);
                         box.queue.lazySet(q); // put the queue back
 
                         while (toProcess != null) {
@@ -245,8 +240,8 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                             numBeingWorked.getAndDecrement();
 
                             // get the next message
-                            final CountedLinkedList<KeyedMessage> queue = getQueue(box);
-                            if (queue.size == 0)
+                            final LinkedList<KeyedMessage> queue = getQueue(box);
+                            if (queue.size() == 0)
                                 // we need to leave the queue out
                                 break;
 
@@ -259,7 +254,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                     } else {
                         // we didn't get exclusive access so let's see if we can add the message to the mailbox
                         // make one try at putting the message in the mailbox.
-                        final CountedLinkedList<KeyedMessage> q = mailbox.queue.getAndSet(null);
+                        final LinkedList<KeyedMessage> q = mailbox.queue.getAndSet(null);
 
                         if (q != null) { // I got it!
                             q.add(message);
@@ -292,12 +287,20 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
             keys.addAll(instances.keySet());
 
             while (keys.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
+
+                // store off anything that passes for later removal. This is to avoid a
+                // ConcurrentModificationException.
+                final Set<Object> keysProcessed = new HashSet<Object>();
+
                 for (final Object key : keys) {
                     final InstanceWrapper wrapper = instances.get(key);
 
                     if (wrapper != null) { // if the MP still exists
                         final WorkingQueueHolder mailbox = setIfAbsent(wrapper.mailbox, () -> mref.set(new WorkingQueueHolder(true)));
                         if (mailbox == null) { // this means I got it.
+
+                            keysProcessed.add(key); // mark this to remove it from the set of keys later since we've dealing with it
+
                             // it was created locked so no one else will be able to drop messages in the mailbox.
                             final Object instance = wrapper.instance;
                             boolean evictMe;
@@ -328,6 +331,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                         } // end - I got the lock. Otherwise it's too busy to evict.
                     } // end if mp exists. Otherwise the mp is already gone.
                 }
+                keys.removeAll(keysProcessed); // remove the keys we already checked
             }
         }
     }
@@ -489,15 +493,13 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                         ". The value returned from the clone call appears to be null.");
 
             // activate
-            final byte[] data = null;
             if (LOGGER.isTraceEnabled())
                 LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                        + " with " + ((data != null) ? data.length : 0) + " bytes of data"
                         + " via " + SafeString.valueOf(prototype));
 
             boolean activateSuccessful = false;
             try {
-                prototype.activate(instance, key, data);
+                prototype.activate(instance, key);
                 activateSuccessful = true;
             } catch (final IllegalArgumentException e) {
                 throw new ContainerException(

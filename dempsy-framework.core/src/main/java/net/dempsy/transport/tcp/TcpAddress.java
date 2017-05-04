@@ -4,7 +4,7 @@ import java.net.InetAddress;
 
 import net.dempsy.transport.NodeAddress;
 
-public class TcpAddress implements NodeAddress {
+public abstract class TcpAddress implements NodeAddress {
 
     private static final long serialVersionUID = 1L;
 
@@ -12,20 +12,22 @@ public class TcpAddress implements NodeAddress {
     public final InetAddress inetAddress;
     public final int port;
     public final String serializerId;
+    public final int recvBufferSize;
 
-    @SuppressWarnings("unused")
-    private TcpAddress() {
+    protected TcpAddress() {
         guid = null;
         inetAddress = null;
         port = -1;
         serializerId = null;
+        recvBufferSize = -1;
     }
 
-    public TcpAddress(final InetAddress inetAddress, final int port, final String serializerId) {
+    public TcpAddress(final InetAddress inetAddress, final int port, final String serializerId, final int recvBufferSize) {
         this.inetAddress = inetAddress;
         this.port = port;
         this.guid = inetAddress.getHostAddress() + ":" + port;
         this.serializerId = serializerId;
+        this.recvBufferSize = recvBufferSize;
     }
 
     @Override

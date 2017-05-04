@@ -10,6 +10,7 @@ import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
 import net.dempsy.monitoring.basic.BasicStatsCollectorFactory;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.executor.AutoDisposeSingleThreadScheduler;
 
 public class TestInfrastructure implements Infrastructure {
@@ -18,29 +19,32 @@ public class TestInfrastructure implements Infrastructure {
     final BasicStatsCollectorFactory statsFact;
     final BasicNodeStatsCollector nodeStats;
     final String application;
+    final ThreadingModel threading;
 
-    public TestInfrastructure(final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched) {
-        this.session = session;
-        this.sched = sched;
-        statsFact = new BasicStatsCollectorFactory();
-        nodeStats = new BasicNodeStatsCollector();
-        application = "application";
-    }
-
-    public TestInfrastructure(final String testName, final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched) {
+    public TestInfrastructure(final String testName, final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched,
+            final ThreadingModel threading) {
         this.session = session;
         this.sched = sched;
         statsFact = new BasicStatsCollectorFactory();
         nodeStats = new BasicNodeStatsCollector();
         this.application = testName;
+        this.threading = threading;
+    }
+
+    public TestInfrastructure(final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched) {
+        this("application", session, sched, null);
+    }
+
+    public TestInfrastructure(final String testName, final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched) {
+        this(testName, session, sched, null);
     }
 
     public TestInfrastructure(final ClusterId cid, final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched) {
-        this.session = session;
-        this.sched = sched;
-        statsFact = new BasicStatsCollectorFactory();
-        nodeStats = new BasicNodeStatsCollector();
-        this.application = cid.applicationName;
+        this(cid.applicationName, session, sched, null);
+    }
+
+    public TestInfrastructure(final ThreadingModel threading) {
+        this("application", null, null, threading);
     }
 
     @Override
@@ -76,5 +80,16 @@ public class TestInfrastructure implements Infrastructure {
     @Override
     public String getNodeId() {
         return "test-infrastructure-fake-node-id";
+    }
+
+    @Override
+    public ThreadingModel getThreadingModel() {
+        return threading;
+    }
+
+    @Override
+    public void close() {
+        if (threading != null)
+            threading.close();
     }
 }

@@ -16,7 +16,7 @@
 
 package net.dempsy.transport;
 
-import net.dempsy.threading.ThreadingModel;
+import net.dempsy.Infrastructure;
 
 public interface Receiver extends AutoCloseable {
     /**
@@ -27,7 +27,7 @@ public interface Receiver extends AutoCloseable {
     /**
      * A receiver is started with a Listener and a threading model.
      */
-    public void start(Listener<?> listener, ThreadingModel threadingModel) throws MessageTransportException;
+    public void start(Listener<?> listener, Infrastructure threadingModel) throws MessageTransportException;
 
     /**
      * What is a unique Id for the transport that this {@link Receiver} is associated with. This information is used

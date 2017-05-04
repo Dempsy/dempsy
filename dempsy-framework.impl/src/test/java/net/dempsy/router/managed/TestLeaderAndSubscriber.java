@@ -122,7 +122,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
 
         final AtomicBoolean isRunning = new AtomicBoolean(true);
         try {
-            final Subscriber s = new Subscriber(utils, infra, isRunning, (l, m, i) -> {}, null);
+            final Subscriber s = new Subscriber(utils, infra, isRunning, (l, m) -> {});
             s.process();
             final Leader l = new Leader(utils, infra, isRunning);
             l.process();
@@ -153,7 +153,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
             for (int i = 0; i < NUM_SUBS; i++) {
                 final Utils utils = new Utils(makeInfra(session, sched), cid, new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
                 final Subscriber s;
-                subs.add(s = new Subscriber(utils, infra, isRunning, (l, m, xi) -> {}, null));
+                subs.add(s = new Subscriber(utils, infra, isRunning, (l, m) -> {}));
                 final Thread t = new Thread(() -> {
                     // wait for it.
                     while (!go.get()) {

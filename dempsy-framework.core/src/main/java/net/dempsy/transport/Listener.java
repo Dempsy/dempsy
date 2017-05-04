@@ -16,6 +16,8 @@
 
 package net.dempsy.transport;
 
+import java.util.function.Supplier;
+
 /**
  * <p>
  * This is the core abstraction for receiving messages. The client side of a transport implementation (called an "Adaptor") needs to be wired to a MessageTransportListener
@@ -33,6 +35,10 @@ public interface Listener<T> extends AutoCloseable {
      * @throws MessageTransportException
      */
     public boolean onMessage(T message) throws MessageTransportException;
+
+    public default boolean onMessage(final Supplier<T> supplier) {
+        return onMessage(supplier.get());
+    }
 
     @Override
     public default void close() {}

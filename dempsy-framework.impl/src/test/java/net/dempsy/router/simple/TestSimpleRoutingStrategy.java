@@ -60,7 +60,7 @@ public class TestSimpleRoutingStrategy {
             assertNotNull(ib);
             assertTrue(SimpleInboundSide.class.isAssignableFrom(ib.getClass()));
 
-            ib.setContainerDetails(new ClusterId("test", "test"), new ContainerAddress(new DummyNodeAddress(), 0), (l, m, i) -> {});
+            ib.setContainerDetails(new ClusterId("test", "test"), new ContainerAddress(new DummyNodeAddress(), 0), (l, m) -> {});
             ib.start(infra);
 
             assertTrue(waitForReg(session));
@@ -75,7 +75,7 @@ public class TestSimpleRoutingStrategy {
             assertNotNull(ib);
             assertTrue(SimpleInboundSide.class.isAssignableFrom(ib.getClass()));
 
-            ib.setContainerDetails(new ClusterId("test", "test"), new ContainerAddress(new DummyNodeAddress(), 0), (l, m, i) -> {});
+            ib.setContainerDetails(new ClusterId("test", "test"), new ContainerAddress(new DummyNodeAddress(), 0), (l, m) -> {});
             ib.start(infra);
 
             assertTrue(waitForReg(session));
@@ -103,7 +103,7 @@ public class TestSimpleRoutingStrategy {
             assertTrue(SimpleInboundSide.class.isAssignableFrom(ib.getClass()));
 
             final ClusterId cid = new ClusterId("test", "test");
-            ib.setContainerDetails(cid, new ContainerAddress(new DummyNodeAddress("here"), 0), (l, m, i) -> {});
+            ib.setContainerDetails(cid, new ContainerAddress(new DummyNodeAddress("here"), 0), (l, m) -> {});
             ib.start(infra);
 
             assertTrue(waitForReg(session));
@@ -130,7 +130,7 @@ public class TestSimpleRoutingStrategy {
 
                     try (ClusterInfoSession ses3 = sessFact.createSession();
                             RoutingStrategy.Inbound ib2 = manager.getAssociatedInstance(SimpleRoutingStrategy.class.getPackage().getName())) {
-                        ib2.setContainerDetails(cid, ca, (l, m, i) -> {});
+                        ib2.setContainerDetails(cid, ca, (l, m) -> {});
                         ib2.start(makeInfra(ses3, sched));
 
                         assertTrue(poll(o -> ob.selectDestinationForMessage(km) != null));

@@ -1,12 +1,13 @@
 package net.dempsy.threading;
 
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -15,17 +16,29 @@ import java.util.function.Supplier;
 public class DefaultThreadingModel implements ThreadingModel {
     private static final int minNumThreads = 4;
 
+    public static final String CONFIG_KEY_MAX_PENDING = "max_pending";
+    public static final String DEFAULT_MAX_PENDING = "100000";
+
+    public static final String CONFIG_KEY_CORES_FACTOR = "cores_factor";
+    public static final String DEFAULT_CORES_FACTOR = "1.0";
+
+    public static final String CONFIG_KEY_ADDITIONAL_THREADS = "additional_threads";
+    public static final String DEFAULT_ADDITIONAL_THREADS = "1";
+
+    public static final String CONFIG_KEY_HARD_SHUTDOWN = "hard_shutdown";
+    public static final String DEFAULT_HARD_SHUTDOWN = "true";
+
     private ScheduledExecutorService schedule = null;
-    private ThreadPoolExecutor executor = null;
+    private ExecutorService executor = null;
     private AtomicLong numLimited = null;
     private long maxNumWaitingLimitedTasks;
     private int threadPoolSize;
 
-    private double m = 1.25;
-    private int additionalThreads = 2;
+    private double m = Double.parseDouble(DEFAULT_CORES_FACTOR);
+    private int additionalThreads = Integer.parseInt(DEFAULT_ADDITIONAL_THREADS);
 
     private final Supplier<String> nameSupplier;
-    private boolean hardShutdown = false;
+    private boolean hardShutdown = Boolean.parseBoolean(DEFAULT_ADDITIONAL_THREADS);
 
     public DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
         this.nameSupplier = nameSupplier;
@@ -34,7 +47,7 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     public DefaultThreadingModel(final Supplier<String> nameSupplier) {
-        this(nameSupplier, -1, -1);
+        this(nameSupplier, -1, Integer.parseInt(DEFAULT_MAX_PENDING));
     }
 
     public DefaultThreadingModel(final String threadNameBase) {
@@ -84,6 +97,9 @@ public class DefaultThreadingModel implements ThreadingModel {
         return this;
     }
 
+    /**
+     * When closing this ThreadingModel, use a hard shutdown (shutdownNow) on the executors.
+     */
     public DefaultThreadingModel setHardShutdown(final boolean hardShutdown) {
         this.hardShutdown = hardShutdown;
         return this;
@@ -98,14 +114,24 @@ public class DefaultThreadingModel implements ThreadingModel {
                                                                                             // then use the other constructor
             threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
         }
-        executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(threadPoolSize,
+        executor = Executors.newFixedThreadPool(threadPoolSize,
                 r -> new Thread(r, nameSupplier.get()));
         schedule = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, nameSupplier.get() + "-Scheduled"));
         numLimited = new AtomicLong(0);
 
-        if (maxNumWaitingLimitedTasks < 0)
-            maxNumWaitingLimitedTasks = 20 * threadPoolSize;
+        return this;
+    }
 
+    private static String getConfigValue(final Map<String, String> conf, final String key, final String defaultValue) {
+        final String entireKey = DefaultThreadingModel.class.getPackage().getName() + "." + key;
+        return conf.containsKey(entireKey) ? conf.get(entireKey) : defaultValue;
+    }
+
+    public DefaultThreadingModel configure(final Map<String, String> configuration) {
+        setMaxNumberOfQueuedLimitedTasks(Integer.parseInt(getConfigValue(configuration, CONFIG_KEY_MAX_PENDING, DEFAULT_MAX_PENDING)));
+        setHardShutdown(Boolean.parseBoolean(getConfigValue(configuration, CONFIG_KEY_HARD_SHUTDOWN, DEFAULT_HARD_SHUTDOWN)));
+        setCoresFactor(Double.parseDouble(getConfigValue(configuration, CONFIG_KEY_CORES_FACTOR, DEFAULT_CORES_FACTOR)));
+        setAdditionalThreads(Integer.parseInt(getConfigValue(configuration, CONFIG_KEY_ADDITIONAL_THREADS, DEFAULT_ADDITIONAL_THREADS)));
         return this;
     }
 
@@ -141,11 +167,6 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public int getNumberPending() {
-        return executor.getQueue().size();
-    }
-
-    @Override
     public int getNumberLimitedPending() {
         return numLimited.intValue();
     }
@@ -163,27 +184,27 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
-        final Callable<V> task = new Callable<V>() {
-            Rejectable<V> o = r;
 
-            @Override
-            public V call() throws Exception {
+        if (maxNumWaitingLimitedTasks > 0) { // maxNumWaitingLimitedTasks <= 0 means unlimited
+            final Callable<V> task = () -> {
                 if (!count)
-                    return o.call();
+                    return r.call();
 
                 final long num = numLimited.decrementAndGet();
                 if (num <= maxNumWaitingLimitedTasks)
-                    return o.call();
-                o.rejected();
+                    return r.call();
+                r.rejected();
                 return null;
-            }
-        };
+            };
 
-        if (count)
-            numLimited.incrementAndGet();
+            if (count)
+                numLimited.incrementAndGet();
 
-        final Future<V> ret = executor.submit(task);
-        return ret;
+            final Future<V> ret = executor.submit(task);
+            return ret;
+        } else
+            return executor.submit(() -> r.call());
+
     }
 
     @Override

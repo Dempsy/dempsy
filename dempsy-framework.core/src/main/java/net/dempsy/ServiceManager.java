@@ -59,6 +59,10 @@ public class ServiceManager<T extends Service> extends Manager<T> implements Ser
                 LOGGER.warn("Failed to shut down an instance of " + clazz.getSimpleName(), ret);
             }
         });
+
+        if (infra != null) {
+            infra.close();
+        }
     }
 
     @Override

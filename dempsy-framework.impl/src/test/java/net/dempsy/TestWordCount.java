@@ -127,6 +127,7 @@ public class TestWordCount extends DempsyBaseTest {
         private final AtomicBoolean isRunning = new AtomicBoolean(false);
         private Dispatcher dispatcher = null;
         private final AtomicBoolean done = new AtomicBoolean(false);
+        private final AtomicBoolean stopped = new AtomicBoolean(false);
         public boolean onePass = true;
         public static CountDownLatch latch = new CountDownLatch(0);
         KeyExtractor ke = new KeyExtractor();
@@ -150,29 +151,36 @@ public class TestWordCount extends DempsyBaseTest {
         @Override
         public void start() {
             try {
-                latch.await();
-            } catch (final InterruptedException ie) {
-                throw new RuntimeException(ie);
-            }
-            isRunning.set(true);
-            while (isRunning.get() && !done.get()) {
-                // obtain data from an external source
-                final String wordString = getNextWordFromSoucre();
                 try {
-                    dispatcher.dispatch(ke.extract(new Word(wordString)));
-                    numDispatched++;
-                    if (numDispatched % 10000 == 0)
-                        System.out.print(".");
-                } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-                    LOGGER.error("Failed to dispatch", e);
+                    latch.await();
+                } catch (final InterruptedException ie) {
+                    throw new RuntimeException(ie);
                 }
+                isRunning.set(true);
+                while (isRunning.get() && !done.get()) {
+                    // obtain data from an external source
+                    final String wordString = getNextWordFromSoucre();
+                    try {
+                        dispatcher.dispatch(ke.extract(new Word(wordString)));
+                        numDispatched++;
+                        if (numDispatched % 10000 == 0)
+                            System.out.print(".");
+                    } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+                        LOGGER.error("Failed to dispatch", e);
+                    }
+                }
+                System.out.println();
+            } finally {
+                stopped.set(true);
             }
-            System.out.println();
         }
 
         @Override
         public void stop() {
             isRunning.set(false);
+
+            while (!stopped.get())
+                Thread.yield();
         }
 
         private int curCount = 0;

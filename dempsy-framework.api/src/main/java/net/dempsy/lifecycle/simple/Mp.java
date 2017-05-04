@@ -14,9 +14,7 @@ public interface Mp {
         return null;
     }
 
-    public default byte[] passivate() {
-        return null;
-    }
+    public default void passivate() {}
 
-    public default void activate(final byte[] data, final Object key) {}
+    public default void activate(final Object key) {}
 }

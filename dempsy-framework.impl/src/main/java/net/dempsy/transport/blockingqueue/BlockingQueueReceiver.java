@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.dempsy.threading.ThreadingModel;
+import net.dempsy.Infrastructure;
 import net.dempsy.transport.Listener;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.NodeAddress;
@@ -119,7 +119,7 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
      */
     @SuppressWarnings({ "rawtypes", "unchecked" })
     @Override
-    public synchronized void start(final Listener listener, final ThreadingModel threadingModel) {
+    public synchronized void start(final Listener listener, final Infrastructure infra) {
         if (listener == null)
             throw new IllegalArgumentException("Cannot pass null to " + BlockingQueueReceiver.class.getSimpleName() + ".setListener");
         if (this.listener != null)
@@ -127,7 +127,7 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
                     "Cannot set a new Listener (" + SafeString.objectDescription(listener) + ") on a " + BlockingQueueReceiver.class.getSimpleName()
                             + " when there's one already set (" + SafeString.objectDescription(this.listener) + ")");
         this.listener = listener;
-        threadingModel.runDaemon(this, "BQReceiver-" + address.getGuid());
+        infra.getThreadingModel().runDaemon(this, "BQReceiver-" + address.getGuid());
     }
 
     @Override

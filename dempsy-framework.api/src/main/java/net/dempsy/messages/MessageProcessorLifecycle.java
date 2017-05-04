@@ -17,7 +17,7 @@ public interface MessageProcessorLifecycle<T> {
     /**
      * Invokes the activation method of the passed instance.
      */
-    public void activate(T instance, Object key, byte[] activationData) throws IllegalArgumentException, DempsyException;
+    public void activate(T instance, Object key) throws IllegalArgumentException, DempsyException;
 
     /**
      * Invokes the passivation method of the passed instance. Will return the object's passivation data, 
@@ -27,7 +27,7 @@ public interface MessageProcessorLifecycle<T> {
      * @throws IllegalAccessException
      * @throws IllegalArgumentException
      */
-    public byte[] passivate(T instance) throws IllegalArgumentException, DempsyException;
+    public void passivate(T instance) throws IllegalArgumentException, DempsyException;
 
     /**
      * Invokes the appropriate message handler of the passed instance. Caller is responsible for not passing

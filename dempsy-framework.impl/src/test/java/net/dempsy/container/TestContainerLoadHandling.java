@@ -45,6 +45,7 @@ import net.dempsy.ServiceTracker;
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.altnonlocking.NonLockingAltContainer;
 import net.dempsy.container.locking.LockingContainer;
+import net.dempsy.container.mocks.DummyInbound;
 import net.dempsy.container.mocks.MockInputMessage;
 import net.dempsy.container.mocks.MockOutputMessage;
 import net.dempsy.container.nonlocking.NonLockingContainer;
@@ -120,6 +121,8 @@ public class TestContainerLoadHandling {
                 .setMessageProcessor(new MessageProcessor<TestMessageProcessor>(new TestMessageProcessor()))
                 .setClusterId(cid);
         container.setDispatcher(dispatcher);
+
+        container.setInbound(new DummyInbound());
 
         container.start(new TestInfrastructure(null, null) {
 

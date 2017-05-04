@@ -7,7 +7,7 @@
 
    <context:property-placeholder system-properties-mode="OVERRIDE"/>
    
-   <bean id="inputTransport" class="net.dempsy.transport.tcp.netty.NettyReceiver" destroy-method="close">
+   <bean id="inputTransport" class="net.dempsy.transport.tcp.nio.NioReceiver" destroy-method="close">
      <constructor-arg ref="serializer" />
    </bean>
 

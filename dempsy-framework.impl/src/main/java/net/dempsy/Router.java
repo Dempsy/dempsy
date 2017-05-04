@@ -1,6 +1,5 @@
 package net.dempsy;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -8,9 +7,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +24,7 @@ import net.dempsy.router.RoutingStrategy;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
 import net.dempsy.router.RoutingStrategyManager;
 import net.dempsy.transport.NodeAddress;
+import net.dempsy.transport.RoutedMessage;
 import net.dempsy.transport.Sender;
 import net.dempsy.transport.SenderFactory;
 import net.dempsy.transport.TransportManager;
@@ -41,6 +41,7 @@ public class Router extends Dispatcher implements Service {
     private final AtomicReference<ApplicationState> outbounds = new AtomicReference<>(null);
 
     private final NodeAddress thisNode;
+    private final String thisNodeId;
     private final TransportManager tmanager;
     private final NodeReceiver nodeReciever;
     private final AtomicBoolean isReady = new AtomicBoolean(false);
@@ -49,38 +50,39 @@ public class Router extends Dispatcher implements Service {
     private static class ApplicationState {
         private final Map<String, RoutingStrategy.Router> outboundByClusterName;
         private final Map<String, List<String>> clusterNameByMessageType;
-        private final Map<NodeAddress, Sender> senderByNode;
         private final Map<NodeAddress, NodeInformation> current;
+        private final TransportManager tManager;
+        private final NodeAddress thisNode;
 
-        ApplicationState(final Map<String, net.dempsy.router.RoutingStrategy.Router> outboundByClusterName,
-                final Map<String, Set<String>> cnByType, final Map<NodeAddress, Sender> senderByNode,
-                final Map<NodeAddress, NodeInformation> current) {
+        private final ConcurrentHashMap<NodeAddress, Sender> senders = new ConcurrentHashMap<>();
+
+        ApplicationState(final Map<String, net.dempsy.router.RoutingStrategy.Router> outboundByClusterName, final Map<String, Set<String>> cnByType,
+                final Map<NodeAddress, NodeInformation> current, final TransportManager tManager, final NodeAddress thisNode) {
             this.outboundByClusterName = outboundByClusterName;
             this.clusterNameByMessageType = new HashMap<>();
             cnByType.entrySet().forEach(e -> clusterNameByMessageType.put(e.getKey(), new ArrayList<String>(e.getValue())));
-            this.senderByNode = senderByNode;
             this.current = current;
+            this.tManager = tManager;
+            this.thisNode = thisNode;
         }
 
-        ApplicationState() {
+        ApplicationState(final TransportManager tManager, final NodeAddress thisNode) {
             outboundByClusterName = new HashMap<>();
             clusterNameByMessageType = new HashMap<>();
-            senderByNode = new HashMap<>();
             current = new HashMap<>();
+            this.tManager = tManager;
+            this.thisNode = thisNode;
         }
 
         public static class Update {
             final Set<NodeInformation> toAdd;
             final Set<NodeAddress> toDelete;
             final Set<NodeInformation> leaveAlone;
-            final NodeAddress thisNode;
 
-            public Update(final Set<NodeInformation> leaveAlone, final Set<NodeInformation> toAdd, final Set<NodeAddress> toDelete,
-                    final NodeAddress thisNode) {
+            public Update(final Set<NodeInformation> leaveAlone, final Set<NodeInformation> toAdd, final Set<NodeAddress> toDelete) {
                 this.toAdd = toAdd;
                 this.toDelete = toDelete;
                 this.leaveAlone = leaveAlone;
-                this.thisNode = thisNode;
             }
 
             public boolean change() {
@@ -88,7 +90,7 @@ public class Router extends Dispatcher implements Service {
             }
         }
 
-        public Update update(final Set<NodeInformation> newState, final NodeAddress thisNode) {
+        public Update update(final Set<NodeInformation> newState, final NodeAddress thisNodeX, final String thisNodeId) {
             final Set<NodeInformation> toAdd = new HashSet<>();
             final Set<NodeAddress> toDelete = new HashSet<>();
             final Set<NodeAddress> knownAddr = new HashSet<>(current.keySet());
@@ -98,7 +100,7 @@ public class Router extends Dispatcher implements Service {
 
             for (final NodeInformation cur : newState) {
                 final NodeInformation known = current.get(cur.nodeAddress);
-                if (cur.nodeAddress.equals(thisNode))
+                if (cur.nodeAddress.equals(thisNodeX))
                     oursOnTheList = cur.nodeAddress;
                 if (known == null) // then we don't know about this one yet.
                     // we need to add this one
@@ -116,15 +118,15 @@ public class Router extends Dispatcher implements Service {
                 }
             }
 
-            if (oursOnTheList == null && thisNode != null) // we don't seem to have our own address registered with the collaborator.
-                                                           // this condition is actually okay since the Router is started before the
-                                                           // node is registered with the collaborator.
-                LOGGER.trace("Router at {} doesn't seem to have its own address registered with the collaborator yet", thisNode);
+            if (oursOnTheList == null && thisNodeX != null) // we don't seem to have our own address registered with the collaborator.
+                                                            // this condition is actually okay since the Router is started before the
+                                                            // node is registered with the collaborator.
+                LOGGER.trace("Router at {} doesn't seem to have its own address registered with the collaborator yet", thisNodeId);
 
             // dump the remaining knownAddrs on the toDelete list
             toDelete.addAll(knownAddr);
 
-            return new Update(leaveAlone, toAdd, toDelete, thisNode);
+            return new Update(leaveAlone, toAdd, toDelete);
         }
 
         public ApplicationState apply(final Update update, final TransportManager tmanager, final NodeStatsCollector statsCollector,
@@ -132,33 +134,21 @@ public class Router extends Dispatcher implements Service {
             // apply toDelete first.
             final Set<NodeAddress> toDelete = update.toDelete;
 
-            for (final NodeAddress cur : toDelete) {
-                senderByNode.get(current.get(cur).nodeAddress).stop();
+            if (toDelete.size() > 0) { // just clear all senders.
+                senders.clear();
             }
 
             final Map<NodeAddress, NodeInformation> newCurrent = new HashMap<>();
-            final Map<NodeAddress, Sender> newSenders = new HashMap<>();
 
             // the one's to carry over.
             final Set<NodeInformation> leaveAlone = update.leaveAlone;
             for (final NodeInformation cur : leaveAlone) {
-                // if this is our node then we don't want to add a sender.
-                // update.thisNode can be null but cur.nodeAddress cannot
-                if (!cur.nodeAddress.equals(update.thisNode)) {
-                    final Sender sender = senderByNode.get(cur.nodeAddress);
-                    newSenders.put(cur.nodeAddress, sender);
-                }
                 newCurrent.put(cur.nodeAddress, cur);
             }
 
             // add new senders
             final Set<NodeInformation> toAdd = update.toAdd;
             for (final NodeInformation cur : toAdd) {
-                if (!cur.nodeAddress.equals(update.thisNode)) {
-                    final SenderFactory sf = tmanager.getAssociatedInstance(cur.transportTypeId);
-                    final Sender sender = sf.getSender(cur.nodeAddress);
-                    newSenders.put(cur.nodeAddress, sender);
-                }
                 newCurrent.put(cur.nodeAddress, cur);
             }
 
@@ -196,15 +186,39 @@ public class Router extends Dispatcher implements Service {
                 });
             }
 
-            return new ApplicationState(newOutboundByClusterName, cnByType, newSenders, newCurrent);
+            return new ApplicationState(newOutboundByClusterName, cnByType, newCurrent, tmanager, thisNode);
         }
 
+        public void stop() {
+            outboundByClusterName.values().forEach(r -> {
+                try {
+                    r.release();
+                } catch (final RuntimeException rte) {
+                    LOGGER.warn("Problem while shutting down an outbound router", rte);
+                }
+            });
+            senders.clear();
+        }
+
+        public Sender getSender(final NodeAddress na) {
+            final Sender ret = senders.get(na);
+            if (ret == null) {
+                if (na.equals(thisNode))
+                    return null;
+                return senders.computeIfAbsent(na, n -> {
+                    final SenderFactory sf = tManager.getAssociatedInstance(na.getClass().getPackage().getName());
+                    return sf.getSender(n);
+                });
+            }
+            return ret;
+        }
     }
 
-    public Router(final RoutingStrategyManager manager, final NodeAddress thisNode, final NodeReceiver nodeReciever,
+    public Router(final RoutingStrategyManager manager, final NodeAddress thisNode, final String thisNodeId, final NodeReceiver nodeReciever,
             final TransportManager tmanager, final NodeStatsCollector statsCollector) {
         this.manager = manager;
         this.thisNode = thisNode;
+        this.thisNodeId = thisNodeId;
         this.tmanager = tmanager;
         this.nodeReciever = nodeReciever;
         this.statsCollector = statsCollector;
@@ -212,8 +226,8 @@ public class Router extends Dispatcher implements Service {
 
     @Override
     public void dispatch(final KeyedMessageWithType message) {
-        if (LOGGER.isTraceEnabled())
-            LOGGER.trace("Dispatching " + SafeString.objectDescription(message.message) + ".");
+        // if (LOGGER.isTraceEnabled())
+        // LOGGER.trace("Dispatching " + SafeString.objectDescription(message.message) + ".");
 
         boolean messageSentSomewhere = false;
         try {
@@ -222,8 +236,10 @@ public class Router extends Dispatcher implements Service {
 
             // if we're in the midst of an update then we really want to wait for the new state.
             while (tmp == null) {
-                if (!isRunning.get())
-                    throw new DempsyException("Router dispatch called while stopped.");
+                if (!isRunning.get()) {
+                    LOGGER.debug("Router dispatch called while stopped.");
+                    return;
+                }
 
                 if (!isReady.get()) // however, if we never were ready then we're not in the midst
                                     // of an update.
@@ -261,7 +277,7 @@ public class Router extends Dispatcher implements Service {
                 final ContainerAddress ca = ob.selectDestinationForMessage(message);
                 // it's possible 'ca' is null when we don't know where to send the message.
                 if (ca == null)
-                    LOGGER.info("No way to send the message {} to the cluster {} for the time being", message.message, clusterName);
+                    LOGGER.debug("No way to send the message {} to the cluster {} for the time being", message.message, clusterName);
                 else {
                     // When the message will be sent to 2 different clusters, but both clusters
                     // are hosted in the same node, then we send 1 message to 1 ContainerAddress
@@ -287,10 +303,13 @@ public class Router extends Dispatcher implements Service {
                     nodeReciever.feedbackLoop(toSend);
                     messageSentSomewhere = true;
                 } else {
-                    final Sender sf = cur.senderByNode.get(curNode);
-                    if (sf == null)
-                        LOGGER.error("Couldn't send message to " + curNode + " because there's no " + SenderFactory.class.getSimpleName());
-                    else {
+                    final Sender sf = cur.getSender(curNode);
+                    if (sf == null) {
+                        // router update is probably behind the routing strategy update
+                        if (isRunning.get())
+                            LOGGER.error("Couldn't send message to " + curNode + " from " + thisNodeId + " because there's no "
+                                    + Sender.class.getSimpleName());
+                    } else {
                         // TODO: more error handling
                         sf.send(toSend);
                         messageSentSomewhere = true;
@@ -348,12 +367,13 @@ public class Router extends Dispatcher implements Service {
                     }
 
                     // check to see if there's new nodes.
-                    final ApplicationState.Update ud = outbounds.get().update(alreadySeen, thisNode);
+                    final ApplicationState.Update ud = outbounds.get().update(alreadySeen, thisNode, thisNodeId);
 
                     if (!ud.change()) {
                         isReady.set(true);
                         return true; // nothing to update.
-                    }
+                    } else if (LOGGER.isTraceEnabled())
+                        LOGGER.trace("Updating for " + thisNodeId);
 
                     // otherwise we will be making changes so remove the current ApplicationState
                     final ApplicationState obs = outbounds.getAndSet(null); // this can cause instability.
@@ -386,7 +406,7 @@ public class Router extends Dispatcher implements Service {
 
         };
 
-        outbounds.set(new ApplicationState());
+        outbounds.set(new ApplicationState(tmanager, thisNode));
 
         isRunning.set(true);
         checkup.process();
@@ -403,19 +423,6 @@ public class Router extends Dispatcher implements Service {
             if (!tmanager.isReady())
                 return false;
 
-            // go through all of the outbounds and make sure we know about all of the nodes reachable with the exception
-            // of thisNode.
-            final Set<NodeAddress> nodes = obs.outboundByClusterName.values().stream()
-                    .map(r -> r.allDesintations().stream().map(ca -> ca.node))
-                    .flatMap(i -> i)
-                    .filter(na -> !na.equals(thisNode)) // make sure it's not thisNode
-                    .collect(Collectors.toSet());
-
-            // is there an outbound for each node?
-            for (final NodeAddress c : nodes) {
-                if (!obs.senderByNode.containsKey(c))
-                    return false;
-            }
             return true;
         } else return false;
     }
@@ -424,47 +431,9 @@ public class Router extends Dispatcher implements Service {
     public void stop() {
         synchronized (isRunning) {
             isRunning.set(false);
-            stopEm(outbounds.getAndSet(null));
-        }
-    }
-
-    public static class RoutedMessage implements Serializable {
-        private static final long serialVersionUID = 1L;
-        public final int[] containers;
-        public final Object key;
-        public final Object message;
-
-        @SuppressWarnings("unused")
-        private RoutedMessage() {
-            containers = null;
-            key = null;
-            message = null;
-        }
-
-        public RoutedMessage(final int[] containers, final Object key, final Object message) {
-            this.containers = containers;
-            this.key = key;
-            this.message = message;
-        }
-    }
-
-    private static void stopEm(final ApplicationState obs) {
-        if (obs != null) {
-            obs.outboundByClusterName.values().forEach(r -> {
-                try {
-                    r.release();
-                } catch (final RuntimeException rte) {
-                    LOGGER.warn("Problem while shutting down an outbound router", rte);
-                }
-            });
-
-            obs.senderByNode.values().forEach(sf -> {
-                try {
-                    sf.stop();
-                } catch (final RuntimeException rte) {
-                    LOGGER.warn("Problem while shutting down an SenderFactory", rte);
-                }
-            });
+            final ApplicationState cur = outbounds.getAndSet(null);
+            if (cur != null)
+                cur.stop();
         }
     }
 
@@ -494,8 +463,8 @@ public class Router extends Dispatcher implements Service {
         return ob.allDesintations();
     }
 
-    NodeAddress thisNode() {
-        return thisNode;
+    String thisNodeId() {
+        return thisNodeId;
     }
 
     NodeStatsCollector getNodeStatCollector() {
