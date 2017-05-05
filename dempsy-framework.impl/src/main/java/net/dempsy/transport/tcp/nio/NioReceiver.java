@@ -28,7 +28,6 @@ import net.dempsy.transport.Listener;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.RoutedMessage;
 import net.dempsy.transport.tcp.AbstractTcpReceiver;
-import net.dempsy.transport.tcp.TcpAddress;
 import net.dempsy.transport.tcp.TcpUtils;
 import net.dempsy.transport.tcp.nio.internal.NioUtils;
 import net.dempsy.transport.tcp.nio.internal.NioUtils.ReturnableBufferOutput;
@@ -69,7 +68,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     }
 
     @Override
-    public synchronized TcpAddress getAddress() {
+    public synchronized NioAddress getAddress() {
         if (internal == null) {
             try {
                 final InetAddress addr = useLocalHost ? Inet4Address.getLocalHost()

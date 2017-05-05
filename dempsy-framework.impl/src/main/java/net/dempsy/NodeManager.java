@@ -218,7 +218,9 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         this.router = new Router(rsManager, nodeAddress, nodeId, nodeReciever, tManager, nodeStatsCollector);
 
         // set up containers
-        containers.forEach(pc -> pc.container.setDispatcher(router));
+        containers.forEach(pc -> pc.container.setDispatcher(router)
+                .setEvictionCycle(pc.clusterDefinition.getEvictionFrequency().evictionFrequency,
+                        pc.clusterDefinition.getEvictionFrequency().evictionTimeUnit));
 
         // IB routing strategy
         final int numContainers = containers.size();
@@ -374,7 +376,6 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     Container getContainer(final String clusterName) {
         return containers.stream().filter(pc -> clusterName.equals(pc.clusterDefinition.getClusterId().clusterName)).findFirst().get().container;
     }
-
     // ==============================================================================
 
     private static class PerContainer {

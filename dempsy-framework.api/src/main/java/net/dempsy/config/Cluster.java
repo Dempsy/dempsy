@@ -41,7 +41,8 @@ public class Cluster {
     private ClusterId[] destinations = {};
 
     private KeySource<?> keySource = null;
-    private EvictionFrequency evictionFrequency = new EvictionFrequency(600L, TimeUnit.SECONDS);
+    // default to negative cycle time means no eviction cycle runs
+    private EvictionFrequency evictionFrequency = new EvictionFrequency(-1L, TimeUnit.DAYS);
 
     public static class EvictionFrequency {
         public final long evictionFrequency;
