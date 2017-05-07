@@ -16,14 +16,14 @@
 
 package net.dempsy.monitoring;
 
+import java.util.function.LongSupplier;
+
 public interface NodeStatsCollector extends StatsCollector {
 
     /**
      * Sets a unique identifier for this node, used by certain stats collectors when publishing.
      */
-    default void setNodeId(final String nodeId) {
-        // Does nothing by default. Must override.
-    }
+    void setNodeId(final String nodeId);
 
     /**
      * The dispatcher calls this method in its <code>onMessage</code> handler.
@@ -48,11 +48,11 @@ public interface NodeStatsCollector extends StatsCollector {
     /**
      * If the transport supports the queuing of incoming messages, then it can optionally supply a Gauge instance that provides this metric on demand.
      */
-    void setMessagesPendingGauge(Gauge currentMessagesPendingGauge);
+    void setMessagesPendingGauge(LongSupplier currentMessagesPendingGauge);
 
     /**
      * If the transport supports the queuing of outgoing messages, then it can optionally supply a Gauge instance that provides this metric on demand.
      */
-    void setMessagesOutPendingGauge(Gauge currentMessagesOutPendingGauge);
+    void setMessagesOutPendingGauge(LongSupplier currentMessagesOutPendingGauge);
 
 }

@@ -56,18 +56,8 @@ public class TestDropwizardNodeStatsCollector {
 
     @Test
     public void verifyGaugesGetSet() {
-        collector.setMessagesPendingGauge(new net.dempsy.monitoring.StatsCollector.Gauge() {
-            @Override
-            public long value() {
-                return 1;
-            }
-        });
-        collector.setMessagesOutPendingGauge(new net.dempsy.monitoring.StatsCollector.Gauge() {
-            @Override
-            public long value() {
-                return 2;
-            }
-        });
+        collector.setMessagesPendingGauge(() -> 1L);
+        collector.setMessagesOutPendingGauge(() -> 2L);
 
         verifyGauge(DropwizardNodeStatsCollector.MESSAGES_PENDING_GAUGE, 1);
         verifyGauge(DropwizardNodeStatsCollector.MESSAGES_OUT_PENDING_GAUGE, 2);

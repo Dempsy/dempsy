@@ -17,6 +17,7 @@
 package net.dempsy.monitoring.basic;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 import net.dempsy.container.NodeMetricGetters;
 import net.dempsy.monitoring.NodeStatsCollector;
@@ -36,8 +37,11 @@ public class BasicNodeStatsCollector implements NodeStatsCollector, NodeMetricGe
     private final AtomicLong bytesReceived = new AtomicLong();
     private final AtomicLong bytesSent = new AtomicLong();
 
-    private Gauge currentMessagesPendingGauge = null;
-    private Gauge currentMessagesOutPendingGauge = null;
+    private LongSupplier currentMessagesPendingGauge = null;
+    private LongSupplier currentMessagesOutPendingGauge = null;
+
+    @Override
+    public void setNodeId(final String nodeId) {}
 
     @Override
     public long getDiscardedMessageCount() {
@@ -65,10 +69,7 @@ public class BasicNodeStatsCollector implements NodeStatsCollector, NodeMetricGe
     }
 
     @Override
-    public void stop() {
-        // no-op
-
-    }
+    public void stop() {}
 
     @Override
     public long getMessagesNotSentCount() {
@@ -96,23 +97,23 @@ public class BasicNodeStatsCollector implements NodeStatsCollector, NodeMetricGe
     }
 
     @Override
-    public synchronized void setMessagesPendingGauge(final Gauge currentMessagesPendingGauge) {
+    public synchronized void setMessagesPendingGauge(final LongSupplier currentMessagesPendingGauge) {
         this.currentMessagesPendingGauge = currentMessagesPendingGauge;
     }
 
     @Override
-    public synchronized void setMessagesOutPendingGauge(final Gauge currentMessagesOutPendingGauge) {
+    public synchronized void setMessagesOutPendingGauge(final LongSupplier currentMessagesOutPendingGauge) {
         this.currentMessagesOutPendingGauge = currentMessagesOutPendingGauge;
     }
 
     @Override
     public synchronized long getMessagesPending() {
-        return currentMessagesPendingGauge == null ? 0 : currentMessagesPendingGauge.value();
+        return currentMessagesPendingGauge == null ? 0 : currentMessagesPendingGauge.getAsLong();
     }
 
     @Override
     public synchronized long getMessagesOutPending() {
-        return currentMessagesOutPendingGauge == null ? 0 : currentMessagesOutPendingGauge.value();
+        return currentMessagesOutPendingGauge == null ? 0 : currentMessagesOutPendingGauge.getAsLong();
     }
 
 }

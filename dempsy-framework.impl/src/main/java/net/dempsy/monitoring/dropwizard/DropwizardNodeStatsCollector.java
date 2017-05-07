@@ -2,6 +2,7 @@ package net.dempsy.monitoring.dropwizard;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongSupplier;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
@@ -74,28 +75,28 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
     }
 
     @Override
-    public void setMessagesPendingGauge(final Gauge currentMessagesPendingGauge) {
+    public void setMessagesPendingGauge(final LongSupplier currentMessagesPendingGauge) {
         final String gaugeName = getName(MESSAGES_PENDING_GAUGE);
         // If the registry doesn't already have this gauge, then add it.
         if (!registry.getGauges().containsKey(gaugeName)) {
             registry.register(gaugeName, new com.codahale.metrics.Gauge<Long>() {
                 @Override
                 public Long getValue() {
-                    return currentMessagesPendingGauge.value();
+                    return currentMessagesPendingGauge.getAsLong();
                 }
             });
         }
     }
 
     @Override
-    public void setMessagesOutPendingGauge(final Gauge currentMessagesOutPendingGauge) {
+    public void setMessagesOutPendingGauge(final LongSupplier currentMessagesOutPendingGauge) {
         final String gaugeName = getName(MESSAGES_OUT_PENDING_GAUGE);
         // If the registry doesn't already have this gauge, then add it.
         if (!registry.getGauges().containsKey(gaugeName)) {
             registry.register(gaugeName, new com.codahale.metrics.Gauge<Long>() {
                 @Override
                 public Long getValue() {
-                    return currentMessagesOutPendingGauge.value();
+                    return currentMessagesOutPendingGauge.getAsLong();
                 }
             });
         }

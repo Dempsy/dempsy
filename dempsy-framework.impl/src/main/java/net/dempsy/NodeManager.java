@@ -156,6 +156,8 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         threading = tr.track(new DefaultThreadingModel("NodeThreadPool-" + nodeId + "-"))
                 .configure(node.getConfiguration()).start();
 
+        nodeStatsCollector.setMessagesPendingGauge(() -> threading.getNumberLimitedPending());
+
         final NodeReceiver nodeReciever = receiver == null ? null : tr
                 .track(new NodeReceiver(containers.stream().map(pc -> pc.container).collect(Collectors.toList()), threading, nodeStatsCollector));
 

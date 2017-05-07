@@ -18,10 +18,6 @@ package net.dempsy.monitoring;
 
 public interface StatsCollector extends AutoCloseable {
 
-    public interface Gauge {
-        long value();
-    }
-
     /**
      * A timer context is returned from start calls on the Stats collector to provide a thread-safe context for stopping the started timer. This is analogous to Yammer Metrics use of Times.
      */
