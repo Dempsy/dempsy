@@ -1,5 +1,6 @@
 package net.dempsy.transport.tcp;
 
+import static net.dempsy.transport.tcp.nio.internal.NioUtils.dontInterrupt;
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
@@ -32,6 +33,7 @@ import net.dempsy.serialization.jackson.JsonSerializer;
 import net.dempsy.serialization.kryo.KryoSerializer;
 import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.threading.ThreadingModel;
+import net.dempsy.transport.DisruptableRecevier;
 import net.dempsy.transport.Listener;
 import net.dempsy.transport.Receiver;
 import net.dempsy.transport.RoutedMessage;
@@ -198,15 +200,7 @@ public class TcpTransportTest {
             letMeGo.set(true);
 
             // the total number of messages sent should be this count.
-            assertTrue(poll(new Long((long) numThreads * (long) numMessagePerThread), v -> {
-                try {
-                    Thread.sleep(1000);
-                } catch (final InterruptedException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
-                return v.longValue() == msgCount.get();
-            }));
+            assertTrue(poll(new Long((long) numThreads * (long) numMessagePerThread), v -> v.longValue() == msgCount.get()));
 
             // let the threads exit
             waitToExit.countDown();
@@ -229,4 +223,65 @@ public class TcpTransportTest {
         runMultiMessage("testMultiHugeMessage", 5, 100, "" + messageNum.incrementAndGet() + TestWordCount.readBible() + messageNum.incrementAndGet(),
                 new JsonSerializer());
     }
+
+    @Test
+    public void testConnectionRecovery() throws Exception {
+        try (final ServiceTracker tr = new ServiceTracker();) {
+            final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
+                    .setNumHandlers(2)
+                    .setUseLocalHost(true);
+
+            // can't test connection recovery here.
+            if (!(r instanceof DisruptableRecevier))
+                return;
+
+            final TcpAddress addr = r.getAddress();
+            LOGGER.debug(addr.toString());
+            final AtomicReference<RoutedMessage> rm = new AtomicReference<>(null);
+            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testConnectionRecovery"));
+            r.start((Listener<RoutedMessage>) msg -> {
+                rm.set(msg);
+                return true;
+            }, tr.track(new TestInfrastructure(tm)));
+
+            try (final SenderFactory sf = senderFactory.get();) {
+                sf.start(new TestInfrastructure(tm) {
+                    @Override
+                    public String getNodeId() {
+                        return "test";
+                    }
+                });
+                final Sender sender = sf.getSender(addr);
+                sender.send(new RoutedMessage(new int[] { 0 }, "Hello", "Hello"));
+
+                assertTrue(poll(o -> rm.get() != null));
+                assertEquals("Hello", rm.get().message);
+
+                assertTrue(((DisruptableRecevier) r).disrupt(addr));
+
+                final AtomicBoolean stop = new AtomicBoolean(false);
+                final RoutedMessage resetMessage = new RoutedMessage(new int[] { 0 }, "RESET", "RESET");
+                final Thread senderThread = new Thread(() -> {
+                    while (!stop.get()) {
+                        sender.send(resetMessage);
+                        dontInterrupt(() -> Thread.sleep(100));
+                    }
+                }, "testConnectionRecovery-sender");
+                senderThread.start();
+
+                try {
+                    assertTrue(poll(o -> "RESET".equals(rm.get().message)));
+                } finally {
+                    stop.set(true);
+
+                    if (!poll(senderThread, t -> {
+                        dontInterrupt(() -> t.join(10000));
+                        return !t.isAlive();
+                    }))
+                        LOGGER.error("FAILED TO SHUT DOWN TEST SENDING THREAD. THREAD LEAK!");
+                }
+            }
+        }
+    }
+
 }

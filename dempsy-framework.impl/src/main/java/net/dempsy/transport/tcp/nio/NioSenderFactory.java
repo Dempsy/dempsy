@@ -48,7 +48,7 @@ public class NioSenderFactory implements SenderFactory {
 
     private final ConcurrentHashMap<TcpAddress, NioSender> senders = new ConcurrentHashMap<>();
 
-    final StupidHashMap<NioSender, NioSender> working = new StupidHashMap<>();
+    final StupidHashMap<NioSender, NioSender> idleSenders = new StupidHashMap<>();
 
     // =======================================
     // Read from NioSender
@@ -120,9 +120,9 @@ public class NioSenderFactory implements SenderFactory {
             throw new MessageTransportException(nodeId + " sender had getSender called while stopped.");
 
         try {
-            ret.connect();
+            ret.connect(false);
         } catch (final IOException e) {
-            throw new MessageTransportException(nodeId + " sender failed to connect to " + destination.getGuid(), e);
+            throw new MessageTransportException(nodeId + " sender failed to connect to " + destination, e);
         }
         return ret;
     }
@@ -140,8 +140,6 @@ public class NioSenderFactory implements SenderFactory {
 
         maxNumberOfQueuedOutgoing = Integer.parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_MAX_QUEUED, DEFAULT_SENDER_MAX_QUEUED));
 
-        // blocking = Boolean.parseBoolean(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_BLOCKING, DEFAULT_SENDER_BLOCKING));
-
         stopTimeout = Integer
                 .parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_STOP_TIMEOUT_MILLIS, DEFAULT_SENDER_STOP_TIMEOUT_MILLIS));
 
@@ -150,7 +148,7 @@ public class NioSenderFactory implements SenderFactory {
 
         // now start the sending threads.
         for (int i = 0; i < sendings.length; i++)
-            chain(sendingsThreads[i] = new Thread(sendings[i] = new Sending(sendingsRunning, nodeId, working, statsCollector),
+            chain(sendingsThreads[i] = new Thread(sendings[i] = new Sending(sendingsRunning, nodeId, idleSenders, statsCollector),
                     "nio-sender-" + i + "-" + nodeId), t -> t.start());
 
     }
@@ -166,12 +164,11 @@ public class NioSenderFactory implements SenderFactory {
         final StupidHashMap<NioSender, NioSender> idleSenders;
         final NodeStatsCollector statsCollector;
 
-        Sending(final AtomicBoolean isRunning, final String nodeId, final StupidHashMap<NioSender, NioSender> working,
-                final NodeStatsCollector statsCollector)
-                throws MessageTransportException {
+        Sending(final AtomicBoolean isRunning, final String nodeId, final StupidHashMap<NioSender, NioSender> idleSenders,
+                final NodeStatsCollector statsCollector) throws MessageTransportException {
             this.isRunning = isRunning;
             this.nodeId = nodeId;
-            this.idleSenders = working;
+            this.idleSenders = idleSenders;
             this.statsCollector = statsCollector;
             try {
                 this.selector = Selector.open();
@@ -273,7 +270,7 @@ public class NioSenderFactory implements SenderFactory {
                     // ... if the new sender has messages ...
                     if (cur.messages.peek() != null) {
                         // ... register the channel for writing and attach the SenderHolder
-                        new SenderHolder(cur).register(selector);
+                        new SenderHolder(cur, LOGGER).register(selector);
                         iter.remove();
                         didSomething = true; // we did something.
                     }

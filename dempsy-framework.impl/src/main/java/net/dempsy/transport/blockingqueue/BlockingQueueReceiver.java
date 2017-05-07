@@ -127,7 +127,7 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
                     "Cannot set a new Listener (" + SafeString.objectDescription(listener) + ") on a " + BlockingQueueReceiver.class.getSimpleName()
                             + " when there's one already set (" + SafeString.objectDescription(this.listener) + ")");
         this.listener = listener;
-        infra.getThreadingModel().runDaemon(this, "BQReceiver-" + address.getGuid());
+        infra.getThreadingModel().runDaemon(this, "BQReceiver-" + address.toString());
     }
 
     @Override

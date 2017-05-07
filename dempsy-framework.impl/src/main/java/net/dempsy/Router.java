@@ -135,7 +135,11 @@ public class Router extends Dispatcher implements Service {
             final Set<NodeAddress> toDelete = update.toDelete;
 
             if (toDelete.size() > 0) { // just clear all senders.
-                senders.clear();
+                for (final NodeAddress a : toDelete) {
+                    final Sender s = senders.get(a);
+                    if (s != null)
+                        s.stop();
+                }
             }
 
             final Map<NodeAddress, NodeInformation> newCurrent = new HashMap<>();
@@ -197,7 +201,14 @@ public class Router extends Dispatcher implements Service {
                     LOGGER.warn("Problem while shutting down an outbound router", rte);
                 }
             });
-            senders.clear();
+
+            final List<Sender> tmps = new ArrayList<>();
+
+            // keep removing
+            while (senders.size() > 0)
+                senders.keySet().forEach(k -> tmps.add(senders.remove(k)));
+
+            tmps.forEach(s -> s.stop());
         }
 
         public Sender getSender(final NodeAddress na) {
@@ -212,6 +223,7 @@ public class Router extends Dispatcher implements Service {
             }
             return ret;
         }
+
     }
 
     public Router(final RoutingStrategyManager manager, final NodeAddress thisNode, final String thisNodeId, final NodeReceiver nodeReciever,
@@ -226,12 +238,8 @@ public class Router extends Dispatcher implements Service {
 
     @Override
     public void dispatch(final KeyedMessageWithType message) {
-        // if (LOGGER.isTraceEnabled())
-        // LOGGER.trace("Dispatching " + SafeString.objectDescription(message.message) + ".");
-
         boolean messageSentSomewhere = false;
         try {
-
             ApplicationState tmp = outbounds.get();
 
             // if we're in the midst of an update then we really want to wait for the new state.
@@ -310,7 +318,6 @@ public class Router extends Dispatcher implements Service {
                             LOGGER.error("Couldn't send message to " + curNode + " from " + thisNodeId + " because there's no "
                                     + Sender.class.getSimpleName());
                     } else {
-                        // TODO: more error handling
                         sf.send(toSend);
                         messageSentSomewhere = true;
                     }
@@ -380,7 +387,6 @@ public class Router extends Dispatcher implements Service {
                     try {
                         final ApplicationState newState = obs.apply(ud, tmanager, statsCollector, manager);
                         outbounds.set(newState);
-
                         isReady.set(true);
                         return true;
                     } catch (final RuntimeException rte) {

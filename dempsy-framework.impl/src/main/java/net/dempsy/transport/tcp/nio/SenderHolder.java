@@ -1,12 +1,17 @@
 package net.dempsy.transport.tcp.nio;
 
+import static net.dempsy.transport.tcp.nio.internal.NioUtils.closeQuietly;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.util.Arrays;
 import java.util.LinkedList;
+
+import org.slf4j.Logger;
 
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.serialization.Serializer;
@@ -16,14 +21,15 @@ import net.dempsy.transport.tcp.nio.internal.NioUtils.ReturnableBufferOutput;
 
 public class SenderHolder {
     public final NioSender sender;
-
+    private final Logger LOGGER;
     private boolean previouslyWroteOddNumBufs = false;
 
     private int numBytesToWrite = 0;
     private final LinkedList<ReturnableBufferOutput> serializedMessages = new LinkedList<>();
 
-    public SenderHolder(final NioSender sender) {
+    public SenderHolder(final NioSender sender, final Logger l) {
         this.sender = sender;
+        this.LOGGER = l;
     }
 
     private final void add(final ReturnableBufferOutput ob) {
@@ -62,6 +68,15 @@ public class SenderHolder {
         prepareToWriteBestEffort();
     }
 
+    private static ByteBuffer[] removeFirst(final ByteBuffer[] src, final boolean andSecond) {
+        final LinkedList<ByteBuffer> tmp = new LinkedList<>(Arrays.asList(src));
+        if (tmp.size() > 0)
+            tmp.removeFirst();
+        if (andSecond && tmp.size() > 0)
+            tmp.removeFirst();
+        return tmp.toArray(new ByteBuffer[tmp.size()]);
+    }
+
     public boolean writeSomethingReturnDone(final SelectionKey key, final NodeStatsCollector statsCollector) throws IOException {
         prepareToWriteBestEffort();
 
@@ -72,7 +87,7 @@ public class SenderHolder {
             // collect up the ByteBuffers to send.
             final int numBb = serializedMessages.size();
             final ReturnableBufferOutput[] toSendRbos = new ReturnableBufferOutput[numBb];
-            final ByteBuffer[] toSend = new ByteBuffer[numBb];
+            ByteBuffer[] toSend = new ByteBuffer[numBb];
             int curIndex = 0;
 
             for (final ReturnableBufferOutput c : serializedMessages) {
@@ -82,7 +97,29 @@ public class SenderHolder {
             }
 
             final SocketChannel channel = (SocketChannel) key.channel();
-            channel.write(toSend); // okay, let's see what we have now.
+            try {
+                channel.write(toSend); // okay, let's see what we have now.
+            } catch (final IOException ioe) {
+                LOGGER.warn("The connection from " + sender.nodeId + " to " + sender.addr, ioe);
+
+                if (previouslyWroteOddNumBufs || (toSend[0].hasRemaining() && toSend[0].position() > 0)) { // this means we were in the MIDDLE of a message.
+                    statsCollector.messageNotSent();
+                    toSend = removeFirst(toSend, !previouslyWroteOddNumBufs);
+                }
+                previouslyWroteOddNumBufs = false;
+
+                // now let's retry the connection
+                final SocketChannel oldChannel = sender.makeChannel(); // remake the channel
+                try {
+                    closeQuietly(oldChannel.socket(), LOGGER, sender.nodeId + " failed to close previous channel to " + sender.addr);
+                    sender.connect(true); // reconnect.
+
+                    // Eliminate the key - only if the connect succeeded
+                    key.cancel(); // otherwise this is the only place to keep track of the channel
+                } catch (final IOException ioe2) {
+                    LOGGER.warn("Failed the reconnection attempt from " + sender.nodeId + " to " + sender.addr, ioe2);
+                }
+            }
 
             numBytesToWrite = 0;
             serializedMessages.clear();
@@ -91,9 +128,9 @@ public class SenderHolder {
                 final ByteBuffer curBb = toSend[i];
                 final ReturnableBufferOutput curRob = toSendRbos[i];
                 final int remaining = curBb.remaining();
-                if (remaining != 0) {
+                if (remaining != 0)
                     addBack(curRob, remaining);
-                } else
+                else
                     numBufsCompletelyWritten++;
             }
 
@@ -108,7 +145,6 @@ public class SenderHolder {
                 statsCollector.messageSent(null);
 
             return !(readyToWrite(false) || readyToSerialize());
-
         } else
             return sender.messages.peek() == null;
 

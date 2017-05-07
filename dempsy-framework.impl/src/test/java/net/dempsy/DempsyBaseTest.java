@@ -114,7 +114,6 @@ public abstract class DempsyBaseTest {
                 new String[] { "zookeeper" },
                 new String[] { "nio" },
                 new String[] { "kryo" });
-
     }
 
     public static boolean requiresSerialization(final String transport) {

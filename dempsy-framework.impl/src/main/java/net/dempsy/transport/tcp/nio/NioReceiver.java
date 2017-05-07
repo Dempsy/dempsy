@@ -12,6 +12,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,8 +25,10 @@ import net.dempsy.DempsyException;
 import net.dempsy.Infrastructure;
 import net.dempsy.serialization.Serializer;
 import net.dempsy.threading.ThreadingModel;
+import net.dempsy.transport.DisruptableRecevier;
 import net.dempsy.transport.Listener;
 import net.dempsy.transport.MessageTransportException;
+import net.dempsy.transport.NodeAddress;
 import net.dempsy.transport.RoutedMessage;
 import net.dempsy.transport.tcp.AbstractTcpReceiver;
 import net.dempsy.transport.tcp.TcpUtils;
@@ -33,7 +36,7 @@ import net.dempsy.transport.tcp.nio.internal.NioUtils;
 import net.dempsy.transport.tcp.nio.internal.NioUtils.ReturnableBufferOutput;
 import net.dempsy.util.io.MessageBufferInput;
 
-public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<T>> {
+public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<T>> implements DisruptableRecevier {
     private static Logger LOGGER = LoggerFactory.getLogger(NioReceiver.class);
 
     private final AtomicBoolean isRunning = new AtomicBoolean(true);
@@ -97,10 +100,10 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         // before starting the acceptor, make sure we have Readers created.
         try {
             for (int i = 0; i < readers.length; i++)
-                readers[i] = new Reader<T>(isRunning, address.getGuid(), (Listener<T>) listener, serializer, maxMessageSize);
+                readers[i] = new Reader<T>(isRunning, address, (Listener<T>) listener, serializer, maxMessageSize);
         } catch (final IOException ioe) {
-            LOGGER.error(address.getGuid() + " failed to start up readers", ioe);
-            throw new MessageTransportException(address.getGuid() + " failed to start up readers", ioe);
+            LOGGER.error(address.toString() + " failed to start up readers", ioe);
+            throw new MessageTransportException(address.toString() + " failed to start up readers", ioe);
         }
 
         final ThreadingModel threadingModel = infra.getThreadingModel();
@@ -109,7 +112,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             threadingModel.runDaemon(readers[i], "nio-reader-" + i + "-" + address);
 
         // start the acceptor
-        threadingModel.runDaemon(acceptor = new Acceptor(binding, isRunning, readers, address.getGuid()), "nio-acceptor-" + address);
+        threadingModel.runDaemon(acceptor = new Acceptor(binding, isRunning, readers, address), "nio-acceptor-" + address);
     }
 
     @Override
@@ -117,6 +120,16 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     public NioReceiver<T> setNumHandlers(final int numHandlers) {
         readers = new Reader[numHandlers];
         return this;
+    }
+
+    // =============================================================================
+    // These methods are to support testing
+    // =============================================================================
+    @Override
+    public boolean disrupt(final NodeAddress nodeAddress) {
+        return Arrays.stream(readers)
+                .filter(r -> r.disrupt(nodeAddress))
+                .findFirst().orElse(null) != null;
     }
 
     // =============================================================================
@@ -150,9 +163,9 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         final long numReaders;
         final AtomicLong messageNum = new AtomicLong(0);
         final AtomicBoolean done = new AtomicBoolean(false);
-        final String thisNode;
+        final NioAddress thisNode;
 
-        private Acceptor(final Binding binding, final AtomicBoolean isRunning, final Reader<?>[] readers, final String thisNode) {
+        private Acceptor(final Binding binding, final AtomicBoolean isRunning, final Reader<?>[] readers, final NioAddress thisNode) {
             this.binding = binding;
             this.isRunning = isRunning;
             this.readers = readers;
@@ -230,12 +243,12 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     // =============================================================================
     private static class Client<T> {
         ReturnableBufferOutput partialRead = null;
-        private final String thisNode;
+        private final NioAddress thisNode;
         private final Listener<T> typedListener;
         private final Serializer serializer;
         private final int maxMessageSize;
 
-        private Client(final String thisNode, final Listener<T> listener, final Serializer serializer, final int maxMessageSize) {
+        private Client(final NioAddress thisNode, final Listener<T> listener, final Serializer serializer, final int maxMessageSize) {
             this.thisNode = thisNode;
             this.typedListener = listener;
             this.serializer = serializer;
@@ -249,17 +262,6 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
          */
         private final int readSize(final SocketChannel channel, final ByteBuffer bb) throws IOException {
             final int size;
-
-            // if (bb.position() < 4) {
-            // bb.limit(4);
-            // if (channel.read(bb) == -1)
-            // return -2;
-            // }
-            //
-            // if (bb.position() >= 4)
-            // size = bb.getInt(0);
-            // else
-            // size = -1;
 
             if (bb.position() < 2) {
                 // read a Short
@@ -375,19 +377,18 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     }
 
     public static class Reader<T> implements Runnable {
-
         private final AtomicReference<SocketChannel> landing = new AtomicReference<SocketChannel>(null);
         private final Selector selector;
         private final AtomicBoolean isRunning;
-        private final String thisNode;
+        private final NioAddress thisNode;
         private final Listener<T> typedListener;
         private final Serializer serializer;
         private final int maxMessageSize;
         private final AtomicBoolean done = new AtomicBoolean(false);
+        private final AtomicReference<CloseCommand> clientToClose = new AtomicReference<CloseCommand>(null);
 
-        public Reader(final AtomicBoolean isRunning, final String thisNode, final Listener<T> typedListener, final Serializer serializer,
-                final int maxMessageSize)
-                throws IOException {
+        public Reader(final AtomicBoolean isRunning, final NioAddress thisNode, final Listener<T> typedListener, final Serializer serializer,
+                final int maxMessageSize) throws IOException {
             selector = Selector.open();
             this.isRunning = isRunning;
             this.thisNode = thisNode;
@@ -398,7 +399,6 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
         @Override
         public void run() {
-
             try {
                 while (isRunning.get()) {
                     try {
@@ -420,7 +420,6 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                                     LOGGER.info(thisNode + " reciever got an unexpexted selection key " + key);
                             }
                         } else if (isRunning.get() && !done.get()) {
-
                             // if we processed no keys then maybe we have a new client passed over to us.
                             final SocketChannel newClient = landing.getAndSet(null); // mark it as retrieved.
                             if (newClient != null) {
@@ -431,15 +430,67 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                                 LOGGER.debug(thisNode + " received connection from " + remote);
                                 newClient.register(selector, SelectionKey.OP_READ,
                                         new Client<T>(thisNode, typedListener, serializer, maxMessageSize));
+                            } else if (clientToClose.get() != null) {
+                                final NioAddress addr = clientToClose.get().addrToClose;
+                                final Object[] toClose = selector.keys().stream()
+                                        .map(k -> new Object[] { k, (Client<?>) k.attachment() })
+                                        .filter(c -> ((Client<?>) c[1]).thisNode.equals(addr))
+                                        .findFirst()
+                                        .orElse(null);
+
+                                if (toClose != null) {
+                                    final SelectionKey key = (SelectionKey) toClose[0];
+                                    final Client<?> client = ((Client<?>) toClose[1]);
+                                    try {
+                                        client.closeup((SocketChannel) key.channel(), key);
+                                    } finally {
+                                        clientToClose.get().set(client);
+                                    }
+                                } else
+                                    clientToClose.set(null);
                             }
                         }
                     } catch (final IOException ioe) {
-                        LOGGER.error("Failed during read loop.", ioe);
+                        LOGGER.error("Failed during reader loop.", ioe);
                     }
                 }
             } finally {
                 done.set(true);
             }
+        }
+
+        private static class CloseCommand {
+            public final NioAddress addrToClose;
+            public volatile boolean done;
+            public Client<?> clientClosed;
+
+            CloseCommand(final NioAddress addrToClose) {
+                this.addrToClose = addrToClose;
+                done = false;
+            }
+
+            public void set(final Client<?> clientClosed) {
+                this.clientClosed = clientClosed;
+                done = true;
+            }
+        }
+
+        boolean disrupt(final NodeAddress addr) {
+            final CloseCommand cmd = new CloseCommand((NioAddress) addr);
+
+            // wait for the commend landing pad to be clear and claim it once available
+            while (!clientToClose.compareAndSet(null, cmd) && isRunning.get())
+                Thread.yield();
+
+            // now wait for the reader thread to pick up the command and respond
+            do {
+                selector.wakeup();
+                Thread.yield();
+            } while (!clientToClose.get().done && isRunning.get()); // double volatile read
+
+            clientToClose.set(null); // clear the command
+
+            return cmd.clientClosed != null;
         }
 
         // assumes isRunning is already set to false
@@ -450,7 +501,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             }
         }
 
-        public synchronized void newClient(final SocketChannel newClient) {
+        public synchronized void newClient(final SocketChannel newClient) throws IOException {
             // attempt to set the landing as long as it's null
             while (landing.compareAndSet(null, newClient))
                 Thread.yield();

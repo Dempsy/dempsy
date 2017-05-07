@@ -1,6 +1,7 @@
 package net.dempsy.transport.tcp;
 
 import java.net.InetAddress;
+import java.util.UUID;
 
 import net.dempsy.transport.NodeAddress;
 
@@ -25,7 +26,8 @@ public abstract class TcpAddress implements NodeAddress {
     public TcpAddress(final InetAddress inetAddress, final int port, final String serializerId, final int recvBufferSize) {
         this.inetAddress = inetAddress;
         this.port = port;
-        this.guid = inetAddress.getHostAddress() + ":" + port;
+        final String uuid = UUID.randomUUID().toString();
+        this.guid = inetAddress.getHostAddress() + ":" + port + "-" + uuid;
         this.serializerId = serializerId;
         this.recvBufferSize = recvBufferSize;
     }

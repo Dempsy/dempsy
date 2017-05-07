@@ -20,17 +20,19 @@ import net.dempsy.transport.Sender;
 import net.dempsy.transport.tcp.TcpAddress;
 import net.dempsy.transport.tcp.nio.internal.NioUtils;
 
+// TODO: blocking that creates back-pressure
 public final class NioSender implements Sender {
     private final static Logger LOGGER = LoggerFactory.getLogger(NioSender.class);
 
-    private final NodeStatsCollector statsCollector;
-    private final TcpAddress addr;
+    final TcpAddress addr;
+    final String nodeId;
+
     private final NioSenderFactory owner;
-    private final String nodeId;
+    private final NodeStatsCollector statsCollector;
 
     public final Serializer serializer;
 
-    final SocketChannel channel;
+    SocketChannel channel = null;
 
     private boolean connected = false;
     private int sendBufferSize = -1;
@@ -49,11 +51,7 @@ public final class NioSender implements Sender {
 
         // messages = new LinkedBlockingQueue<>();
         messages = new ArrayBlockingQueue<>(2);
-        try {
-            channel = SocketChannel.open();
-        } catch (final IOException e) {
-            throw new MessageTransportException(e); // this is probably impossible
-        }
+        makeChannel();
     }
 
     @Override
@@ -69,6 +67,7 @@ public final class NioSender implements Sender {
     @Override
     public synchronized void stop() {
         running = false;
+        owner.idleSenders.remove(this);
         dontInterrupt(() -> Thread.sleep(1));
 
         final List<Object> drainTo = new ArrayList<>();
@@ -107,16 +106,27 @@ public final class NioSender implements Sender {
 
     static class StopMessage {}
 
-    void connect() throws IOException {
-        if (!connected) {
-            channel.configureBlocking(true);
-            channel.connect(new InetSocketAddress(addr.inetAddress, addr.port));
+    void connect(final boolean force) throws IOException {
+        if (!connected || force) {
             channel.configureBlocking(false);
+            channel.connect(new InetSocketAddress(addr.inetAddress, addr.port));
+            while (!channel.finishConnect())
+                Thread.yield();
             sendBufferSize = channel.socket().getSendBufferSize();
             recvBufferSize = addr.recvBufferSize;
             connected = true;
-            owner.working.putIfAbsent(this, this);
+            owner.idleSenders.putIfAbsent(this, this);
         }
+    }
+
+    SocketChannel makeChannel() {
+        final SocketChannel ret = channel;
+        try {
+            channel = SocketChannel.open();
+        } catch (final IOException e) {
+            throw new MessageTransportException(e); // this is probably impossible
+        }
+        return ret;
     }
 
     private int cachedBatchSize = -1;
@@ -130,7 +140,7 @@ public final class NioSender implements Sender {
                 ret = recvBufferSize;
             else ret = Math.min(recvBufferSize, sendBufferSize);
             if (ret <= 0) {
-                LOGGER.warn(nodeId + " sender to " + addr.getGuid() + " couldn't determine send and receieve buffer sizes. Setting batch size to ");
+                LOGGER.warn(nodeId + " sender to " + addr.toString() + " couldn't determine send and receieve buffer sizes. Setting batch size to ");
                 ret = owner.mtu;
             }
             cachedBatchSize = Math.min(ret, owner.mtu);
