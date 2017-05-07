@@ -114,8 +114,7 @@ public class DefaultThreadingModel implements ThreadingModel {
                                                                                             // then use the other constructor
             threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
         }
-        executor = Executors.newFixedThreadPool(threadPoolSize,
-                r -> new Thread(r, nameSupplier.get()));
+        executor = Executors.newFixedThreadPool(threadPoolSize, r -> new Thread(r, nameSupplier.get()));
         schedule = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, nameSupplier.get() + "-Scheduled"));
         numLimited = new AtomicLong(0);
 
