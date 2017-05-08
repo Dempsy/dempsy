@@ -308,7 +308,7 @@ public class Router extends Dispatcher implements Service {
 
                 final RoutedMessage toSend = new RoutedMessage(curAddr.clusters, message.key, message.message);
                 if (curNode.equals(thisNode)) {
-                    nodeReciever.feedbackLoop(toSend);
+                    nodeReciever.feedbackLoop(toSend, false); // this shouldn't count since Router is an OUTGOING class
                     messageSentSomewhere = true;
                 } else {
                     final Sender sf = cur.getSender(curNode);

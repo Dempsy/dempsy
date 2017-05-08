@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -39,6 +40,7 @@ import net.dempsy.lifecycle.annotation.Mp;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.NodeAddress;
 
 public class TestElasticity extends DempsyBaseTest {
@@ -54,8 +56,9 @@ public class TestElasticity extends DempsyBaseTest {
             { "elasticity/mp-num-rank.xml", },
     };
 
-    public TestElasticity(final String routerId, final String containerId, final String sessCtx, final String tpCtx, final String serType) {
-        super(LOGGER, routerId, containerId, sessCtx, tpCtx, serType);
+    public TestElasticity(final String routerId, final String containerId, final String sessCtx, final String tpCtx, final String serType,
+            final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
+        super(LOGGER, routerId, containerId, sessCtx, tpCtx, serType, threadingModelSource);
     }
 
     // ========================================================================

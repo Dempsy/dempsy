@@ -95,6 +95,14 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         return this;
     }
 
+    /**
+     * This methods expects that the thread manager will be started and stopped apart from the NodeManager itself.
+     */
+    public NodeManager threadingModel(final ThreadingModel threading) {
+        this.threading = threading;
+        return this;
+    }
+
     private static Container makeContainer(final String containerTypeId) {
         return new Manager<>(Container.class).getAssociatedInstance(containerTypeId);
     }
@@ -153,8 +161,8 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         if (nodeAddress == null && node.getReceiver() != null)
             LOGGER.warn("The node at " + nodeId + " contains no message processors but has a Reciever set. The receiver will never be started.");
 
-        threading = tr.track(new DefaultThreadingModel("NodeThreadPool-" + nodeId + "-"))
-                .configure(node.getConfiguration()).start();
+        if (threading == null)
+            threading = tr.track(new DefaultThreadingModel("NodeThreadPool-" + nodeId + "-")).configure(node.getConfiguration()).start();
 
         nodeStatsCollector.setMessagesPendingGauge(() -> threading.getNumberLimitedPending());
 

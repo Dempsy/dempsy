@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.junit.runner.RunWith;
@@ -24,15 +25,17 @@ import net.dempsy.cluster.local.LocalClusterSessionFactory;
 import net.dempsy.config.Cluster;
 import net.dempsy.config.Node;
 import net.dempsy.serialization.util.ClassTracker;
+import net.dempsy.threading.DefaultThreadingModel;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.blockingqueue.BlockingQueueAddress;
 import net.dempsy.utils.test.SystemPropertyManager;
 
 @RunWith(Parameterized.class)
 public abstract class DempsyBaseTest {
     /**
-    * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
-    * every runCombos call. This can make tests run for a loooooong time.
-    */
+     * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
+     * every runCombos call. This can make tests run for a loooooong time.
+     */
     public static boolean hardcore = false;
     public static boolean butRotateSerializer = true;
 
@@ -57,6 +60,7 @@ public abstract class DempsyBaseTest {
     protected final String sessionType;
     protected final String transportType;
     protected final String serializerType;
+    protected final Function<String, ThreadingModel> threadingModelSource;
 
     protected static final String ROUTER_ID_PREFIX = "net.dempsy.router.";
     protected static final String CONTAINER_ID_PREFIX = "net.dempsy.container.";
@@ -68,14 +72,15 @@ public abstract class DempsyBaseTest {
     protected static final String SERIALIZER_CTX_SUFFIX = ".xml";
     protected static final int NUM_MICROSHARDS = 16;
 
-    protected DempsyBaseTest(final Logger logger, final String routerId, final String containerId,
-            final String sessionType, final String transportType, final String serializerType) {
+    protected DempsyBaseTest(final Logger logger, final String routerId, final String containerId, final String sessionType,
+            final String transportType, final String serializerType, final Function<String, ThreadingModel> threadingModelSource) {
         this.LOGGER = logger;
         this.routerId = routerId;
         this.containerId = containerId;
         this.sessionType = sessionType;
         this.transportType = transportType;
         this.serializerType = serializerType;
+        this.threadingModelSource = threadingModelSource;
     }
 
     private static class Combos {
@@ -84,19 +89,36 @@ public abstract class DempsyBaseTest {
         final String[] sessions;
         final String[] transports;
         final String[] serializers;
+        final Object[][] threadingDetails;
 
         public Combos(final String[] routers, final String[] containers, final String[] sessions, final String[] transports,
-                final String[] serializers) {
+                final String[] serializers, final Object[][] threadingDetails) {
             this.routers = routers;
             this.containers = containers;
             this.sessions = sessions;
             this.transports = transports;
             this.serializers = serializers;
+            this.threadingDetails = threadingDetails;
         }
     }
 
     public static List<String> elasticRouterIds = Arrays.asList("managed");
     public static String[] transportsThatRequireSerializer = { "nio" };
+
+    public static Object[][] threadingModelDetails = {
+            { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                    .setAdditionalThreads(0)
+                    .setCoresFactor(1.0)
+                    .setBlocking(true)
+                    .setMaxNumberOfQueuedLimitedTasks(10L)
+            },
+            { "non-blocking", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                    .setAdditionalThreads(0)
+                    .setCoresFactor(1.0)
+                    .setBlocking(false)
+                    .setMaxNumberOfQueuedLimitedTasks(-1)
+            },
+    };
 
     public static Combos hardcore() {
         return new Combos(
@@ -104,7 +126,21 @@ public abstract class DempsyBaseTest {
                 new String[] { "locking", "nonlocking", "altnonlocking" },
                 new String[] { "local", "zookeeper" },
                 new String[] { "bq", "passthrough", "nio" },
-                new String[] { "json", "java", "kryo" });
+                new String[] { "json", "java", "kryo" },
+                new Object[][] {
+                        { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                                .setAdditionalThreads(0)
+                                .setCoresFactor(1.0)
+                                .setBlocking(true)
+                                .setMaxNumberOfQueuedLimitedTasks(10L)
+                        },
+                        { "non-blocking", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                                .setAdditionalThreads(0)
+                                .setCoresFactor(1.0)
+                                .setBlocking(false)
+                                .setMaxNumberOfQueuedLimitedTasks(-1)
+                        },
+                });
     }
 
     public static Combos production() {
@@ -113,14 +149,28 @@ public abstract class DempsyBaseTest {
                 new String[] { "altnonlocking" },
                 new String[] { "zookeeper" },
                 new String[] { "nio" },
-                new String[] { "kryo" });
+                new String[] { "kryo" },
+                new Object[][] {
+                        { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                                .setAdditionalThreads(0)
+                                .setCoresFactor(1.0)
+                                .setBlocking(true)
+                                .setMaxNumberOfQueuedLimitedTasks(1000L)
+                        },
+                        { "unbounded", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                                .setAdditionalThreads(0)
+                                .setCoresFactor(1.0)
+                                .setBlocking(false)
+                                .setMaxNumberOfQueuedLimitedTasks(-1)
+                        },
+                });
     }
 
     public static boolean requiresSerialization(final String transport) {
         return Arrays.asList(transportsThatRequireSerializer).contains(transport);
     }
 
-    @Parameters(name = "{index}: routerId={0}, container={1}, cluster={2}, transport={3}/{4}")
+    @Parameters(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
     public static Collection<Object[]> combos() {
         final Combos combos = (hardcore) ? hardcore() : production();
 
@@ -132,18 +182,21 @@ public abstract class DempsyBaseTest {
         for (final String router : combos.routers) {
             for (final String container : combos.containers) {
                 for (final String sessFact : combos.sessions) {
-                    for (final String tp : combos.transports) {
-                        if (requiresSerialization(tp)) {
-                            if (butRotateSerializer) {
-                                ret.add(new Object[] { router, container, sessFact, tp,
-                                        combos.serializers[(serializerIndex % combos.serializers.length)] });
-                                serializerIndex++;
-                            } else {
-                                for (final String ser : combos.serializers)
-                                    ret.add(new Object[] { router, container, sessFact, tp, ser });
-                            }
-                        } else
-                            ret.add(new Object[] { router, container, sessFact, tp, "none" });
+                    for (final Object[] threading : combos.threadingDetails) {
+                        for (final String tp : combos.transports) {
+                            if (requiresSerialization(tp)) {
+                                if (butRotateSerializer) {
+                                    ret.add(new Object[] { router, container, sessFact, tp,
+                                            combos.serializers[(serializerIndex % combos.serializers.length)],
+                                            threading[0], threading[1] });
+                                    serializerIndex++;
+                                } else {
+                                    for (final String ser : combos.serializers)
+                                        ret.add(new Object[] { router, container, sessFact, tp, ser, threading[0], threading[1] });
+                                }
+                            } else
+                                ret.add(new Object[] { router, container, sessFact, tp, "none" });
+                        }
                     }
                 }
             }
@@ -208,6 +261,7 @@ public abstract class DempsyBaseTest {
 
     private static AtomicLong runComboSequence = new AtomicLong(0);
     protected static String currentAppName = null;
+    protected static ThreadingModel threading;
 
     protected void runCombos(final String testName, final ComboFilter filter, final String[][] ctxs, final TestToRun test) throws Exception {
         runCombos(testName, filter, ctxs, null, test);
@@ -234,6 +288,8 @@ public abstract class DempsyBaseTest {
                     .getBean(ClusterInfoSessionFactory.class);
 
             currentSessionFactory = sessFact;
+
+            tr.track(threading = threadingModelSource.apply(testName)).start();
 
             final List<NodeManagerWithContext> reverseCpCtxs = reverseRange(0, ctxs.length)
                     .mapToObj(i -> {
@@ -270,6 +326,7 @@ public abstract class DempsyBaseTest {
             LocalClusterSessionFactory.completeReset();
             BlockingQueueAddress.completeReset();
             ClassTracker.dumpResults();
+            threading = null;
         }
     }
 
@@ -286,6 +343,7 @@ public abstract class DempsyBaseTest {
 
         return currentlyTracking.track(new NodeManagerWithContext(new NodeManager()
                 .node(ctx.getBean(Node.class))
+                .threadingModel(threading)
                 .collaborator(uncheck(() -> currentSessionFactory.createSession()))
                 .start(), ctx));
     }

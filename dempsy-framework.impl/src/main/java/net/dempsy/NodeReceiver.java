@@ -27,7 +27,7 @@ public class NodeReceiver implements Listener<RoutedMessage> {
     @Override
     public boolean onMessage(final RoutedMessage message) throws MessageTransportException {
         statsCollector.messageReceived(message);
-        feedbackLoop(message);
+        feedbackLoop(message, true);
         return true;
     }
 
@@ -54,7 +54,7 @@ public class NodeReceiver implements Listener<RoutedMessage> {
         Arrays.stream(message.containers).forEach(container -> containers[container].dispatch(new KeyedMessage(message.key, message.message), true));
     }
 
-    public void feedbackLoop(final RoutedMessage message) {
+    public void feedbackLoop(final RoutedMessage message, final boolean count) {
         threadModel.submitLimited(new ThreadingModel.Rejectable<Object>() {
 
             @Override
@@ -67,6 +67,6 @@ public class NodeReceiver implements Listener<RoutedMessage> {
             public void rejected() {
                 statsCollector.messageDiscarded(message);
             }
-        }, true);
+        }, count);
     }
 }

@@ -13,7 +13,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DefaultThreadingModel implements ThreadingModel {
+    private static Logger LOGGER = LoggerFactory.getLogger(DefaultThreadingModel.class);
+
     private static final int minNumThreads = 4;
 
     public static final String CONFIG_KEY_MAX_PENDING = "max_pending";
@@ -28,9 +33,12 @@ public class DefaultThreadingModel implements ThreadingModel {
     public static final String CONFIG_KEY_HARD_SHUTDOWN = "hard_shutdown";
     public static final String DEFAULT_HARD_SHUTDOWN = "true";
 
+    public static final String CONFIG_KEY_BLOCKING = "blocking";
+    public static final String DEFAULT_BLOCKING = "false";
+
     private ScheduledExecutorService schedule = null;
     private ExecutorService executor = null;
-    private AtomicLong numLimited = null;
+    private final AtomicLong numLimited = new AtomicLong(0);
     private long maxNumWaitingLimitedTasks;
     private int threadPoolSize;
 
@@ -39,6 +47,9 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     private final Supplier<String> nameSupplier;
     private boolean hardShutdown = Boolean.parseBoolean(DEFAULT_ADDITIONAL_THREADS);
+
+    private boolean blocking = Boolean.parseBoolean(DEFAULT_BLOCKING);
+    SubmitLimited submitter = null;
 
     public DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
         this.nameSupplier = nameSupplier;
@@ -105,6 +116,15 @@ public class DefaultThreadingModel implements ThreadingModel {
         return this;
     }
 
+    /**
+     * Blocking will cause {@link ThreadingModel#submitLimited(net.dempsy.threading.ThreadingModel.Rejectable, boolean)} 
+     * to block if the queue is filled.
+     */
+    public DefaultThreadingModel setBlocking(final boolean blocking) {
+        this.blocking = blocking;
+        return this;
+    }
+
     @Override
     public DefaultThreadingModel start() {
         if (threadPoolSize == -1) {
@@ -116,7 +136,21 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
         executor = Executors.newFixedThreadPool(threadPoolSize, r -> new Thread(r, nameSupplier.get()));
         schedule = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, nameSupplier.get() + "-Scheduled"));
-        numLimited = new AtomicLong(0);
+
+        if (blocking) {
+            if (maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
+                submitter = new BlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks);
+            else {
+                LOGGER.warn("You cannot configure \"" + CONFIG_KEY_BLOCKING + "\" and set \"" + CONFIG_KEY_MAX_PENDING
+                        + "\" to unbounded at the same time. The queue will be unbounded.");
+                submitter = new NonBlockingUnlimited(executor);
+            }
+        } else {
+            if (maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
+                submitter = new NonBlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks);
+            else
+                submitter = new NonBlockingUnlimited(executor);
+        }
 
         return this;
     }
@@ -131,6 +165,7 @@ public class DefaultThreadingModel implements ThreadingModel {
         setHardShutdown(Boolean.parseBoolean(getConfigValue(configuration, CONFIG_KEY_HARD_SHUTDOWN, DEFAULT_HARD_SHUTDOWN)));
         setCoresFactor(Double.parseDouble(getConfigValue(configuration, CONFIG_KEY_CORES_FACTOR, DEFAULT_CORES_FACTOR)));
         setAdditionalThreads(Integer.parseInt(getConfigValue(configuration, CONFIG_KEY_ADDITIONAL_THREADS, DEFAULT_ADDITIONAL_THREADS)));
+        setBlocking(Boolean.parseBoolean(getConfigValue(configuration, CONFIG_KEY_BLOCKING, DEFAULT_BLOCKING)));
         return this;
     }
 
@@ -183,27 +218,7 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
-
-        if (maxNumWaitingLimitedTasks > 0) { // maxNumWaitingLimitedTasks <= 0 means unlimited
-            final Callable<V> task = () -> {
-                if (!count)
-                    return r.call();
-
-                final long num = numLimited.decrementAndGet();
-                if (num <= maxNumWaitingLimitedTasks)
-                    return r.call();
-                r.rejected();
-                return null;
-            };
-
-            if (count)
-                numLimited.incrementAndGet();
-
-            final Future<V> ret = executor.submit(task);
-            return ret;
-        } else
-            return executor.submit(() -> r.call());
-
+        return submitter.submitLimited(r, count);
     }
 
     @Override
@@ -225,6 +240,97 @@ public class DefaultThreadingModel implements ThreadingModel {
 
         // proxy the return future.
         return ret;
+    }
+
+    private static class NonBlockingLimited implements SubmitLimited {
+        private final AtomicLong numLimited;
+        private final ExecutorService executor;
+        private final long maxNumWaitingLimitedTasks;
+
+        NonBlockingLimited(final AtomicLong numLimited, final ExecutorService executor, final long maxNumWaitingLimitedTasks) {
+            this.numLimited = numLimited;
+            this.executor = executor;
+            this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+        }
+
+        @Override
+        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
+            if (count)
+                numLimited.incrementAndGet();
+
+            final Future<V> ret = executor.submit(() -> {
+                if (!count)
+                    return r.call();
+
+                final long num = numLimited.decrementAndGet();
+                if (num <= maxNumWaitingLimitedTasks)
+                    return r.call();
+                r.rejected();
+                return null;
+            });
+            return ret;
+        }
+    }
+
+    private static class BlockingLimited implements SubmitLimited {
+        private final AtomicLong numLimited;
+        private final ExecutorService executor;
+        private final long maxNumWaitingLimitedTasks;
+
+        BlockingLimited(final AtomicLong numLimited, final ExecutorService executor, final long maxNumWaitingLimitedTasks) {
+            this.numLimited = numLimited;
+            this.executor = executor;
+            this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+        }
+
+        @Override
+        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
+            if (count) {
+                // only goes in if I get a position less than the max.
+                long spinner = 0;
+                for (boolean done = false; !done;) {
+                    final long curValue = numLimited.get();
+                    if (curValue < maxNumWaitingLimitedTasks) {
+                        if (numLimited.compareAndSet(curValue, curValue + 1L))
+                            done = true;
+                    } else {
+                        spinner++;
+                        if (spinner < 1000)
+                            Thread.yield();
+                        else {
+                            try {
+                                Thread.sleep(1);
+                            } catch (final InterruptedException ie) {}
+                        }
+                    }
+                }
+            }
+
+            final Future<V> ret = executor.submit(() -> {
+                if (count)
+                    numLimited.decrementAndGet();
+                return r.call();
+            });
+            return ret;
+        }
+    }
+
+    private static class NonBlockingUnlimited implements SubmitLimited {
+        private final ExecutorService executor;
+
+        NonBlockingUnlimited(final ExecutorService executor) {
+            this.executor = executor;
+        }
+
+        @Override
+        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
+            return executor.submit(() -> r.call());
+        }
+    }
+
+    @FunctionalInterface
+    private static interface SubmitLimited {
+        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count);
     }
 
     private static class ProxyFuture<V> implements Future<V> {

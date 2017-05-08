@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
@@ -42,6 +43,7 @@ import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.MessageProcessorLifecycle;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.utils.test.SystemPropertyManager;
 
 public class TestWordCount extends DempsyBaseTest {
@@ -56,8 +58,9 @@ public class TestWordCount extends DempsyBaseTest {
         return writer.toString();
     }
 
-    public TestWordCount(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType) {
-        super(LOGGER, routerId, containerId, sessCtx, tpid, serType);
+    public TestWordCount(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+            final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
+        super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelSource);
     }
 
     @Before
