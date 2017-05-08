@@ -6,7 +6,7 @@ import net.dempsy.messages.MessageProcessorLifecycle;
 
 public class AccessUtil {
 
-    public static Router getRouter(final NodeManager nm) {
+    public static OutgoingDispatcher getRouter(final NodeManager nm) {
         return nm.getRouter();
     }
 
@@ -18,7 +18,7 @@ public class AccessUtil {
         return nm.getContainer(clusterName);
     }
 
-    public static boolean canReach(final Router router, final String cluterName, final KeyedMessageWithType message) {
+    public static boolean canReach(final OutgoingDispatcher router, final String cluterName, final KeyedMessageWithType message) {
         return router.canReach(cluterName, message);
     }
 

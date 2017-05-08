@@ -60,7 +60,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     private Receiver receiver = null;
     private final List<PerContainer> containers = new ArrayList<>();
     private final Map<ClusterId, Adaptor> adaptors = new HashMap<>();
-    private Router router = null;
+    private OutgoingDispatcher router = null;
     private PersistentTask keepNodeRegstered = null;
     private RootPaths rootPaths = null;
     private ClusterStatsCollectorFactory statsCollectorFactory;
@@ -225,7 +225,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         this.rsManager = tr.start(new RoutingStrategyManager(), this);
 
         // create the router but don't start it yet.
-        this.router = new Router(rsManager, nodeAddress, nodeId, nodeReciever, tManager, nodeStatsCollector);
+        this.router = new OutgoingDispatcher(rsManager, nodeAddress, nodeId, nodeReciever, tManager, nodeStatsCollector);
 
         // set up containers
         containers.forEach(pc -> pc.container.setDispatcher(router)
@@ -374,7 +374,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     // ==============================================================================
     // ++++++++++++++++++++++++++ STRICTLY FOR TESTING ++++++++++++++++++++++++++++++
     // ==============================================================================
-    Router getRouter() {
+    OutgoingDispatcher getRouter() {
         return router;
     }
 
