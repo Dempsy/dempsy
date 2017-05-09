@@ -19,6 +19,15 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
     public static final String MESSAGES_PENDING_GAUGE = "messages-pending-gauge";
     public static final String MESSAGES_OUT_PENDING_GAUGE = "messages-out-pending-gauge";
 
+    public static final String[] METRIC_NAMES = new String[] {
+            MESSAGE_RECEIVED,
+            MESSAGE_DISCARDED,
+            MESSAGE_SENT,
+            MESSAGE_NOT_SENT,
+            MESSAGES_PENDING_GAUGE,
+            MESSAGES_OUT_PENDING_GAUGE
+    };
+
     private List<DropwizardReporterSpec> reporters = new ArrayList<>();
 
     private DropwizardStatsReporter reporter;
@@ -52,6 +61,11 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
     public void stop() {
         // Stop the reporters
         reporter.stopReporters();
+
+        // Remove the metrics from the registry
+        for (final String m : METRIC_NAMES) {
+            registry.remove(getName(m));
+        }
     }
 
     @Override

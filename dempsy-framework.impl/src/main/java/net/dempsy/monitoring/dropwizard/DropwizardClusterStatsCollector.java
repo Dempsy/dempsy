@@ -21,6 +21,18 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     public static final String EVICTION_PASS_STARTED_TIMER = "eviction-pass-started-timer";
     public static final String PRE_INSTANTIATION_STARTED_TIMER = "pre-instantiation-started-timer";
 
+    public static final String[] METRIC_NAMES = new String[] {
+            MESSAGES_DISPATCHED,
+            MESSAGES_PROCESSED,
+            MESSAGES_FAILED,
+            MESSAGES_COLLISION,
+            MESSAGES_PROCESSOR_CREATED,
+            MESSAGES_PROCESSOR_DELETED,
+            OUTPUT_INVOKE_STARTED_TIMER,
+            EVICTION_PASS_STARTED_TIMER,
+            PRE_INSTANTIATION_STARTED_TIMER
+    };
+
     private static class DropwizardTimerContext implements StatsCollector.TimerContext {
         private final Timer timer;
         private final Timer.Context context;
@@ -92,7 +104,10 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
 
     @Override
     public void stop() {
-        // Don't need to do anything to stop this collector.
+        // Remove the metrics from the registry
+        for (final String m : METRIC_NAMES) {
+            registry.remove(getName(m));
+        }
     }
 
     @Override
