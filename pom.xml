@@ -24,7 +24,7 @@
   </scm>
 
   <properties>
-    <dempsy-commons-bom.version>2.1.1</dempsy-commons-bom.version>
+    <dempsy-commons-bom.version>2.1.2-SNAPSHOT</dempsy-commons-bom.version>
     <spring.version>4.2.5.RELEASE</spring.version>
     <metrics.version>3.2.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
