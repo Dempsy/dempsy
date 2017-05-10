@@ -116,6 +116,7 @@ public class TestContainer {
     public static Map<String, TestProcessor> cache = null;
     public static Set<OutputMessage> outputMessages = null;
     public static RuntimeException justThrowMe = null;
+    public static RuntimeException throwMeInActivation = null;
 
     public TestContainer(final String containerId) {
         this.containerId = containerId;
@@ -129,6 +130,7 @@ public class TestContainer {
     @Before
     public void setUp() throws Exception {
         justThrowMe = null;
+        throwMeInActivation = null;
         track(new SystemPropertyManager()).set("container-type", containerId);
         context = track(new ClassPathXmlApplicationContext(ctx));
         sessionFactory = new LocalClusterSessionFactory();
@@ -144,6 +146,7 @@ public class TestContainer {
         cache = null;
         outputMessages = null;
         justThrowMe = null;
+        throwMeInActivation = null;
         recheck(() -> toClose.forEach(v -> uncheck(() -> v.close())), Exception.class);
         toClose.clear();
         LocalClusterSessionFactory.completeReset();
@@ -250,6 +253,8 @@ public class TestContainer {
 
         @Activation
         public void activate(final byte[] data) {
+            if (throwMeInActivation != null)
+                throw throwMeInActivation;
             activationCount++;
         }
 
@@ -354,21 +359,37 @@ public class TestContainer {
     }
 
     @Test
+    public void testMpActivationFails() throws Exception {
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+        throwMeInActivation = new RuntimeException("JustThrowMeDAMMIT!");
+        final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
+        container.dispatch(kmwt, true);
+        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+
+    }
+
+    @Test
     public void testMpThrowsDempsyException() throws Exception {
         assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
         justThrowMe = new DempsyException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
         container.dispatch(kmwt, true);
         assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
     }
 
     @Test
     public void testMpThrowsException() throws Exception {
         assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
         justThrowMe = new RuntimeException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
         container.dispatch(kmwt, true);
         assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
     }
 
     @Test
