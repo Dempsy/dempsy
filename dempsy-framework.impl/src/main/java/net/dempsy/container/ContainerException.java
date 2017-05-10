@@ -11,7 +11,7 @@ public class ContainerException extends DempsyException {
     }
 
     public ContainerException(final String message, final Throwable cause) {
-        super(message, cause);
+        super(message, cause, false);
     }
 
 }

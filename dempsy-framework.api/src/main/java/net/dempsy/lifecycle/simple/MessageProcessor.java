@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 
+import net.dempsy.DempsyException;
 import net.dempsy.config.ClusterId;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.KeyedMessageWithType;
@@ -35,33 +36,57 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
     }
 
     @Override
-    public Mp newInstance() {
-        return newMp.get();
+    public Mp newInstance() throws DempsyException {
+        try {
+            return newMp.get();
+        } catch (final RuntimeException rte) {
+            throw new DempsyException(rte, true);
+        }
     }
 
     @Override
-    public void activate(final Mp instance, final Object key) throws IllegalArgumentException {
-        instance.activate(key);
+    public void activate(final Mp instance, final Object key) throws DempsyException {
+        try {
+            instance.activate(key);
+        } catch (final RuntimeException rte) {
+            throw new DempsyException(rte, true);
+        }
     }
 
     @Override
-    public void passivate(final Mp instance) throws IllegalArgumentException {
-        instance.passivate();
+    public void passivate(final Mp instance) throws DempsyException {
+        try {
+            instance.passivate();
+        } catch (final RuntimeException rte) {
+            throw new DempsyException(rte, true);
+        }
     }
 
     @Override
-    public List<KeyedMessageWithType> invoke(final Mp instance, final KeyedMessage message) throws IllegalArgumentException {
-        return Arrays.asList(instance.handle(message));
+    public List<KeyedMessageWithType> invoke(final Mp instance, final KeyedMessage message) throws DempsyException {
+        try {
+            return Arrays.asList(instance.handle(message));
+        } catch (final RuntimeException rte) {
+            throw new DempsyException(rte, true);
+        }
     }
 
     @Override
-    public List<KeyedMessageWithType> invokeOutput(final Mp instance) throws IllegalArgumentException {
-        return Arrays.asList(instance.output());
+    public List<KeyedMessageWithType> invokeOutput(final Mp instance) throws DempsyException {
+        try {
+            return Arrays.asList(instance.output());
+        } catch (final RuntimeException rte) {
+            throw new DempsyException(rte, true);
+        }
     }
 
     @Override
-    public boolean invokeEvictable(final Mp instance) throws IllegalArgumentException {
-        return instance.shouldBeEvicted();
+    public boolean invokeEvictable(final Mp instance) throws DempsyException {
+        try {
+            return instance.shouldBeEvicted();
+        } catch (final RuntimeException rte) {
+            throw new DempsyException(rte, true);
+        }
     }
 
     @Override

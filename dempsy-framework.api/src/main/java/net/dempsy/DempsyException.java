@@ -22,16 +22,24 @@ package net.dempsy;
 public class DempsyException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
-    public DempsyException(final String message, final Throwable cause) {
+    public final Throwable userCause;
+
+    public DempsyException(final String message, final Throwable cause, final boolean userCaused) {
         super(message, cause);
+        userCause = userCaused ? cause : null;
     }
 
     public DempsyException(final String message) {
         super(message);
+        userCause = null;
     }
 
-    public DempsyException(final Throwable cause) {
+    public DempsyException(final Throwable cause, final boolean userCaused) {
         super(cause);
+        userCause = userCaused ? cause : null;
     }
 
+    public boolean userCaused() {
+        return userCause != null;
+    }
 }

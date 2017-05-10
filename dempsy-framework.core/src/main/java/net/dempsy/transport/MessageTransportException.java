@@ -29,10 +29,10 @@ public class MessageTransportException extends DempsyException {
     }
 
     public MessageTransportException(final Throwable e) {
-        super(e);
+        super(e, false);
     }
 
     public MessageTransportException(final String message, final Throwable e) {
-        super(message, e);
+        super(message, e, false);
     }
 }

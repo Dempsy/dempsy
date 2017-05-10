@@ -350,6 +350,8 @@ public class TestContainer {
     // ----------------------------------------------------------------------------
     public static final KeyExtractor ke = new KeyExtractor();
 
+    public void doNothing() {}
+
     @Test
     public void testWrongTypeMessage() throws Exception {
         assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());

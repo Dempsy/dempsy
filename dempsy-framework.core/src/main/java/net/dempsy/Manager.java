@@ -56,7 +56,7 @@ public class Manager<T> {
                         throw new DempsyException(
                                 "Failed to create an instance of the " + clazz.getSimpleName() + " \"" + sfClass.getName()
                                         + "\". Is there a default constructor?",
-                                e);
+                                e, false);
                     }
                 }
             }

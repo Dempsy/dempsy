@@ -129,39 +129,42 @@ public class NonLockingContainer extends Container {
         try {
             instance = prototype.newInstance();
         } catch (final DempsyException e) {
-            throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                    " because the clone method threw an exception.", e);
+            if (e.userCaused()) {
+                LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
+                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                statCollector.messageFailed(true);
+                instance = null;
+            } else
+                throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
+                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                        " because the clone method threw an exception.", e);
         } catch (final RuntimeException e) {
             throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
                     SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
                     " because the clone invocation resulted in an unknown exception.", e);
         }
 
-        if (instance == null)
-            throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                    ". The value returned from the clone call appears to be null.");
-
         // activate
-        if (LOGGER.isTraceEnabled())
-            LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                    + " via " + SafeString.valueOf(prototype));
-
         boolean activateSuccessful = false;
         try {
-            prototype.activate(instance, key);
-            activateSuccessful = true;
-        } catch (final IllegalArgumentException e) {
-            throw new ContainerException(
-                    "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                            ". Is it declared to take a byte[]?",
-                    e);
+            if (instance != null) {
+                if (LOGGER.isTraceEnabled())
+                    LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
+                            + " via " + SafeString.valueOf(prototype));
+
+                prototype.activate(instance, key);
+                activateSuccessful = true;
+            }
         } catch (final DempsyException e) {
-            throw new ContainerException(
-                    "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                            ". Is the active method accessible - the class is public and the method is public?",
-                    e);
+            if (e.userCaused()) {
+                LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
+                statCollector.messageFailed(true);
+                instance = null;
+            } else
+                throw new ContainerException(
+                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
+                                + ". Is the active method accessible - the class is public and the method is public?",
+                        e);
         } catch (final RuntimeException e) {
             throw new ContainerException(
                     "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
@@ -258,32 +261,31 @@ public class NonLockingContainer extends Container {
                         try {
                             // this can throw
                             instance = createAndActivate(key);
-                        } catch (final RuntimeException e) {
+                        } catch (final RuntimeException e) { // container or runtime exception
                             // This will drain the swamp
-                            final WorkingQueueHolder mailbox = getQueue(wp);
-                            if (mailbox.queue != null) {
-                                mailbox.queue.forEach(m -> {
-                                    LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(m.key), e);
-                                    statCollector.messageDispatched(m); // the Mp is failed so update the stats appropriately
-                                    statCollector.messageFailed(true);
-                                    numBeingWorked.decrementAndGet();
-                                });
-                            }
+                            LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(message.key), e);
                             instance = null;
                         }
                     }
 
-                    KeyedMessage curMessage = message;
-                    while (curMessage != null) { // can't be null the first time
-                        if (instance != null) { // if it's null then activation failed.
-                            invokeOperation(instance, Operation.handle, curMessage);
-                        } else { // activate failed
-                            LOGGER.debug("Can't handle message {} because the creation of the Mp seems to have failed.",
-                                    SafeString.objectDescription(key));
+                    if (instance == null) { // activation or creation failed.
+                        numBeingWorked.decrementAndGet(); // decrement for this one
+                        LOGGER.debug("Can't handle message {} because the creation of the Mp seems to have failed.",
+                                SafeString.objectDescription(key));
+                        final WorkingQueueHolder mailbox = getQueue(wp);
+                        if (mailbox.queue != null) {
+                            mailbox.queue.forEach(m -> {
+                                LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(m.key));
+                                statCollector.messageFailed(true);
+                                numBeingWorked.decrementAndGet(); // decrement for each in the queue
+                            });
                         }
-                        numBeingWorked.decrementAndGet(); // decrement the initial increment.
+                    } else {
+                        KeyedMessage curMessage = message;
+                        while (curMessage != null) { // can't be null the first time
+                            invokeOperation(instance, Operation.handle, curMessage);
+                            numBeingWorked.decrementAndGet(); // decrement the initial increment.
 
-                        if (instance != null) {
                             // work off the queue.
                             final WorkingQueueHolder mailbox = getQueue(wp); // spin until I have it.
                             if (mailbox.queue != null && mailbox.queue.size() > 0) { // if there are messages in the queue
@@ -304,6 +306,7 @@ public class NonLockingContainer extends Container {
                                 // queue. Since we're about to give up the Mp we cannot allow the mailbox to become available
                                 // therefore we cannot allow any other threads to spin on it.
                             }
+
                         }
                     }
                 } finally {
@@ -339,6 +342,7 @@ public class NonLockingContainer extends Container {
                 } // we didn't get the lock and we're blocking and we're now done handling the mailbox
             } // we didn't get the lock so we tried the mailbox (or ended becasuse we're non-blocking)
         } // keep working
+
     }
 
     @Override

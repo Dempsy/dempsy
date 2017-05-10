@@ -102,7 +102,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
      * Invokes the activation method of the passed instance.
      */
     @Override
-    public void activate(final T instance, final Object key) throws IllegalArgumentException, DempsyException {
+    public void activate(final T instance, final Object key) throws DempsyException {
         wrap(() -> activationMethod.invoke(instance, key));
     }
 
@@ -110,7 +110,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
      * Invokes the passivation method of the passed instance. Will return the object's passivation data, <code>null</code> if there is none.
      */
     @Override
-    public void passivate(final T instance) throws IllegalArgumentException, DempsyException {
+    public void passivate(final T instance) throws DempsyException {
         wrap(() -> (byte[]) passivationMethod.invoke(instance));
     }
 
@@ -118,7 +118,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
      * Invokes the appropriate message handler of the passed instance. Caller is responsible for not passing <code>null</code> messages.
      */
     @Override
-    public List<KeyedMessageWithType> invoke(final T instance, final KeyedMessage message) throws IllegalArgumentException, DempsyException {
+    public List<KeyedMessageWithType> invoke(final T instance, final KeyedMessage message) throws DempsyException {
 
         if (!isMessageSupported(message.message))
             throw new IllegalArgumentException(mpClassName + ": no handler for messages of type: " + message.message.getClass().getName());
@@ -128,7 +128,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
 
     }
 
-    private static final List<KeyedMessageWithType> emptyKeyMessageList = Collections.unmodifiableList(new ArrayList<KeyedMessageWithType>());
+    private static final List<KeyedMessageWithType> emptyKeyedMessageList = Collections.emptyList();
 
     /**
      * Invokes the output method, if it exists. If the instance does not have an annotated output method, this is a no-op (this is simpler than requiring the caller to check every instance).
@@ -136,7 +136,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
     @Override
     public List<KeyedMessageWithType> invokeOutput(final T instance) throws DempsyException {
         if (outputMethods == null)
-            return emptyKeyMessageList;
+            return emptyKeyedMessageList;
 
         final List<KeyedMessageWithType> ret = new ArrayList<>();
         for (final Method om : outputMethods) {
@@ -296,7 +296,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         }
     }
 
-    private void validateAsMP() throws IllegalArgumentException {
+    private void validateAsMP() throws IllegalStateException {
         if (mpClass.getAnnotation(Mp.class) == null)
             throw new IllegalStateException("MP class not annotated as MessageProcessor: " + mpClassName);
     }
@@ -374,7 +374,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
             if (!stopTryingToSendTheseTypes.contains(messageClass))
                 return keyExtractor.extract(toSend);
             else
-                return emptyKeyMessageList;
+                return emptyKeyedMessageList;
         } catch (final IllegalArgumentException e1) {
             stopTryingToSendTheseTypes.add(messageClass.getClass());
             LOGGER.warn("unable to retrieve key or message type from message: \"" + String.valueOf(toSend) +
@@ -393,7 +393,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
                     "\" due to an exception thrown from the getter: " +
                     e1.getLocalizedMessage(), e1.getCause());
         }
-        return emptyKeyMessageList;
+        return emptyKeyedMessageList;
     }
 
     // =============================================================================================
@@ -418,9 +418,9 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         try {
             return runnable.run();
         } catch (final InvocationTargetException e) {
-            throw new DempsyException(e.getCause());
+            throw new DempsyException(e.getCause(), true);
         } catch (final IllegalAccessException e) {
-            throw new DempsyException(e);
+            throw new DempsyException(e, true);
         }
     }
 }

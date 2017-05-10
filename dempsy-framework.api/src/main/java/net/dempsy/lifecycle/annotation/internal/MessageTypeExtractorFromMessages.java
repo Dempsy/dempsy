@@ -68,10 +68,15 @@ public class MessageTypeExtractorFromMessages {
             final String[] subret = Arrays.stream(methodsThatGetsMessageTypes).map(m -> {
                 try {
                     return (String[]) m.invoke(message);
-                } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+                } catch (IllegalAccessException | IllegalArgumentException e) {
                     LOGGER.warn("Can't invoke method " + m.getName() + " due to the following exception", e);
                     if (iThrow)
-                        throw new DempsyException(e);
+                        throw new DempsyException(e, true);
+                    return new String[0];
+                } catch (final InvocationTargetException e) {
+                    LOGGER.warn("Can't invoke method " + m.getName() + " due to the following exception", e.getTargetException());
+                    if (iThrow)
+                        throw new DempsyException(e.getTargetException(), true);
                     return new String[0];
                 }
             }).map(Arrays::stream).flatMap(v -> v).toArray(String[]::new);

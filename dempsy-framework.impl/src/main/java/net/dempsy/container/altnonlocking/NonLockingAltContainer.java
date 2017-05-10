@@ -269,6 +269,12 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                         }
                     }
                 }
+            } else {
+                // if we got here then the activate on the Mp explicitly returned 'false'
+                if (LOGGER.isDebugEnabled())
+                    LOGGER.debug("the container for " + clusterId + " failed to activate the Mp for " + SafeString.valueOf(prototype));
+                // we consider this "processed"
+                break; // leave the do/while loop
             }
         }
 
@@ -478,9 +484,15 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
             try {
                 instance = prototype.newInstance();
             } catch (final DempsyException e) {
-                throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        " because the clone method threw an exception.", e);
+                if (e.userCaused()) {
+                    LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
+                            + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                    statCollector.messageFailed(true);
+                    instance = null;
+                } else
+                    throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
+                            SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                            " because the clone method threw an exception.", e);
             } catch (final RuntimeException e) {
                 throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
                         SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
@@ -493,24 +505,25 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                         ". The value returned from the clone call appears to be null.");
 
             // activate
-            if (LOGGER.isTraceEnabled())
-                LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                        + " via " + SafeString.valueOf(prototype));
-
             boolean activateSuccessful = false;
             try {
-                prototype.activate(instance, key);
-                activateSuccessful = true;
-            } catch (final IllegalArgumentException e) {
-                throw new ContainerException(
-                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                                ". Is it declared to take a byte[]?",
-                        e);
+                if (instance != null) {
+                    if (LOGGER.isTraceEnabled())
+                        LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
+                                + " via " + SafeString.valueOf(prototype));
+                    prototype.activate(instance, key);
+                    activateSuccessful = true;
+                }
             } catch (final DempsyException e) {
-                throw new ContainerException(
-                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                                ". Is the active method accessible - the class is public and the method is public?",
-                        e);
+                if (e.userCaused()) {
+                    LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
+                    statCollector.messageFailed(true);
+                    instance = null;
+                } else
+                    throw new ContainerException(
+                            "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
+                                    + ". Is the active method accessible - the class is public and the method is public?",
+                            e);
             } catch (final RuntimeException e) {
                 throw new ContainerException(
                         "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +

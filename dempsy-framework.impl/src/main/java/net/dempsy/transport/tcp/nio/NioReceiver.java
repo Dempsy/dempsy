@@ -82,7 +82,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                 internal = new NioAddress(addr, internalPort, serId, binding.recvBufferSize);
                 address = resolver.getExternalAddresses(internal);
             } catch (final IOException e) {
-                throw new DempsyException(e);
+                throw new DempsyException(e, false);
             }
         }
         return address;
@@ -370,7 +370,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                     return rm;
                 } catch (final IOException ioe) {
                     LOGGER.error(thisNode + " failed on deserialization", ioe);
-                    throw new DempsyException(ioe);
+                    throw new DempsyException(ioe, false);
                 }
             });
         }

@@ -1,6 +1,5 @@
 package net.dempsy.messages;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Set;
 
@@ -17,35 +16,23 @@ public interface MessageProcessorLifecycle<T> {
     /**
      * Invokes the activation method of the passed instance.
      */
-    public void activate(T instance, Object key) throws IllegalArgumentException, DempsyException;
+    public void activate(T instance, Object key) throws DempsyException;
 
     /**
      * Invokes the passivation method of the passed instance. Will return the object's passivation data, 
      * <code>null</code> if there is none.
-     * 
-     * @throws InvocationTargetException
-     * @throws IllegalAccessException
-     * @throws IllegalArgumentException
      */
-    public void passivate(T instance) throws IllegalArgumentException, DempsyException;
+    public void passivate(T instance) throws DempsyException;
 
     /**
      * Invokes the appropriate message handler of the passed instance. Caller is responsible for not passing
      * <code>null</code> messages.
-     * 
-     * @throws InvocationTargetException
-     * @throws IllegalAccessException
-     * @throws IllegalArgumentException
      */
-    public List<KeyedMessageWithType> invoke(T instance, KeyedMessage message) throws IllegalArgumentException, DempsyException;
+    public List<KeyedMessageWithType> invoke(T instance, KeyedMessage message) throws DempsyException;
 
     /**
      * Invokes the output method, if it exists. If the instance does not have an annotated output method,
      *  this is a no-op (this is simpler than requiring the caller to check every instance).
-     * 
-     * @throws InvocationTargetException
-     * @throws IllegalAccessException
-     * @throws IllegalArgumentException
      */
     public List<KeyedMessageWithType> invokeOutput(T instance) throws DempsyException;
 
@@ -53,11 +40,6 @@ public interface MessageProcessorLifecycle<T> {
 
     /**
      * Invokes the evictable method on the provided instance. If the evictable is not implemented, returns false.
-     * 
-     * @param instance
-     * @throws IllegalArgumentException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
      */
     public boolean invokeEvictable(T instance) throws DempsyException;
 
