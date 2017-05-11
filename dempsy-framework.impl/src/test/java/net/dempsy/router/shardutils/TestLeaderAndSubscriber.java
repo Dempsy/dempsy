@@ -1,5 +1,5 @@
 
-package net.dempsy.router.managed;
+package net.dempsy.router.shardutils;
 
 import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
@@ -34,11 +34,12 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
     @Test
     public void testOneLeader() throws InterruptedException {
         final ClusterId cid = setTestName("testOneLeader");
-        final Utils utils = new Utils(makeInfra(session, sched), cid, new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+        final Utils<ContainerAddress> utils = new Utils<ContainerAddress>(makeInfra(session, sched), cid.clusterName,
+                new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
 
         final AtomicBoolean isRunning = new AtomicBoolean(true);
         try {
-            final Leader l = new Leader(utils, infra, isRunning);
+            final Leader<ContainerAddress> l = new Leader<ContainerAddress>(utils, 256, 1, infra, isRunning, ContainerAddress[]::new);
             l.process();
             assertTrue(poll(o -> l.imIt()));
         } finally {
@@ -48,10 +49,10 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
 
     static class ListenerHolder {
         public final ClusterInfoSession session;
-        public final Leader l;
+        public final Leader<ContainerAddress> l;
         public final Thread t;
 
-        public ListenerHolder(final ClusterInfoSession session, final Leader l, final Thread t) {
+        public ListenerHolder(final ClusterInfoSession session, final Leader<ContainerAddress> l, final Thread t) {
             this.session = session;
             this.l = l;
             this.t = t;
@@ -71,8 +72,9 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
 
             for (int i = 0; i < NUM_THREADS; i++) {
                 final ClusterInfoSession session = sessFact.createSession();
-                final Utils utils = new Utils(makeInfra(session, sched), cid, new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
-                final Leader l = new Leader(utils, infra, isRunning);
+                final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName,
+                        new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+                final Leader<ContainerAddress> l = new Leader<>(utils, 256, 1, infra, isRunning, ContainerAddress[]::new);
 
                 final Thread t = new Thread(() -> {
                     // wait for it.
@@ -118,13 +120,14 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
     @Test
     public void testLeaderWithSubscriber() throws Exception {
         final ClusterId cid = setTestName("testLeaderWithSubscriber");
-        final Utils utils = new Utils(makeInfra(session, sched), cid, new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+        final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName,
+                new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
 
         final AtomicBoolean isRunning = new AtomicBoolean(true);
         try {
-            final Subscriber s = new Subscriber(utils, infra, isRunning, (l, m) -> {});
+            final Subscriber<ContainerAddress> s = new Subscriber<>(utils, infra, isRunning, (l, m) -> {}, 256);
             s.process();
-            final Leader l = new Leader(utils, infra, isRunning);
+            final Leader<ContainerAddress> l = new Leader<>(utils, 256, 1, infra, isRunning, ContainerAddress[]::new);
             l.process();
             assertTrue(poll(o -> l.imIt()));
 
@@ -132,7 +135,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
             assertTrue(poll(o -> s.isReady()));
 
             // s should now own all shards.
-            for (int i = 0; i < utils.totalNumShards; i++)
+            for (int i = 0; i < 256; i++)
                 assertTrue(s.doIOwnShard(i));
         } finally {
             isRunning.set(false);
@@ -147,13 +150,14 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
         final AtomicBoolean isRunning = new AtomicBoolean(true);
         final List<Thread> threads = new ArrayList<>();
         try {
-            final List<Subscriber> subs = new ArrayList<>();
+            final List<Subscriber<ContainerAddress>> subs = new ArrayList<>();
             final AtomicBoolean go = new AtomicBoolean(false);
 
             for (int i = 0; i < NUM_SUBS; i++) {
-                final Utils utils = new Utils(makeInfra(session, sched), cid, new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
-                final Subscriber s;
-                subs.add(s = new Subscriber(utils, infra, isRunning, (l, m) -> {}));
+                final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName,
+                        new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+                final Subscriber<ContainerAddress> s;
+                subs.add(s = new Subscriber<>(utils, infra, isRunning, (l, m) -> {}, 256));
                 final Thread t = new Thread(() -> {
                     // wait for it.
                     while (!go.get()) {
@@ -169,16 +173,16 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
 
             go.set(true);
 
-            final Utils utils = new Utils(makeInfra(session, sched), cid, subs.get(3).getUtils().thisNodeAddress);
-            final Leader l = new Leader(utils, infra, isRunning);
+            final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName, subs.get(3).getUtils().thisNodeAddress);
+            final Leader<ContainerAddress> l = new Leader<>(utils, 256, 1, infra, isRunning, ContainerAddress[]::new);
             l.process();
             assertTrue(poll(o -> l.imIt()));
 
             // wait until ready
             assertTrue(poll(o -> subs.stream().filter(s -> s.isReady()).count() == NUM_SUBS));
 
-            final int lowerNum = Math.floorDiv(utils.totalNumShards, NUM_SUBS);
-            final int upperNum = (int) Math.ceil((double) utils.totalNumShards / NUM_SUBS);
+            final int lowerNum = Math.floorDiv(256, NUM_SUBS);
+            final int upperNum = (int) Math.ceil((double) 256 / NUM_SUBS);
 
             // do we have balanced subs?
             assertTrue(poll(o -> subs.stream()

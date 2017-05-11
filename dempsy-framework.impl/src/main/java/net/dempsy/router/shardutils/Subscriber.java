@@ -1,4 +1,4 @@
-package net.dempsy.router.managed;
+package net.dempsy.router.shardutils;
 
 import java.io.File;
 import java.util.Collection;
@@ -16,26 +16,33 @@ import net.dempsy.KeyspaceChangeListener;
 import net.dempsy.cluster.ClusterInfoException;
 import net.dempsy.cluster.ClusterInfoSession;
 import net.dempsy.cluster.DirMode;
-import net.dempsy.router.RoutingStrategy.ContainerAddress;
-import net.dempsy.router.managed.Utils.ShardAssignment;
+import net.dempsy.router.shardutils.Utils.ShardAssignment;
 import net.dempsy.utils.PersistentTask;
 
-public class Subscriber extends PersistentTask {
+public class Subscriber<C> extends PersistentTask {
     private static Logger LOGGER = LoggerFactory.getLogger(Subscriber.class);
 
-    private final Utils utils;
-    private final ContainerAddress thisNode;
+    private final Utils<C> utils;
+    private final C thisNode;
     private final AtomicReference<boolean[]> iOwn = new AtomicReference<boolean[]>(null);
     private final KeyspaceChangeListener listener;
     private String nodeDirectory = null;
     private final ClusterInfoSession session;
+    private final int totalNumShards;
 
-    public Subscriber(final Utils msutils, final Infrastructure infra, final AtomicBoolean isRunning, final KeyspaceChangeListener listener) {
+    public Subscriber(final Utils<C> msutils, final Infrastructure infra, final AtomicBoolean isRunning, final KeyspaceChangeListener listener,
+            final int totalNumShards) {
         super(LOGGER, isRunning, infra.getScheduler(), 500);
         this.utils = msutils;
         this.session = msutils.session;
         this.thisNode = utils.thisNodeAddress;
         this.listener = listener;
+
+        if (Integer.bitCount(totalNumShards) != 1)
+            throw new IllegalArgumentException("The configuration property \"" + Utils.CONFIG_KEY_TOTAL_SHARDS
+                    + "\" must be set to a power of 2. It's currently set to " + totalNumShards);
+
+        this.totalNumShards = totalNumShards;
     }
 
     public boolean isReady() {
@@ -46,17 +53,17 @@ public class Subscriber extends PersistentTask {
     public boolean execute() {
         try {
             checkNodeDirectory();
-            final List<ShardAssignment> assignments = utils.persistentGetData(utils.shardsAssignedDir, this);
+            final List<ShardAssignment<C>> assignments = utils.persistentGetData(utils.shardsAssignedDir, this);
             if (assignments == null)
                 return false; // nothing there, try later.
 
-            for (final ShardAssignment sa : assignments) {
+            for (final ShardAssignment<C> sa : assignments) {
                 // find me.
                 if (thisNode.equals(sa.addr)) { // found me
-                    final boolean[] newState = new boolean[utils.totalNumShards];
+                    final boolean[] newState = new boolean[totalNumShards];
                     for (final int index : sa.shards)
                         newState[index] = true;
-                    final boolean[] prev = Optional.ofNullable(iOwn.getAndSet(newState)).orElse(new boolean[utils.totalNumShards]);
+                    final boolean[] prev = Optional.ofNullable(iOwn.getAndSet(newState)).orElse(new boolean[totalNumShards]);
                     callListener(prev, newState);
                     return true;
                 }
@@ -86,12 +93,13 @@ public class Subscriber extends PersistentTask {
         return (int) IntStream.range(0, shards.length).mapToObj(i -> Boolean.valueOf(shards[i])).filter(b -> b.booleanValue()).count();
     }
 
-    Utils getUtils() {
+    Utils<C> getUtils() {
         return utils;
     }
 
     // ===============================================================
 
+    @SuppressWarnings("unchecked")
     private final int checkNodeDirectory() throws ClusterInfoException {
         try {
 
@@ -125,7 +133,7 @@ public class Subscriber extends PersistentTask {
             }
 
             // verify the container address is correct.
-            ContainerAddress curDest = (ContainerAddress) session.getData(nodeDirectory, null);
+            C curDest = (C) session.getData(nodeDirectory, null);
             if (curDest == null) // this really can't be null
                 session.setData(nodeDirectory, thisNode);
             else if (!thisNode.equals(curDest)) { // wth?
@@ -139,7 +147,7 @@ public class Subscriber extends PersistentTask {
             // that's not THIS node directory then this is something we should clean up.
             for (final String subdir : nodeDirs) {
                 final String fullPathToSubdir = utils.nodesDir + "/" + subdir;
-                curDest = (ContainerAddress) session.getData(fullPathToSubdir, null);
+                curDest = (C) session.getData(fullPathToSubdir, null);
                 if (thisNode.equals(curDest) && !fullPathToSubdir.equals(nodeDirectory)) // this is bad .. clean up
                     session.rmdir(fullPathToSubdir);
             }

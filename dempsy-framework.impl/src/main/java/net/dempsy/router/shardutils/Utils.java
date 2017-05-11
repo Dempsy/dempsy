@@ -1,4 +1,4 @@
-package net.dempsy.router.managed;
+package net.dempsy.router.shardutils;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -13,10 +13,8 @@ import net.dempsy.cluster.ClusterInfoException.NoNodeException;
 import net.dempsy.cluster.ClusterInfoSession;
 import net.dempsy.cluster.ClusterInfoWatcher;
 import net.dempsy.cluster.DirMode;
-import net.dempsy.config.ClusterId;
-import net.dempsy.router.RoutingStrategy.ContainerAddress;
 
-public class Utils {
+public class Utils<C> {
     // we multiply by an arbitrary large (not 31) prime in order to
     // avoid overlapping collisions with the normal HashMap operation
     // used in the container implementations.
@@ -28,24 +26,24 @@ public class Utils {
     public static final String DEFAULT_MIN_NODES = "1";
 
     /**
-     * PERSISTENT directory at: {@code /[appname]/clusters/[clustername]}
+     * PERSISTENT directory at: {@code /[appname]/clusters/[grouname]}
      */
-    public final String clusterDir;
+    public final String groupDir;
 
     /**
-     * PERSISTENT directory at: {@code /[appname]/clusters/[clustername]/leader}
+     * PERSISTENT directory at: {@code /[appname]/clusters/[grouname]/leader}
      */
     public final String leaderDir;
 
     /**
-     * <p>EPHEMERAL directory at: {@code /[appname]/clusters/[clustername]/managed/ImIt}</p>
+     * <p>EPHEMERAL directory at: {@code /[appname]/clusters/[grouname]/managed/ImIt}</p>
      * 
      * <p>This directory is the location for determining who is the master (who is "it"). </p>
      */
     public final String masterDetermineDir;
 
     /**
-     * PERSISTENT directory at: {@code /[appname]/clusters/[clustername]/shardAssignment}
+     * PERSISTENT directory at: {@code /[appname]/clusters/[grouname]/shardAssignment}
      * 
      * The object here contains the shard assignements.
      */
@@ -59,39 +57,21 @@ public class Utils {
      */
     public final String nodesDir;
 
-    public final int totalNumShards;
-    public final int mask;
-    public final int minNumberOfNodes;
-
-    public final ContainerAddress thisNodeAddress;
-
-    public final ClusterId clusterId;
+    public final C thisNodeAddress;
     public final ClusterInfoSession session;
 
-    public Utils(final Infrastructure infra, final ClusterId clusterId, final ContainerAddress thisNode) {
+    public Utils(final Infrastructure infra, final String groupName, final C thisNode) {
         final RootPaths paths = infra.getRootPaths();
 
-        this.clusterDir = paths.clustersDir + "/" + clusterId.clusterName;
-        this.leaderDir = this.clusterDir + "/leader";
+        this.groupDir = paths.clustersDir + "/" + groupName;
+        this.leaderDir = this.groupDir + "/leader";
         this.masterDetermineDir = this.leaderDir + "/ImIt";
-        this.shardsAssignedDir = this.clusterDir + "/shardAssignment";
-        this.nodesDir = this.clusterDir + "/nodes";
+        this.shardsAssignedDir = this.groupDir + "/shardAssignment";
+        this.nodesDir = this.groupDir + "/nodes";
 
         this.session = infra.getCollaborator();
 
         this.thisNodeAddress = thisNode;
-
-        this.clusterId = clusterId;
-
-        totalNumShards = Integer
-                .parseInt(infra.getConfigValue(ManagedInbound.class, CONFIG_KEY_TOTAL_SHARDS, DEFAULT_TOTAL_SHARDS));
-
-        if (Integer.bitCount(totalNumShards) != 1)
-            throw new IllegalArgumentException("The configuration property \"" + CONFIG_KEY_TOTAL_SHARDS
-                    + "\" must be set to a power of 2. It's currently set to " + totalNumShards);
-
-        mask = totalNumShards - 1;
-        minNumberOfNodes = Integer.parseInt(infra.getConfigValue(ManagedInbound.class, CONFIG_KEY_MIN_NODES, DEFAULT_MIN_NODES));
     }
 
     public Collection<String> persistentGetSubdir(final String path, final ClusterInfoWatcher watcher)
@@ -157,7 +137,7 @@ public class Utils {
         return ret;
     }
 
-    public int determineShard(final Object key) {
+    public int determineShard(final Object key, final int mask) {
         return (prime * key.hashCode()) & mask;
     }
 
@@ -165,19 +145,23 @@ public class Utils {
         Collections.sort(toSort, (o1, o2) -> o1.subdir.compareTo(o2.subdir));
     }
 
-    public static class ShardAssignment implements Serializable {
+    public static class ShardAssignment<C> implements Serializable {
         private static final long serialVersionUID = 1L;
+        public final int totalNumShards;
+        public final int minShards;
         public final int[] shards;
-        public final ContainerAddress addr;
+        public final C addr;
 
-        public ShardAssignment(final int[] shards, final ContainerAddress addr) {
+        public ShardAssignment(final int[] shards, final C addr, final int totalNumShards, final int minShards) {
             this.shards = shards;
             this.addr = addr;
+            this.totalNumShards = totalNumShards;
+            this.minShards = minShards;
         }
 
         @SuppressWarnings("unused") // serialization
         private ShardAssignment() {
-            this(null, null);
+            this(null, null, -1, -1);
         }
     }
 

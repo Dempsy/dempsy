@@ -1,4 +1,4 @@
-package net.dempsy.router.managed;
+package net.dempsy.router.shardutils;
 
 import static net.dempsy.util.Functional.chain;
 
@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -22,24 +23,35 @@ import net.dempsy.Infrastructure;
 import net.dempsy.cluster.ClusterInfoException;
 import net.dempsy.cluster.ClusterInfoSession;
 import net.dempsy.cluster.DirMode;
-import net.dempsy.router.RoutingStrategy.ContainerAddress;
-import net.dempsy.router.managed.Utils.ShardAssignment;
-import net.dempsy.router.managed.Utils.SubdirAndData;
+import net.dempsy.router.shardutils.Utils.ShardAssignment;
+import net.dempsy.router.shardutils.Utils.SubdirAndData;
 import net.dempsy.utils.PersistentTask;
 
-public class Leader extends PersistentTask {
+public class Leader<C> extends PersistentTask {
     private static final Logger LOGGER = LoggerFactory.getLogger(Leader.class);
 
     private boolean imIt = false;
-    private final Utils utils;
+    private final Utils<C> utils;
     private final ClusterInfoSession session;
     private final PersistentTask nodesChangedTask;
     private final AtomicBoolean isReady = new AtomicBoolean(false);
+    private final IntFunction<C[]> newArraySupplier;
+    private final int totalNumShards;
+    private final int minNodes;
 
-    public Leader(final Utils msutils, final Infrastructure infra, final AtomicBoolean isRunning) {
+    public Leader(final Utils<C> msutils, final int totalNumShards, final int minNodes, final Infrastructure infra, final AtomicBoolean isRunning,
+            final IntFunction<C[]> newArraySupplier) {
         super(LOGGER, isRunning, infra.getScheduler(), 500);
         this.utils = msutils;
         this.session = utils.session;
+        this.newArraySupplier = newArraySupplier;
+        this.totalNumShards = totalNumShards;
+        this.minNodes = minNodes;
+
+        if (Integer.bitCount(totalNumShards) != 1)
+            throw new IllegalArgumentException("The configuration property \"" + Utils.CONFIG_KEY_TOTAL_SHARDS
+                    + "\" must be set to a power of 2. It's currently set to " + totalNumShards);
+
         this.nodesChangedTask = new PersistentTask(LOGGER, isRunning, infra.getScheduler(), 500) {
             @Override
             public boolean execute() {
@@ -108,23 +120,24 @@ public class Leader extends PersistentTask {
             LOGGER.trace("Master was notifed of node changes");
 
         // current nodes registered, sorted by rank
-        final List<SubdirAndData<ContainerAddress>> currentNodes = chain(
+        final List<SubdirAndData<C>> currentNodes = chain(
                 // I need to be notified when Nodes appear or disappear v
                 utils.persistentGetSubdirAndData(utils.nodesDir, nodesChangedTask, null), p -> Utils.rankSort(p));
 
         // get all of the current shard assignments
         @SuppressWarnings("unchecked")
-        final List<ShardAssignment> assignments = Optional.ofNullable((List<ShardAssignment>) utils.persistentGetData(utils.shardsAssignedDir, null))
+        final List<ShardAssignment<C>> assignments = Optional
+                .ofNullable((List<ShardAssignment<C>>) utils.persistentGetData(utils.shardsAssignedDir, null))
                 .orElse(new ArrayList<>());
 
         // Build a lookup to determine the rank of a given node denoted by its ContainerAddress
-        final Map<ContainerAddress, Integer> rankByCa = new HashMap<>();
+        final Map<C, Integer> rankByCa = new HashMap<>();
         for (int i = 0; i < currentNodes.size(); i++)
             rankByCa.put(currentNodes.get(i).data, Integer.valueOf(i));
 
         // create an array of already assigned and accepted addresses
-        final ContainerAddress[] assignedTo = new ContainerAddress[utils.totalNumShards];
-        for (final ShardAssignment sa : assignments) {
+        final C[] assignedTo = newArraySupplier.apply(totalNumShards);
+        for (final ShardAssignment<C> sa : assignments) {
             // do we know about this destination?
             if (rankByCa.get(sa.addr) != null) {
                 for (final int shard : sa.shards) {
@@ -141,7 +154,7 @@ public class Leader extends PersistentTask {
 
         // for each node in order I need to build a reduced state.
         for (int i = currentNodes.size() - 1; i >= 0; i--) {
-            final ContainerAddress cur = currentNodes.get(i).data;
+            final C cur = currentNodes.get(i).data;
 
             final Set<Integer> shardsToRelease = perNodeRelease(cur, assignedTo, currentNodes.size(), i);
             for (final Integer shard : shardsToRelease) {
@@ -151,7 +164,7 @@ public class Leader extends PersistentTask {
 
         // now go through and add
         for (int i = 0; i < currentNodes.size(); i++) {
-            final ContainerAddress cur = currentNodes.get(i).data;
+            final C cur = currentNodes.get(i).data;
             final Set<Integer> shardsToAdd = perNodeAcquire(cur, assignedTo, currentNodes.size(), i);
             for (final Integer shard : shardsToAdd) {
                 assignedTo[shard] = cur;
@@ -159,9 +172,9 @@ public class Leader extends PersistentTask {
         }
 
         // now write the results.
-        final Map<ContainerAddress, List<Integer>> tmp = new HashMap<>();
+        final Map<C, List<Integer>> tmp = new HashMap<>();
         for (int i = 0; i < assignedTo.length; i++) {
-            final ContainerAddress cur = assignedTo[i];
+            final C cur = assignedTo[i];
             if (cur != null) {
                 List<Integer> shards = tmp.get(cur);
                 if (shards == null) {
@@ -173,15 +186,15 @@ public class Leader extends PersistentTask {
         }
 
         // now create the list of new assignments.
-        final List<ShardAssignment> newAssignments = new ArrayList<>(tmp.entrySet().stream()
-                .map(e -> new ShardAssignment(e.getValue().stream().mapToInt(i -> i.intValue()).toArray(), e.getKey()))
+        final List<ShardAssignment<C>> newAssignments = new ArrayList<>(tmp.entrySet().stream()
+                .map(e -> new ShardAssignment<C>(e.getValue().stream().mapToInt(i -> i.intValue()).toArray(), e.getKey(), totalNumShards, minNodes))
                 .collect(Collectors.toList()));
 
         session.setData(utils.shardsAssignedDir, newAssignments);
         return true;
     }
 
-    private static List<Integer> buildDestinationsAcquired(final ContainerAddress thisNodeAddress, final ContainerAddress[] currentState) {
+    private static <C> List<Integer> buildDestinationsAcquired(final C thisNodeAddress, final C[] currentState) {
         // destinationsAcquired reflects what we already have according to the currentState
         return new ArrayList<>(IntStream.range(0, currentState.length)
                 .filter(i -> thisNodeAddress.equals(currentState[i]))
@@ -190,9 +203,8 @@ public class Leader extends PersistentTask {
     }
 
     // go through and determine which nodes to give up ... if any
-    private Set<Integer> perNodeRelease(final ContainerAddress thisNodeAddress, final ContainerAddress[] currentState, final int nodeCount,
-            final int nodeRank) {
-        final int numberIShouldHave = howManyShouldIHave(utils.totalNumShards, nodeCount, nodeRank);
+    private Set<Integer> perNodeRelease(final C thisNodeAddress, final C[] currentState, final int nodeCount, final int nodeRank) {
+        final int numberIShouldHave = howManyShouldIHave(totalNumShards, nodeCount, minNodes, nodeRank);
 
         // destinationsAcquired reflects what we already have according to the currentState
         final List<Integer> destinationsAcquired = buildDestinationsAcquired(thisNodeAddress, currentState);
@@ -215,9 +227,8 @@ public class Leader extends PersistentTask {
         return ret;
     }
 
-    private Set<Integer> perNodeAcquire(final ContainerAddress thisNodeAddress, final ContainerAddress[] currentState, final int nodeCount,
-            final int nodeRank) {
-        final int numberIShouldHave = howManyShouldIHave(utils.totalNumShards, nodeCount, nodeRank);
+    private Set<Integer> perNodeAcquire(final C thisNodeAddress, final C[] currentState, final int nodeCount, final int nodeRank) {
+        final int numberIShouldHave = howManyShouldIHave(totalNumShards, nodeCount, minNodes, nodeRank);
 
         // destinationsAcquired reflects what we already have according to the currentState
         final List<Integer> destinationsAcquired = buildDestinationsAcquired(thisNodeAddress, currentState);
@@ -248,9 +259,10 @@ public class Leader extends PersistentTask {
         return ret;
     }
 
-    private final static int howManyShouldIHave(final int totalShardCount, final int numNodes, final int myRank) {
-        final int base = Math.floorDiv(totalShardCount, numNodes);
-        final int mod = Math.floorMod(totalShardCount, numNodes);
+    private final static int howManyShouldIHave(final int totalShardCount, final int numNodes, final int minNodes, final int myRank) {
+        final int numNodesToConsider = Math.max(numNodes, minNodes);
+        final int base = Math.floorDiv(totalShardCount, numNodesToConsider);
+        final int mod = Math.floorMod(totalShardCount, numNodesToConsider);
         return myRank < mod ? (base + 1) : base;
     }
 
@@ -266,7 +278,8 @@ public class Leader extends PersistentTask {
                     "This is IMPOSSIBLE. There's more than one subdir of " + utils.leaderDir + ". They include " + imItSubdirs);
 
         // make sure it's still mine.
-        final ContainerAddress registered = (ContainerAddress) session.getData(utils.masterDetermineDir, null);
+        @SuppressWarnings("unchecked")
+        final C registered = (C) session.getData(utils.masterDetermineDir, null);
 
         return utils.thisNodeAddress.equals(registered); // am I it, or not?
     }

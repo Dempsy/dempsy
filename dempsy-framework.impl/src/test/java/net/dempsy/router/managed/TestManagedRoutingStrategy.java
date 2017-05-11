@@ -32,7 +32,8 @@ import net.dempsy.router.BaseRouterTestWithSession;
 import net.dempsy.router.RoutingStrategy;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
 import net.dempsy.router.RoutingStrategyManager;
-import net.dempsy.router.managed.Utils.ShardAssignment;
+import net.dempsy.router.shardutils.Utils;
+import net.dempsy.router.shardutils.Utils.ShardAssignment;
 import net.dempsy.transport.NodeAddress;
 import net.dempsy.util.TestInfrastructure;
 
@@ -50,7 +51,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
         final Manager<RoutingStrategy.Inbound> manager = new Manager<>(RoutingStrategy.Inbound.class);
         try (final RoutingStrategy.Inbound ib = manager.getAssociatedInstance(ManagedInbound.class.getPackage().getName());) {
             final ClusterId clusterId = new ClusterId("test", "test");
-            final Utils msutils = new Utils(infra, clusterId,
+            final Utils<ContainerAddress> msutils = new Utils<>(infra, clusterId.clusterName,
                     new ContainerAddress(new DummyNodeAddress("testInboundSimpleHappyPathRegister"), 0));
 
             assertNotNull(ib);
@@ -67,14 +68,14 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
         public int val;
     }
 
-    private static void checkForShardDistribution(final ClusterInfoSession session, final Utils utils, final int numShardsToExpect,
+    private static void checkForShardDistribution(final ClusterInfoSession session, final Utils<ContainerAddress> utils, final int numShardsToExpect,
             final int numNodes) throws InterruptedException {
         final MutableInt iters = new MutableInt();
         assertTrue(poll(o -> {
             try {
                 iters.val++;
                 final boolean showLog = LOGGER.isTraceEnabled() && (iters.val % 100 == 0);
-                final List<ShardAssignment> sas = getShardAssignments(utils);
+                final List<ShardAssignment<ContainerAddress>> sas = getShardAssignments(utils);
                 final Set<Integer> shards = getCurrentShards(sas);
                 if (shards.size() != numShardsToExpect) {
                     if (showLog)
@@ -82,7 +83,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
                     return false;
                 }
                 final Map<NodeAddress, AtomicInteger> counts = new HashMap<>();
-                for (final ShardAssignment sa : sas) {
+                for (final ShardAssignment<ContainerAddress> sa : sas) {
                     AtomicInteger count = counts.get(sa.addr.node);
                     if (count == null) {
                         count = new AtomicInteger(0);
@@ -122,7 +123,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
                         .getAssociatedInstance(ManagedInbound.class.getPackage().getName());) {
             final ClusterId clusterId = new ClusterId("test", "test");
             final ContainerAddress node1Ca = new ContainerAddress(new DummyNodeAddress("node1"), 0);
-            final Utils utils = new Utils(infra, clusterId, node1Ca);
+            final Utils<ContainerAddress> utils = new Utils<>(infra, clusterId.clusterName, node1Ca);
 
             ib1.setContainerDetails(clusterId, node1Ca, (l, m) -> {});
             ib1.start(infra);
@@ -161,7 +162,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
             final ClusterId clusterId = super.setTestName("testInboundResillience");
             final ContainerAddress ca = new ContainerAddress(new DummyNodeAddress("theOnlyNode"), 0);
             final Infrastructure infra = makeInfra(session, sched);
-            final Utils msutils = new Utils(infra, clusterId, ca);
+            final Utils<ContainerAddress> msutils = new Utils<>(infra, clusterId.clusterName, ca);
 
             ib.setContainerDetails(clusterId, ca, (l, m) -> {});
             ib.start(infra);
@@ -182,7 +183,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
             final ClusterId cid = setTestName("testInboundWithOutbound");
             final ContainerAddress oca = new ContainerAddress(new DummyNodeAddress("here"), 0);
             final Infrastructure infra = makeInfra(session, sched);
-            final Utils msutils = new Utils(infra, cid, oca);
+            final Utils<ContainerAddress> msutils = new Utils<>(infra, cid.clusterName, oca);
 
             ib.setContainerDetails(cid, oca, (l, m) -> {});
             ib.start(infra);
@@ -198,6 +199,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
                 assertTrue(poll(o -> obf.isReady()));
 
                 final RoutingStrategy.Router ob = obf.getStrategy(cid);
+                assertTrue(poll(o -> obf.isReady()));
 
                 final KeyedMessageWithType km = new KeyedMessageWithType(new Object(), new Object(), "");
                 assertTrue(poll(o -> ob.selectDestinationForMessage(km) != null));
@@ -255,15 +257,15 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
     }
 
     @SuppressWarnings("unchecked")
-    private static List<ShardAssignment> getShardAssignments(final Utils utils) throws ClusterInfoException {
-        return (List<ShardAssignment>) utils.persistentGetData(utils.shardsAssignedDir, null);
+    private static List<ShardAssignment<ContainerAddress>> getShardAssignments(final Utils<ContainerAddress> utils) throws ClusterInfoException {
+        return (List<ShardAssignment<ContainerAddress>>) utils.persistentGetData(utils.shardsAssignedDir, null);
     }
 
-    private static Set<Integer> getCurrentShards(final Utils utils) throws ClusterInfoException {
+    private static Set<Integer> getCurrentShards(final Utils<ContainerAddress> utils) throws ClusterInfoException {
         return getCurrentShards(getShardAssignments(utils));
     }
 
-    private static Set<Integer> getCurrentShards(final List<ShardAssignment> sas) {
+    private static Set<Integer> getCurrentShards(final List<ShardAssignment<ContainerAddress>> sas) {
         if (sas == null)
             return new HashSet<>();
         final Set<Integer> shards = sas.stream().map(sa -> Arrays.stream(sa.shards)
@@ -273,7 +275,7 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
         return shards;
     }
 
-    private static boolean waitForShards(final ClusterInfoSession session, final Utils utils, final int shardCount)
+    private static boolean waitForShards(final ClusterInfoSession session, final Utils<ContainerAddress> utils, final int shardCount)
             throws InterruptedException {
         return poll(o -> {
             try {

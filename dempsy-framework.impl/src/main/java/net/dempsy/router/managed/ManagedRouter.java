@@ -3,10 +3,10 @@ package net.dempsy.router.managed;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntConsumer;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -14,33 +14,41 @@ import org.slf4j.LoggerFactory;
 
 import net.dempsy.DempsyException;
 import net.dempsy.Infrastructure;
-import net.dempsy.cluster.ClusterInfoException;
 import net.dempsy.config.ClusterId;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
 import net.dempsy.router.RoutingStrategy.Router;
-import net.dempsy.router.managed.Utils.ShardAssignment;
+import net.dempsy.router.shardutils.ShardState;
+import net.dempsy.router.shardutils.Utils;
 import net.dempsy.util.SafeString;
-import net.dempsy.utils.PersistentTask;
 
-public class ManagedRouter extends PersistentTask implements Router {
+public class ManagedRouter implements Router, IntConsumer {
     private static Logger LOGGER = LoggerFactory.getLogger(ManagedRouter.class);
-    private final AtomicReference<ContainerAddress[]> destinations = new AtomicReference<>(null);
+    private final AtomicReference<ContainerAddress[]> destinations;
 
     final ClusterId clusterId;
     private final AtomicBoolean isRunning;
-    private final Utils utils;
     private final ManagedRouterFactory mommy;
     private final String thisNodeId;
 
+    private final ShardState<ContainerAddress> state;
+    private final Utils<ContainerAddress> utils;
+    private int mask = 0;
+
     ManagedRouter(final ManagedRouterFactory mom, final ClusterId clusterId, final Infrastructure infra) {
-        super(LOGGER, new AtomicBoolean(true), infra.getScheduler(), 500);
         this.mommy = mom;
         this.clusterId = clusterId;
-        this.utils = new Utils(infra, clusterId, null);
         this.thisNodeId = infra.getNodeId();
-        this.isRunning = getIsRunningFlag();
-        process();
+        this.isRunning = new AtomicBoolean(true);
+        this.state = new ShardState<ContainerAddress>(clusterId.clusterName, infra, isRunning, ContainerAddress[]::new, this);
+        this.utils = state.getUtils();
+        this.destinations = state.getShardContentsArray();
+        this.state.process();
+    }
+
+    @Override
+    public void accept(final int mask) {
+        this.mask = mask;
     }
 
     @Override
@@ -51,7 +59,7 @@ public class ManagedRouter extends PersistentTask implements Router {
                     SafeString.objectDescription(message != null ? message.key : null)
                     + " is being used prior to initialization or after a failure.");
 
-        return destinations[utils.determineShard(message.key)];
+        return destinations[utils.determineShard(message.key, mask)];
     }
 
     @Override
@@ -66,30 +74,6 @@ public class ManagedRouter extends PersistentTask implements Router {
     public synchronized void release() {
         mommy.release(this);
         isRunning.set(false);
-    }
-
-    @Override
-    public boolean execute() {
-        try {
-            final List<ShardAssignment> assignments = utils.persistentGetData(utils.shardsAssignedDir, this);
-            if (assignments == null)
-                return false; // nothing there, try later.
-
-            final ContainerAddress[] newState = new ContainerAddress[utils.totalNumShards];
-            for (final ShardAssignment sa : assignments) {
-                for (final int index : sa.shards) {
-                    if (newState[index] != null)
-                        LOGGER.warn("There are 2 nodes that think they both have shard " + index + ". The one that will be used is " + newState[index]
-                                + " the one being skipped is " + sa.addr);
-                    else
-                        newState[index] = sa.addr;
-                }
-            }
-            this.destinations.set(newState);
-            return true;
-        } catch (final ClusterInfoException cie) {
-            throw new RuntimeException(cie);
-        }
     }
 
     @Override
