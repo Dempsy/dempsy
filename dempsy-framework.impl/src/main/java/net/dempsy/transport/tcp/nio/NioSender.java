@@ -67,7 +67,6 @@ public final class NioSender implements Sender {
     @Override
     public synchronized void stop() {
         running = false;
-        owner.idleSenders.remove(this);
         dontInterrupt(() -> Thread.sleep(1));
 
         final List<Object> drainTo = new ArrayList<>();
@@ -88,7 +87,7 @@ public final class NioSender implements Sender {
                 else if ((System.currentTimeMillis() - startTime) > 500)
                     break;
                 else
-                    Thread.yield();
+                    dontInterrupt(() -> Thread.sleep(1));
             }
 
             // if X seconds have passed let's just close it from this side and move on.
@@ -101,6 +100,7 @@ public final class NioSender implements Sender {
         }
 
         drainTo.forEach(o -> statsCollector.messageNotSent());
+        owner.idleSenders.remove(this);
         owner.imDone(addr);
     }
 

@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -26,7 +27,6 @@ import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.NodeAddress;
 import net.dempsy.transport.SenderFactory;
 import net.dempsy.transport.tcp.TcpAddress;
-import net.dempsy.util.StupidHashMap;
 
 public class NioSenderFactory implements SenderFactory {
     public final static Logger LOGGER = LoggerFactory.getLogger(NioSenderFactory.class);
@@ -48,7 +48,7 @@ public class NioSenderFactory implements SenderFactory {
 
     private final ConcurrentHashMap<TcpAddress, NioSender> senders = new ConcurrentHashMap<>();
 
-    final StupidHashMap<NioSender, NioSender> idleSenders = new StupidHashMap<>();
+    final ConcurrentHashMap<NioSender, NioSender> idleSenders = new ConcurrentHashMap<>();
 
     // =======================================
     // Read from NioSender
@@ -161,10 +161,10 @@ public class NioSenderFactory implements SenderFactory {
         final AtomicBoolean isRunning;
         final Selector selector;
         final String nodeId;
-        final StupidHashMap<NioSender, NioSender> idleSenders;
+        final Map<NioSender, NioSender> idleSenders;
         final NodeStatsCollector statsCollector;
 
-        Sending(final AtomicBoolean isRunning, final String nodeId, final StupidHashMap<NioSender, NioSender> idleSenders,
+        Sending(final AtomicBoolean isRunning, final String nodeId, final Map<NioSender, NioSender> idleSenders,
                 final NodeStatsCollector statsCollector) throws MessageTransportException {
             this.isRunning = isRunning;
             this.nodeId = nodeId;
@@ -190,6 +190,8 @@ public class NioSenderFactory implements SenderFactory {
                         // =====================================================================
                         // nothing ready ... might as well spend some time serializing messages
                         final Set<SelectionKey> keys = selector.keys();
+                        // keys are removed when there's nothing to write to them. When there's no writing to do
+                        // but there's data queued up to be written we can move to start serializing
                         if (keys != null && keys.size() > 0) {
                             numNothing = 0; // reset the yield count since we have something to do
                             final SenderHolder thisOneCanSerialize = keys.stream()
@@ -200,10 +202,19 @@ public class NioSenderFactory implements SenderFactory {
                                     .orElse(null);
                             if (thisOneCanSerialize != null)
                                 thisOneCanSerialize.trySerialize();
+                            else { // see if we need to stop
+                                final SelectionKey thisOneCanClose = keys.stream()
+                                        .filter(k -> ((SenderHolder) k.attachment()).shouldClose())
+                                        .findAny().orElse(null);
+                                if (thisOneCanClose != null)
+                                    ((SenderHolder) thisOneCanClose.attachment()).close(thisOneCanClose);
+                            }
                         }
                         // =====================================================================
+                        // otherwise there's no data to be written and (last we knew) no data
+                        // to be serialized which results in (eventually) all keys being removed.
                         else { // nothing to serialize, do we have any new senders that need handling?
-                            if (!checkForNewSenders()) { // if we didn't do anything then sleep/yield based on how long we've been bord.
+                            if (!checkForNewSenders()) { // if we didn't do anything then sleep/yield based on how long we've been bored.
                                 numNothing++;
                                 if (numNothing > 1000) {
                                     dontInterrupt(() -> Thread.sleep(1), ie -> {
@@ -230,9 +241,18 @@ public class NioSenderFactory implements SenderFactory {
 
                         if (key.isWritable()) {
                             final SenderHolder sh = (SenderHolder) key.attachment();
+                            // write something and return whether or not we're done.
                             if (sh.writeSomethingReturnDone(key, statsCollector)) {
-                                idleSenders.putIfAbsent(sh.sender, sh.sender);
-                                key.cancel();
+                                // if we're done, does that mean that we should be closing the connection?
+                                if (sh.shouldClose()) {
+                                    if (!sh.close(key)) { // this should close the socket. If that works then this will also cancel the key.
+                                        idleSenders.putIfAbsent(sh.sender, sh.sender); // otherwise, drop it back on idleSenders so we can try the cancel again later.
+                                        key.cancel();
+                                    }
+                                } else {
+                                    idleSenders.putIfAbsent(sh.sender, sh.sender);
+                                    key.cancel();
+                                }
                             }
                         }
                     }

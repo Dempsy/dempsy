@@ -22,12 +22,14 @@ public class NioUtils {
         return ret;
     }
 
-    public static void closeQuietly(final AutoCloseable ac, final Logger LOGGER, final String failedMessage) {
+    public static boolean closeQuietly(final AutoCloseable ac, final Logger LOGGER, final String failedMessage) {
         try {
             ac.close();
+            return true;
         } catch (final Exception e) {
             LOGGER.warn(failedMessage, e);
         }
+        return false;
     }
 
     public static void dontInterrupt(final RunnableThrows<InterruptedException> runner) {

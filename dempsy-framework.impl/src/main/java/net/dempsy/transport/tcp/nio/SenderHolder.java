@@ -77,6 +77,15 @@ public class SenderHolder {
         return tmp.toArray(new ByteBuffer[tmp.size()]);
     }
 
+    public boolean close(final SelectionKey key) {
+        final SocketChannel channel = (SocketChannel) key.channel();
+        if (closeQuietly(channel, LOGGER, sender.nodeId + " failed to close previous channel to " + sender.addr)) {
+            // if we closed it then unregister and move on.
+            key.cancel();
+            return true;
+        } else return false;
+    }
+
     public boolean writeSomethingReturnDone(final SelectionKey key, final NodeStatsCollector statsCollector) throws IOException {
         prepareToWriteBestEffort();
 
@@ -145,8 +154,13 @@ public class SenderHolder {
                 statsCollector.messageSent(null);
 
             return !(readyToWrite(false) || readyToSerialize());
-        } else
-            return sender.messages.peek() == null;
+        } else {
+            final Object peek = sender.messages.peek();
+            if (peek != null)
+                return (peek instanceof StopMessage); // we're "done" if the next message is a StopMessage.
+            else
+                return true; // we're done if there's no message left.
+        }
 
     }
 
