@@ -6,6 +6,7 @@ import java.util.Map;
 import net.dempsy.Infrastructure;
 import net.dempsy.cluster.ClusterInfoSession;
 import net.dempsy.config.ClusterId;
+import net.dempsy.config.Node;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
@@ -13,7 +14,7 @@ import net.dempsy.monitoring.basic.BasicStatsCollectorFactory;
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.executor.AutoDisposeSingleThreadScheduler;
 
-public class TestInfrastructure implements Infrastructure {
+public class TestInfrastructure implements Infrastructure, AutoCloseable {
     final ClusterInfoSession session;
     final AutoDisposeSingleThreadScheduler sched;
     final BasicStatsCollectorFactory statsFact;
@@ -85,6 +86,11 @@ public class TestInfrastructure implements Infrastructure {
     @Override
     public ThreadingModel getThreadingModel() {
         return threading;
+    }
+
+    @Override
+    public Node getNode() {
+        throw new UnsupportedOperationException();
     }
 
     @Override

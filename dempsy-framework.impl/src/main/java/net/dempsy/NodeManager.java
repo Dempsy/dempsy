@@ -1,8 +1,5 @@
 package net.dempsy;
 
-import static net.dempsy.Infrastructure.clusters;
-import static net.dempsy.Infrastructure.nodes;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,6 +26,7 @@ import net.dempsy.messages.MessageProcessorLifecycle;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.ClusterStatsCollectorFactory;
 import net.dempsy.monitoring.NodeStatsCollector;
+import net.dempsy.router.RoutingInboundManager;
 import net.dempsy.router.RoutingStrategy;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
 import net.dempsy.router.RoutingStrategy.Inbound;
@@ -130,7 +128,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                         .setClusterId(c.getClusterId());
 
                 // TODO: This is a hack for now.
-                final Manager<RoutingStrategy.Inbound> inboundManager = new Manager<>(RoutingStrategy.Inbound.class);
+                final Manager<RoutingStrategy.Inbound> inboundManager = new RoutingInboundManager();
                 final RoutingStrategy.Inbound is = inboundManager.getAssociatedInstance(c.getRoutingStrategyId());
                 containers.add(new PerContainer(con, is, c));
             }
@@ -183,11 +181,10 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                 @Override
                 public boolean execute() {
                     try {
-                        final String application = node.application;
-                        session.recursiveMkdir(clusters(application), null, DirMode.PERSISTENT, DirMode.PERSISTENT);
-                        session.recursiveMkdir(nodes(application), null, DirMode.PERSISTENT, DirMode.PERSISTENT);
+                        session.recursiveMkdir(rootPaths.clustersDir, null, DirMode.PERSISTENT, DirMode.PERSISTENT);
+                        session.recursiveMkdir(rootPaths.nodesDir, null, DirMode.PERSISTENT, DirMode.PERSISTENT);
 
-                        final String nodePath = nodes(application) + "/" + nodeId;
+                        final String nodePath = rootPaths.nodesDir + "/" + nodeId;
 
                         session.mkdir(nodePath, nodeInfo, DirMode.EPHEMERAL);
                         final NodeInformation reread = (NodeInformation) session.getData(nodePath, this);
@@ -369,6 +366,11 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         return threading;
     }
 
+    @Override
+    public Node getNode() {
+        return node;
+    }
+
     // Testing accessors
 
     // ==============================================================================
@@ -398,10 +400,6 @@ public class NodeManager implements Infrastructure, AutoCloseable {
             this.inboundStrategy = inboundStrategy;
             this.clusterDefinition = clusterDefinition;
         }
-    }
-
-    public Node getNode() {
-        return node;
     }
 
     public void setNode(final Node node) {
