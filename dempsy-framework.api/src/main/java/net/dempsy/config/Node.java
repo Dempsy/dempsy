@@ -28,7 +28,7 @@ public class Node {
     private String defaultRoutingStrategyId = null;
     private Object receiver = null;
     private boolean configed = false;
-    private String containerTypeId = "net.dempsy.container.nonlocking";
+    private String containerTypeId = "net.dempsy.container.altnonlocking";
     private final Map<String, String> configuration = new HashMap<>();
 
     public Node(final String applicationName) {
