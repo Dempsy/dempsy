@@ -9,6 +9,7 @@
    
    <bean id="inputTransport" class="net.dempsy.transport.tcp.nio.NioReceiver" destroy-method="close">
      <constructor-arg ref="serializer" />
+     <property name="numHandlers" value="${receive_threads:2}"></property>
    </bean>
 
 </beans>

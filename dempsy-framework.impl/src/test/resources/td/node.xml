@@ -13,7 +13,7 @@
      <constructor-arg value="${test-name}" />
      <property name="clusterStatsCollectorFactoryId" value="net.dempsy.monitoring.basic" />
      <property name="nodeStatsCollector" ref="nodeStatsCollector" />
-     <property name="defaultRoutingStrategyId" value="${routing-strategy}" />
+     <property name="defaultRoutingStrategyId" value="${routing-strategy}${routing-group:}" />
      <property name="receiver" ref="inputTransport" />
      <property name="containerTypeId" value="${container-type}" />
      
@@ -22,7 +22,6 @@
          <entry key="net.dempsy.router.managed.min_node_count" value="${min_nodes:1}" />
          <entry key="net.dempsy.router.managed.total_shards" value="${total_shards:300}" />
          <entry key="net.dempsy.transport.tcp.nio.send_threads" value="${send_threads:2}" />
-         <entry key="net.dempsy.transport.tcp.netty.send_threads" value="${send_threads:2}" />
        </map>
      </property>
    </bean>

@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 
-import net.dempsy.Infrastructure;
 import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.Receiver;
@@ -49,7 +48,7 @@ public class BlockingQueueTest {
         final AtomicReference<String> message = new AtomicReference<String>(null);
         final ArrayBlockingQueue<Object> input = new ArrayBlockingQueue<>(16);
         try (final Receiver r = new BlockingQueueReceiver(input);
-                final Infrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueue-"));
+                final TestInfrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueue-"));
                 final TransportManager tranMan = chain(new TransportManager(), c -> c.start(infra));
                 SenderFactory sf = tranMan.getAssociatedInstance(transportTypeId);) {
             final Sender sender = sf.getSender(r.getAddress());
@@ -72,7 +71,7 @@ public class BlockingQueueTest {
     public void testBlockingQueueOverflow() throws Throwable {
         final AtomicReference<String> message = new AtomicReference<String>(null);
         final ArrayBlockingQueue<Object> input = new ArrayBlockingQueue<>(1);
-        try (final Infrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueueOverflow-"));
+        try (final TestInfrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueueOverflow-"));
                 final Receiver r = new BlockingQueueReceiver(input);
                 final TransportManager tranMan = chain(new TransportManager(), c -> c.start(infra));
                 final SenderFactory sf = tranMan.getAssociatedInstance(transportTypeId);) {

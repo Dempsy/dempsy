@@ -104,6 +104,7 @@ public abstract class DempsyBaseTest {
 
     public static List<String> elasticRouterIds = Arrays.asList("managed");
     public static String[] transportsThatRequireSerializer = { "nio" };
+    public static String[] grouRoutingStrategies = { "group" };
 
     public static Object[][] threadingModelDetails = {
             { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
@@ -122,21 +123,21 @@ public abstract class DempsyBaseTest {
 
     public static Combos hardcore() {
         return new Combos(
-                new String[] { "simple", "managed" },
+                new String[] { "simple", "managed", "group" },
                 new String[] { "locking", "nonlocking", "altnonlocking" },
                 new String[] { "local", "zookeeper" },
                 new String[] { "bq", "passthrough", "nio" },
                 new String[] { "json", "java", "kryo" },
                 new Object[][] {
                         { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                                .setAdditionalThreads(0)
-                                .setCoresFactor(1.0)
+                                .setAdditionalThreads(2)
+                                .setCoresFactor(0.0)
                                 .setBlocking(true)
                                 .setMaxNumberOfQueuedLimitedTasks(10L)
                         },
                         { "non-blocking", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                                .setAdditionalThreads(0)
-                                .setCoresFactor(1.0)
+                                .setAdditionalThreads(2)
+                                .setCoresFactor(0.0)
                                 .setBlocking(false)
                                 .setMaxNumberOfQueuedLimitedTasks(-1)
                         },
@@ -145,7 +146,7 @@ public abstract class DempsyBaseTest {
 
     public static Combos production() {
         return new Combos(
-                new String[] { "managed" },
+                new String[] { "managed", "group" },
                 new String[] { "altnonlocking" },
                 new String[] { "zookeeper" },
                 new String[] { "nio" },
@@ -168,6 +169,10 @@ public abstract class DempsyBaseTest {
 
     public static boolean requiresSerialization(final String transport) {
         return Arrays.asList(transportsThatRequireSerializer).contains(transport);
+    }
+
+    public static boolean isGroupRoutingStrategy(final String routerId) {
+        return Arrays.asList(grouRoutingStrategies).contains(routerId);
     }
 
     @Parameters(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
@@ -261,7 +266,6 @@ public abstract class DempsyBaseTest {
 
     private static AtomicLong runComboSequence = new AtomicLong(0);
     protected static String currentAppName = null;
-    protected static ThreadingModel threading;
 
     protected void runCombos(final String testName, final ComboFilter filter, final String[][] ctxs, final TestToRun test) throws Exception {
         runCombos(testName, filter, ctxs, null, test);
@@ -288,8 +292,6 @@ public abstract class DempsyBaseTest {
                     .getBean(ClusterInfoSessionFactory.class);
 
             currentSessionFactory = sessFact;
-
-            tr.track(threading = threadingModelSource.apply(testName)).start();
 
             final List<NodeManagerWithContext> reverseCpCtxs = reverseRange(0, ctxs.length)
                     .mapToObj(i -> {
@@ -326,7 +328,6 @@ public abstract class DempsyBaseTest {
             LocalClusterSessionFactory.completeReset();
             BlockingQueueAddress.completeReset();
             ClassTracker.dumpResults();
-            threading = null;
         }
     }
 
@@ -340,6 +341,9 @@ public abstract class DempsyBaseTest {
         LOGGER.debug("Starting node with {}", fullCtx);
         final ClassPathXmlApplicationContext ctx = currentlyTracking
                 .track(new ClassPathXmlApplicationContext(fullCtx.toArray(new String[fullCtx.size()])));
+
+        final ThreadingModel threading;
+        currentlyTracking.track(threading = threadingModelSource.apply(currentAppName)).start();
 
         return currentlyTracking.track(new NodeManagerWithContext(new NodeManager()
                 .node(ctx.getBean(Node.class))

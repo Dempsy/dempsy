@@ -1,6 +1,8 @@
 package net.dempsy;
 
 import static net.dempsy.utils.test.ConditionPoll.poll;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedInputStream;
@@ -33,6 +35,7 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
+import net.dempsy.container.NodeMetricGetters;
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.MessageHandler;
 import net.dempsy.lifecycle.annotation.MessageKey;
@@ -135,6 +138,7 @@ public class TestWordCount extends DempsyBaseTest {
         public static CountDownLatch latch = new CountDownLatch(0);
         KeyExtractor ke = new KeyExtractor();
         int numDispatched = 0;
+        Thread runningThread = null;
 
         private static String[] strings;
 
@@ -153,6 +157,7 @@ public class TestWordCount extends DempsyBaseTest {
 
         @Override
         public void start() {
+            runningThread = Thread.currentThread();
             try {
                 try {
                     latch.await();
@@ -182,8 +187,11 @@ public class TestWordCount extends DempsyBaseTest {
         public void stop() {
             isRunning.set(false);
 
-            while (!stopped.get())
+            while (!stopped.get()) {
                 Thread.yield();
+                if (runningThread != null)
+                    runningThread.interrupt();
+            }
         }
 
         private int curCount = 0;
@@ -451,10 +459,89 @@ public class TestWordCount extends DempsyBaseTest {
                 waitForAllSent(adaptor);
                 assertTrue(poll(o -> adaptor.done.get()));
                 assertTrue(poll(o -> {
-                    // System.out.println(stats[0].getProcessedMessageCount() + ", " + stats[1].getProcessedMessageCount());
                     return adaptor.numDispatched == stats.stream().map(c -> c.getProcessedMessageCount())
                             .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
+            });
+        }
+    }
+
+    @Test
+    public void testWordCountHomogeneousProcessing() throws Throwable {
+        final String[][] ctxs = {
+                { "classpath:/word-count/adaptor-kjv.xml", }, // adaptor only node
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
+        };
+
+        final int NUM_WC = ctxs.length - 1; // the adaptor is the first one.
+
+        try (@SuppressWarnings("resource")
+        final SystemPropertyManager props = new SystemPropertyManager()
+                .set("min_nodes", Integer.toString(NUM_WC))
+                .set("routing-group", ":group")
+                .set("send_threads", "1")
+                .set("receive_threads", "1")) {
+
+            WordProducer.latch = new CountDownLatch(1); // need to make it wait.
+            runCombos("testWordCountHomogeneousProcessing", ctxs, n -> {
+                final List<NodeManagerWithContext> nodes = n.nodes;
+                final NodeManager[] managers = nodes.stream().map(nm -> nm.manager).toArray(NodeManager[]::new);
+
+                // wait until I can reach the cluster from the adaptor.
+                assertTrue(poll(o -> managers[0].getRouter().allReachable("test-cluster1").size() == NUM_WC));
+                assertTrue(poll(o -> managers[0].getRouter().allReachable("test-cluster2").size() == NUM_WC));
+
+                WordProducer.latch.countDown();
+                final WordProducer adaptor = nodes.get(0).ctx.getBean(WordProducer.class);
+                waitForAllSent(adaptor);
+
+                // get all of the stats collectors for the ranks.
+                final List<ClusterMetricGetters> rankStats = Arrays.asList(managers)
+                        .subList(1, managers.length)
+                        .stream()
+                        .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2")))
+                        .map(sc -> (ClusterMetricGetters) sc)
+                        .collect(Collectors.toList());
+
+                final int totalSent = adaptor.numDispatched;
+                // now wait for the sum of all messages received by the ranking to be the number sent
+                assertTrue(poll(o -> {
+                    final int totalRanked = rankStats.stream()
+                            .map(sc -> Integer.valueOf((int) sc.getDispatchedMessageCount()))
+                            .reduce(Integer.valueOf(0), (i1, i2) -> new Integer(i1.intValue() + i2.intValue())).intValue();
+                    return totalRanked == totalSent;
+                }));
+
+                // no nodes (except the adaptor node) should have sent any messages.
+                // IOW, messages got to the Rank processor never leaving the node the Count was executed.
+                final List<NodeMetricGetters> nodeStats = Arrays.asList(managers)
+                        .subList(1, managers.length)
+                        .stream()
+                        .map(nm -> nm.getNodeStatsCollector())
+                        .map(s -> (NodeMetricGetters) s)
+                        .collect(Collectors.toList());
+
+                // if the routing id isn't a group id then there should be cross talk.
+                if (isGroupRoutingStrategy(routerId)) {
+                    assertEquals(NUM_WC, nodeStats.size());
+                    for (final NodeMetricGetters mg : nodeStats) {
+                        assertEquals(0, mg.getMessagesSentCount());
+                        assertEquals(0, mg.getMessagesNotSentCount());
+                    }
+                } else {
+                    assertEquals(NUM_WC, nodeStats.size());
+                    for (final NodeMetricGetters mg : nodeStats) {
+                        assertNotEquals(0, mg.getMessagesSentCount());
+                        assertEquals(0, mg.getMessagesNotSentCount());
+                    }
+
+                }
             });
         }
     }
