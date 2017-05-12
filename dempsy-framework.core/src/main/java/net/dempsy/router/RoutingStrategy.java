@@ -108,6 +108,14 @@ public interface RoutingStrategy {
          * when it's done. 
          */
         public Router getStrategy(ClusterId clusterId);
+
+        /**
+         * This will be called from the {@link RoutingStrategyManager} to let the {@link Factory}
+         * know what the typeId was that created it. The typeId can contain information 
+         * useful to the {@link Factory}. By default this method does nothing.
+         */
+        public default void typeId(final String typeId) {}
+
     }
 
     /**
@@ -156,5 +164,12 @@ public interface RoutingStrategy {
         public default String routingStrategyTypeId() {
             return this.getClass().getPackage().getName();
         }
+
+        /**
+         * This will be called from the RoutingInboundManager to let the {@link Inbound}
+         * know what the typeId was that created it. The typeId can contain information 
+         * useful to the {@link Inbound}. By default this method does nothing.
+         */
+        public default void typeId(final String typeId) {}
     }
 }

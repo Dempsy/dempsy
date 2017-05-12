@@ -27,45 +27,51 @@ public class Manager<T> {
         synchronized (registered) {
             ret = registered.get(typeId);
             if (ret == null) {
-                LOGGER.trace(clazz.getSimpleName()
-                        + " associated with the id \"{}\" wasn't already registered. Attempting to create one assuming the id is a package name",
-                        typeId);
+                if (LOGGER.isTraceEnabled())
+                    LOGGER.trace(clazz.getSimpleName() + " associated with the id \"{}\" wasn't already registered. Attempting to create one",
+                            typeId);
 
-                // There's an issue opened on Reflections where multi-threaded access to the zip file is broken.
-                // see: https://github.com/ronmamo/reflections/issues/81
-                final Reflections reflections;
-                final Set<Class<? extends T>> senderFactoryClasses;
-                synchronized (Reflections.class) {
-                    // try something stupid like assume it's a package name and the sender factory is in that package
-                    reflections = new Reflections(typeId + ".");
+                ret = makeInstance(typeId);
+                registered.put(typeId, ret);
+            }
+        }
 
-                    senderFactoryClasses = reflections.getSubTypesOf(clazz);
-                }
+        return ret;
+    }
 
-                if (senderFactoryClasses != null && senderFactoryClasses.size() > 0) {
-                    final Class<? extends T> sfClass = senderFactoryClasses.iterator().next();
-                    if (senderFactoryClasses.size() > 1)
-                        LOGGER.warn("Multiple " + clazz.getSimpleName() + " implementations in the package \"{}\". Going with {}", typeId,
-                                sfClass.getName());
+    public T makeInstance(final String typeId) {
+        // There's an issue opened on Reflections where multi-threaded access to the zip file is broken.
+        // see: https://github.com/ronmamo/reflections/issues/81
+        final Reflections reflections;
+        final Set<Class<? extends T>> senderFactoryClasses;
+        synchronized (Reflections.class) {
+            // try something stupid like assume it's a package name and the sender factory is in that package
+            reflections = new Reflections(typeId + ".");
 
-                    try {
-                        ret = sfClass.newInstance();
+            senderFactoryClasses = reflections.getSubTypesOf(clazz);
+        }
 
-                        registered.put(typeId, ret);
-                    } catch (final InstantiationException | IllegalAccessException e) {
-                        throw new DempsyException(
-                                "Failed to create an instance of the " + clazz.getSimpleName() + " \"" + sfClass.getName()
-                                        + "\". Is there a default constructor?",
-                                e, false);
-                    }
-                }
+        T ret = null;
+        if (senderFactoryClasses != null && senderFactoryClasses.size() > 0) {
+            final Class<? extends T> sfClass = senderFactoryClasses.iterator().next();
+            if (senderFactoryClasses.size() > 1)
+                LOGGER.warn("Multiple " + clazz.getSimpleName() + " implementations in the package \"{}\". Going with {}", typeId,
+                        sfClass.getName());
+
+            try {
+                ret = sfClass.newInstance();
+
+            } catch (final InstantiationException | IllegalAccessException e) {
+                throw new DempsyException(
+                        "Failed to create an instance of the " + clazz.getSimpleName() + " \"" + sfClass.getName()
+                                + "\". Is there a default constructor?",
+                        e, false);
             }
         }
 
         if (ret == null)
             throw new DempsyException("Couldn't find a " + clazz.getSimpleName() + " registered with transport type id \"" + typeId
                     + "\" and couldn't find an implementing class assuming the transport type id is a package name");
-
         return ret;
     }
 
