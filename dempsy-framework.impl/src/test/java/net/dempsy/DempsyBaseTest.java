@@ -36,8 +36,16 @@ public abstract class DempsyBaseTest {
      * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
      * every runCombos call. This can make tests run for a loooooong time.
      */
-    public static boolean hardcore = false;
-    public static boolean butRotateSerializer = true;
+    public static boolean hardcore = Boolean.parseBoolean(System.getProperty("hardcore", "false"));
+
+    /**
+     * If this is set to <code>true</code> then the serializers will be rotated through but
+     * not every combination of serializer with the other possibilities will be tried. This is 
+     * because the serializer testing is totally orthogonal to everything else and so setting
+     * this to false isn't likely to provide any better results than running the test multiple
+     * times.
+     */
+    public static boolean butRotateSerializer = Boolean.parseBoolean(System.getProperty("butRotateSerializer", "true"));
 
     protected Logger LOGGER;
 
@@ -47,19 +55,24 @@ public abstract class DempsyBaseTest {
      * <ul>
      * <li>routing-strategy - set the to the routing strategy id. </li>
      * <li>container-type - set to the container type id </li>
+     * <li>routing-group</li> - can be set for group strategies. Shouldn't be set otherwise. Defaults to "group."
+     * <li>min_nodes</li> - for managed and group strategies this sets the min_nodes to expect. Defaults to "1."
+     * <li>total_shards</li> - for managed and group strategies this sets the total_shards. It must be a power of "2."
+     * It's currently defaults to {@link DempsyBaseTest#NUM_MICROSHARDS} in the {@link DempsyBaseTest#runCombos}  methods.
      * </ul>
      * 
      * <p>It autowires all of the {@link Cluster}'s that appear in the same context.</p>
      * 
      * <p>Currently it directly uses the {@code BasicStatsCollector}</p>
      */
-    public static String nodeCtx = "classpath:/td/node.xml";
+    protected static String nodeCtx = "classpath:/td/node.xml";
 
     protected final String routerId;
     protected final String containerId;
     protected final String sessionType;
     protected final String transportType;
     protected final String serializerType;
+    protected final String threadingModelDescription;
     protected final Function<String, ThreadingModel> threadingModelSource;
 
     protected static final String ROUTER_ID_PREFIX = "net.dempsy.router.";
@@ -73,7 +86,8 @@ public abstract class DempsyBaseTest {
     protected static final int NUM_MICROSHARDS = 16;
 
     protected DempsyBaseTest(final Logger logger, final String routerId, final String containerId, final String sessionType,
-            final String transportType, final String serializerType, final Function<String, ThreadingModel> threadingModelSource) {
+            final String transportType, final String serializerType, final String threadingModelDescription,
+            final Function<String, ThreadingModel> threadingModelSource) {
         this.LOGGER = logger;
         this.routerId = routerId;
         this.containerId = containerId;
@@ -81,6 +95,7 @@ public abstract class DempsyBaseTest {
         this.transportType = transportType;
         this.serializerType = serializerType;
         this.threadingModelSource = threadingModelSource;
+        this.threadingModelDescription = threadingModelDescription;
     }
 
     private static class Combos {
@@ -102,9 +117,9 @@ public abstract class DempsyBaseTest {
         }
     }
 
-    public static List<String> elasticRouterIds = Arrays.asList("managed");
-    public static String[] transportsThatRequireSerializer = { "nio" };
-    public static String[] grouRoutingStrategies = { "group" };
+    private static List<String> elasticRouterIds = Arrays.asList("managed", "group");
+    private static List<String> transportsThatRequireSerializer = Arrays.asList("nio");
+    private static List<String> grouRoutingStrategies = Arrays.asList("group");
 
     public static Object[][] threadingModelDetails = {
             { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
@@ -168,11 +183,15 @@ public abstract class DempsyBaseTest {
     }
 
     public static boolean requiresSerialization(final String transport) {
-        return Arrays.asList(transportsThatRequireSerializer).contains(transport);
+        return transportsThatRequireSerializer.contains(transport);
     }
 
     public static boolean isGroupRoutingStrategy(final String routerId) {
-        return Arrays.asList(grouRoutingStrategies).contains(routerId);
+        return grouRoutingStrategies.contains(routerId);
+    }
+
+    public static boolean isElasticRoutingStrategy(final String routerId) {
+        return elasticRouterIds.contains(routerId);
     }
 
     @Parameters(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
@@ -200,7 +219,7 @@ public abstract class DempsyBaseTest {
                                         ret.add(new Object[] { router, container, sessFact, tp, ser, threading[0], threading[1] });
                                 }
                             } else
-                                ret.add(new Object[] { router, container, sessFact, tp, "none" });
+                                ret.add(new Object[] { router, container, sessFact, tp, "none", threading[0], threading[1] });
                         }
                     }
                 }
@@ -246,10 +265,15 @@ public abstract class DempsyBaseTest {
                 final String serializerType);
     }
 
-    private static final String[] frameworkCtx = { "classpath:/td/node.xml" };
+    private static final String[] frameworkCtx = { nodeCtx };
 
-    ServiceTracker currentlyTracking = null;
-    ClusterInfoSessionFactory currentSessionFactory = null;
+    // ==============================================================================
+    // Test state information accessible to the subclasses.
+    // ==============================================================================
+    protected ServiceTracker currentlyTracking = null;
+    protected ClusterInfoSessionFactory currentSessionFactory = null;
+    protected String currentAppName = null;
+    // ==============================================================================
 
     protected void stopSystem() throws Exception {
         currentSessionFactory = null;
@@ -265,7 +289,6 @@ public abstract class DempsyBaseTest {
     }
 
     private static AtomicLong runComboSequence = new AtomicLong(0);
-    protected static String currentAppName = null;
 
     protected void runCombos(final String testName, final ComboFilter filter, final String[][] ctxs, final TestToRun test) throws Exception {
         runCombos(testName, filter, ctxs, null, test);
@@ -276,7 +299,12 @@ public abstract class DempsyBaseTest {
         if (filter != null && !filter.filter(routerId, containerId, sessionType, transportType, serializerType))
             return;
 
-        currentAppName = testName + "-" + runComboSequence.getAndIncrement();
+        final long comboSequence = runComboSequence.getAndIncrement();
+        currentAppName = testName + "-" + comboSequence;
+
+        LOGGER.info("=====================================================================================");
+        LOGGER.info("======== Running (" + comboSequence + ") " + testName + " with " + routerId + ", " + containerId + ", " + sessionType + ", "
+                + threadingModelDescription + ", " + transportType + "/" + serializerType);
 
         try (final ServiceTracker tr = new ServiceTracker()) {
             currentlyTracking = tr;
@@ -284,7 +312,7 @@ public abstract class DempsyBaseTest {
                     .set("routing-strategy", ROUTER_ID_PREFIX + routerId)
                     .set("container-type", CONTAINER_ID_PREFIX + containerId)
                     .set("test-name", currentAppName)
-                    .set("total_shards", Integer.toString(NUM_MICROSHARDS));
+                    .setIfAbsent("total_shards", Integer.toString(NUM_MICROSHARDS));
 
             // instantiate session factory
             final ClusterInfoSessionFactory sessFact = tr

@@ -20,7 +20,11 @@
      <property name="configuration">
        <map>
          <entry key="net.dempsy.router.managed.min_node_count" value="${min_nodes:1}" />
-         <entry key="net.dempsy.router.managed.total_shards" value="${total_shards:300}" />
+         <entry key="net.dempsy.router.managed.total_shards" value="${total_shards:256}" />
+         
+         <entry key="net.dempsy.router.group.min_node_count" value="${min_nodes:1}" />
+         <entry key="net.dempsy.router.group.total_shards" value="${total_shards:256}" />
+         
          <entry key="net.dempsy.transport.tcp.nio.send_threads" value="${send_threads:2}" />
        </map>
      </property>

@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>net.dempsy</groupId>
-  <artifactId>dempsy-parent</artifactId>
+  <artifactId>dempsy-framework.parent</artifactId>
   <version>0.9-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>

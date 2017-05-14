@@ -2,7 +2,7 @@ package net.dempsy;
 
 import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedInputStream;
@@ -63,7 +63,7 @@ public class TestWordCount extends DempsyBaseTest {
 
     public TestWordCount(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
             final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
-        super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelSource);
+        super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
     }
 
     @Before
@@ -394,7 +394,7 @@ public class TestWordCount extends DempsyBaseTest {
             };
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
-            runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> !r.equals("simple"), ctxs, n -> {
+            runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), ctxs, n -> {
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager[] manager = Arrays.asList(nodes.get(0).manager, nodes.get(1).manager).toArray(new NodeManager[2]);
                 final ClassPathXmlApplicationContext[] ctx = Arrays.asList(nodes.get(0).ctx, nodes.get(1).ctx)
@@ -439,7 +439,7 @@ public class TestWordCount extends DempsyBaseTest {
             final int NUM_WC = ctxs.length - 1; // the adaptor is the first one.
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
-            runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> !r.equals("simple"), ctxs, n -> {
+            runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), ctxs, n -> {
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager[] managers = nodes.stream().map(nm -> nm.manager).toArray(NodeManager[]::new);
 
@@ -474,9 +474,6 @@ public class TestWordCount extends DempsyBaseTest {
                 { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
                 { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
                 { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
-                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
-                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
-                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-rank.xml" },
         };
 
         final int NUM_WC = ctxs.length - 1; // the adaptor is the first one.
@@ -486,10 +483,11 @@ public class TestWordCount extends DempsyBaseTest {
                 .set("min_nodes", Integer.toString(NUM_WC))
                 .set("routing-group", ":group")
                 .set("send_threads", "1")
-                .set("receive_threads", "1")) {
+                .set("receive_threads", "1")
+                .set("blocking-queue-size", "500000")) {
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
-            runCombos("testWordCountHomogeneousProcessing", ctxs, n -> {
+            runCombos("testWordCountHomogeneousProcessing", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), ctxs, n -> {
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager[] managers = nodes.stream().map(nm -> nm.manager).toArray(NodeManager[]::new);
 
@@ -528,19 +526,14 @@ public class TestWordCount extends DempsyBaseTest {
                         .collect(Collectors.toList());
 
                 // if the routing id isn't a group id then there should be cross talk.
+                assertEquals(NUM_WC, nodeStats.size());
+                for (final NodeMetricGetters mg : nodeStats)
+                    assertEquals(0, mg.getMessagesNotSentCount());
                 if (isGroupRoutingStrategy(routerId)) {
-                    assertEquals(NUM_WC, nodeStats.size());
-                    for (final NodeMetricGetters mg : nodeStats) {
+                    for (final NodeMetricGetters mg : nodeStats)
                         assertEquals(0, mg.getMessagesSentCount());
-                        assertEquals(0, mg.getMessagesNotSentCount());
-                    }
                 } else {
-                    assertEquals(NUM_WC, nodeStats.size());
-                    for (final NodeMetricGetters mg : nodeStats) {
-                        assertNotEquals(0, mg.getMessagesSentCount());
-                        assertEquals(0, mg.getMessagesNotSentCount());
-                    }
-
+                    assertNotNull(nodeStats.stream().filter(mg -> mg.getMessagesSentCount() > 0).findFirst().orElse(null));
                 }
             });
         }

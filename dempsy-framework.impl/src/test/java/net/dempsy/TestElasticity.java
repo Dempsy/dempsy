@@ -58,7 +58,7 @@ public class TestElasticity extends DempsyBaseTest {
 
     public TestElasticity(final String routerId, final String containerId, final String sessCtx, final String tpCtx, final String serType,
             final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
-        super(LOGGER, routerId, containerId, sessCtx, tpCtx, serType, threadingModelSource);
+        super(LOGGER, routerId, containerId, sessCtx, tpCtx, serType, threadingModelDescription, threadingModelSource);
     }
 
     // ========================================================================
@@ -278,14 +278,7 @@ public class TestElasticity extends DempsyBaseTest {
 
             final KeyExtractor ke = new KeyExtractor();
 
-            runCombos("testForProfiler", (r, c, s, t, ser) -> {
-                final boolean ret = elasticRouterIds.contains(r);
-                if (ret) {
-                    LOGGER.info("=====================================================================================");
-                    LOGGER.info("======== Running testForProfiler with " + r + ", " + c + ", " + s + ", " + t + "/" + ser);
-                }
-                return ret;
-            }, actxPath, new String[][][] {
+            runCombos("testForProfiler", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, new String[][][] {
                     null,
                     { { "min_nodes", "3" } },
                     { { "min_nodes", "3" } },
@@ -353,8 +346,6 @@ public class TestElasticity extends DempsyBaseTest {
 
                     assertEquals(profilerTestNumberCount, count.get());
 
-                } finally {
-                    LOGGER.info("=====================================================================================");
                 }
             });
         } catch (final Throwable th) {
@@ -380,7 +371,7 @@ public class TestElasticity extends DempsyBaseTest {
     @Test
     public void testNumberCountDropOneAndReAdd() throws Throwable {
 
-        runCombos("testNumberCountDropOneAndReAdd", (r, c, s, t, ser) -> elasticRouterIds.contains(r), actxPath, ns -> {
+        runCombos("testNumberCountDropOneAndReAdd", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, ns -> {
             // keepGoing is for the separate thread that pumps messages into the system.
             final AtomicBoolean keepGoing = new AtomicBoolean(true);
             try {
@@ -444,7 +435,7 @@ public class TestElasticity extends DempsyBaseTest {
 
     @Test
     public void testNumberCountAddOneThenDrop() throws Throwable {
-        runCombos("testNumberCountAddOneThenDrop", (r, c, s, t, ser) -> elasticRouterIds.contains(r), actxPath, ns -> {
+        runCombos("testNumberCountAddOneThenDrop", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, ns -> {
             // keepGoing is for the separate thread that pumps messages into the system.
             final AtomicBoolean keepGoing = new AtomicBoolean(true);
             try {
@@ -514,7 +505,7 @@ public class TestElasticity extends DempsyBaseTest {
                 { "elasticity/mp-num-rank.xml", },
         };
 
-        runCombos("testExpansionPassivation", (r, c, s, t, ser) -> elasticRouterIds.contains(r), actxPath, ns -> {
+        runCombos("testExpansionPassivation", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, ns -> {
             final AtomicBoolean keepGoing = new AtomicBoolean(true);
             try {
                 final List<NodeManagerWithContext> nodes = new ArrayList<>(ns.nodes);

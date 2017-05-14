@@ -196,7 +196,9 @@ public class TestGroupRoutingStrategy extends BaseRouterTestWithSession {
             final ContainerAddress oca = new ContainerAddress(na, 0);
             final Infrastructure infra = makeInfra(session, sched);
             final GroupDetails ogd = new GroupDetails(groupName, na);
-            ogd.caByCluster.put(cid.clusterName, oca);
+            final Map<String, ContainerAddress> ocaiByCluster = new HashMap<>();
+            ocaiByCluster.put(cid.clusterName, oca);
+            ogd.fillout(ocaiByCluster);
             final Utils<GroupDetails> msutils = new Utils<>(infra, groupName, ogd);
 
             ib.setContainerDetails(cid, oca, (l, m) -> {});
@@ -231,9 +233,8 @@ public class TestGroupRoutingStrategy extends BaseRouterTestWithSession {
                 // NO: destination will not necessarily clear.
                 // poll(o -> ob.selectDestinationForMessage(km) == null);
 
-                final NodeAddress nna = new DummyNodeAddress("here-again");
-                final ContainerAddress nca = new ContainerAddress(nna, 0);
-                ogd.caByCluster.put(cid.clusterName, oca);
+                final ContainerAddress nca = new ContainerAddress(new DummyNodeAddress("here-again"), 0);
+                ogd.fillout(ocaiByCluster);
 
                 try (ClusterInfoSession ses3 = sessFact.createSession();
                         RoutingStrategy.Inbound ib2 = new RoutingInboundManager()

@@ -34,6 +34,7 @@ public class ClusterGroupInbound {
     private final List<Proxy> inbounds = new ArrayList<>();
     private boolean started = false;
     private GroupDetails groupDetails = null;
+    private Map<String, ContainerAddress> caByCluster = null;
 
     private static final Map<NodeAddress, Map<String, ClusterGroupInbound>> current = new HashMap<>();
 
@@ -140,19 +141,20 @@ public class ClusterGroupInbound {
             throw new IllegalStateException("The group name isn't set on the inbound for " + ib.clusterId
                     + ". This shouldn't be possible. Was the typeId specified correctly?");
 
-        if (groupDetails == null)
+        if (groupDetails == null) {
             groupDetails = new GroupDetails(ib.groupName, ib.address.node);
-        else if (!groupDetails.groupName.equals(ib.groupName))
+            caByCluster = new HashMap<>();
+        } else if (!groupDetails.groupName.equals(ib.groupName))
             throw new IllegalStateException("The group name for " + ib.clusterId + " is " + ib.groupName
                     + " but doesn't match prevous group names supposedly in the same group: " + groupDetails.groupName);
         else if (!groupDetails.node.equals(ib.address.node))
             throw new IllegalStateException("The node address for " + ib.clusterId + " is " + ib.address.node
                     + " but doesn't match prevous group names supposedly in the same group: " + groupDetails.node);
 
-        if (groupDetails.caByCluster.containsKey(ib.clusterId.clusterName))
+        if (caByCluster.containsKey(ib.clusterId.clusterName))
             throw new IllegalStateException("There appears to be two inbounds both configured with the same cluster id:" + ib.clusterId);
 
-        groupDetails.caByCluster.put(ib.clusterId.clusterName, ib.address);
+        caByCluster.put(ib.clusterId.clusterName, ib.address);
 
         if (!inbounds.contains(ib))
             throw new IllegalStateException(
@@ -172,6 +174,8 @@ public class ClusterGroupInbound {
                         + "\" must be set to a power of 2. It's currently set to " + totalShards);
 
             this.mask = totalShards - 1;
+
+            groupDetails.fillout(caByCluster);
 
             utils = new Utils<GroupDetails>(infra, groupDetails.groupName, groupDetails);
             // subscriber first because it registers as a node. If there's no nodes

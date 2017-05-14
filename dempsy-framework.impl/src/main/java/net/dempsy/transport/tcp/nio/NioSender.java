@@ -20,7 +20,6 @@ import net.dempsy.transport.Sender;
 import net.dempsy.transport.tcp.TcpAddress;
 import net.dempsy.transport.tcp.nio.internal.NioUtils;
 
-// TODO: blocking that creates back-pressure
 public final class NioSender implements Sender {
     private final static Logger LOGGER = LoggerFactory.getLogger(NioSender.class);
 
