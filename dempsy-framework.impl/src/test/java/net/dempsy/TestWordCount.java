@@ -191,6 +191,8 @@ public class TestWordCount extends DempsyBaseTest {
                 Thread.yield();
                 if (runningThread != null)
                     runningThread.interrupt();
+                else
+                    break; // runningThread was never set so start might not have been called.
             }
         }
 

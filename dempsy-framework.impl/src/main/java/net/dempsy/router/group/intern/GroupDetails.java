@@ -33,7 +33,10 @@ public class GroupDetails implements Serializable {
     }
 
     public void fillout(final Map<String, ContainerAddress> caByCluster) throws IllegalStateException {
-        final int size = caByCluster.size();
+        // it's possible that not an entire node is dedicated to this group in which case caByCluster.size will be
+        // smaller than the highest index. So we need, basically, the highest index.
+        final int size = Math.max(caByCluster.values().stream().map(ca -> IntStream.of(ca.clusters).mapToObj(i -> Integer.valueOf(i))).flatMap(i -> i)
+                .reduce(Integer.valueOf(0), (i1, i2) -> Integer.valueOf(Math.max(i1.intValue(), i2.intValue()))).intValue() + 1, caByCluster.size());
         this.containerAddresses = new ContainerAddress[size];
         caByCluster.entrySet().forEach(e -> {
             final ContainerAddress ca = e.getValue();
@@ -46,10 +49,7 @@ public class GroupDetails implements Serializable {
             }
         });
 
-        for (int i = 0; i < containerAddresses.length; i++) {
-            if (containerAddresses[i] == null)
-                throw new IllegalStateException("Missing container address at index " + i);
-        }
+        // some can be null.
 
         // now set clusterIndicies
         caByCluster.entrySet().forEach(e -> {

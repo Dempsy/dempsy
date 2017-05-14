@@ -161,7 +161,7 @@ public abstract class DempsyBaseTest {
 
     public static Combos production() {
         return new Combos(
-                new String[] { "managed", "group" },
+                new String[] { "group" },
                 new String[] { "altnonlocking" },
                 new String[] { "zookeeper" },
                 new String[] { "nio" },
