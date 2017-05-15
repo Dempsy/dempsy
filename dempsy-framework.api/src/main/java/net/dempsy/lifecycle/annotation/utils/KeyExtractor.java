@@ -28,7 +28,8 @@ public class KeyExtractor {
 
     private final Map<Class<?>, MteAndGetter> cache = new HashMap<Class<?>, MteAndGetter>();
 
-    public List<KeyedMessageWithType> extract(final Object toSend) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+    public List<KeyedMessageWithType> extract(final Object toSend)
+            throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         final List<Object> messages = new ArrayList<Object>();
         unwindMessages(toSend, messages);
 
@@ -45,11 +46,11 @@ public class KeyExtractor {
 
             if (extractor.getter == null)
                 throw new IllegalArgumentException(
-                        "The message object " + toSend.getClass().getSimpleName() + " doesn't seem to have a method annotated with "
+                        "The message object " + msg.getClass().getSimpleName() + " doesn't seem to have a method annotated with "
                                 + MessageKey.class.getSimpleName() + " so there's no way to route this message");
-            final Object msgKeyValue = extractor.getter.invoke(toSend);
+            final Object msgKeyValue = extractor.getter.invoke(msg);
 
-            ret.add(new KeyedMessageWithType(msgKeyValue, toSend, extractor.mtExtractor.get(toSend)));
+            ret.add(new KeyedMessageWithType(msgKeyValue, msg, extractor.mtExtractor.get(msg)));
         }
 
         return ret;

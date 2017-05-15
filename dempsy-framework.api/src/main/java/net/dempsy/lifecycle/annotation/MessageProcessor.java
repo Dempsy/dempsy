@@ -380,7 +380,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
             LOGGER.warn("unable to retrieve key or message type from message: \"" + String.valueOf(toSend) +
                     (toSend != null ? "\" of type \"" + SafeString.valueOf(toSend.getClass()) : "") +
                     "\" Please make sure its has a simple getter appropriately annotated: " +
-                    e1.getLocalizedMessage()); // no stack trace.
+                    e1.getLocalizedMessage(), e1); // no stack trace.
         } catch (final IllegalAccessException e1) {
             stopTryingToSendTheseTypes.add(messageClass.getClass());
             LOGGER.warn("unable to retrieve key from message: " + String.valueOf(toSend) +
