@@ -220,7 +220,7 @@ public class Cluster {
         if (adaptor != null && keySource != null)
             throw new IllegalStateException("A dempsy cluster can not pre-instantation an adaptor.");
 
-        if (routingStrategyId == null)
+        if (routingStrategyId == null && adaptor == null) // null routingStrategyId is fine if we're an adaptor
             throw new IllegalStateException("No routing strategy set for " + clusterId + ". This should be set on the "
                     + Cluster.class.getSimpleName() + " or on the " + Node.class.getSimpleName());
     }

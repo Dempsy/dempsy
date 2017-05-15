@@ -219,7 +219,8 @@ public class Node {
 
     private void fillout(final Cluster cd) {
         cd.setAppName(application);
-        if (defaultRoutingStrategyId != null && cd.getRoutingStrategyId() == null)
+        // set the routing strategy on the cluster IFF the cluster doesn't have it set and it's not an adaptor
+        if (defaultRoutingStrategyId != null && cd.getRoutingStrategyId() == null && !cd.isAdaptor())
             cd.setRoutingStrategyId(defaultRoutingStrategyId);
     }
 }

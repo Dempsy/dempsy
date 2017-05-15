@@ -55,9 +55,11 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     private ThreadingModel threading;
 
     // created in start(). Stopped in stop()
-    private Receiver receiver = null;
     private final List<PerContainer> containers = new ArrayList<>();
     private final Map<ClusterId, Adaptor> adaptors = new HashMap<>();
+
+    // non-final fields.
+    private Receiver receiver = null;
     private OutgoingDispatcher router = null;
     private PersistentTask keepNodeRegstered = null;
     private RootPaths rootPaths = null;
@@ -123,6 +125,10 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                     firstAdaptorClusterName.set(c.getClusterId().clusterName);
                 final Adaptor adaptor = c.getAdaptor();
                 adaptors.put(c.getClusterId(), adaptor);
+
+                if (c.getRoutingStrategyId() != null && !"".equals(c.getRoutingStrategyId().trim()) && !" ".equals(c.getRoutingStrategyId().trim()))
+                    LOGGER.warn("The cluster " + c.getClusterId()
+                            + " contains an adaptor but also has the routingStrategy set. The routingStrategy will be ignored.");
             } else {
                 final Container con = makeContainer(node.getContainerTypeId()).setMessageProcessor(c.getMessageProcessor())
                         .setClusterId(c.getClusterId());
@@ -158,6 +164,10 @@ public class NodeManager implements Infrastructure, AutoCloseable {
 
         if (nodeAddress == null && node.getReceiver() != null)
             LOGGER.warn("The node at " + nodeId + " contains no message processors but has a Reciever set. The receiver will never be started.");
+
+        if (nodeAddress == null && node.getDefaultRoutingStrategyId() != null)
+            LOGGER.warn("The node at " + nodeId
+                    + " contains no message processors but has a defaultRoutingStrategyId set. The routingStrategyId will never be used.");
 
         if (threading == null)
             threading = tr.track(new DefaultThreadingModel("NodeThreadPool-" + nodeId + "-")).configure(node.getConfiguration()).start();
@@ -212,7 +222,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         // =====================================
         // The layering works this way.
         //
-        // Receiver -> NodeReceiver -> adaptor -> container -> Router -> RoutingStrategyOB -> Transport
+        // Receiver -> NodeReceiver -> adaptor -> container -> OutgoingDispatcher -> RoutingStrategyOB -> Transport
         //
         // starting needs to happen in reverse.
         // =====================================
