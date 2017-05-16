@@ -35,6 +35,7 @@ import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.MessageProcessorLifecycle;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.StatsCollector;
+import net.dempsy.output.OutputInvoker;
 import net.dempsy.router.RoutingStrategy.Inbound;
 import net.dempsy.util.executor.RunningEventSwitch;
 
@@ -46,7 +47,7 @@ import net.dempsy.util.executor.RunningEventSwitch;
  * The container is simple in that it does no thread management. When it's called it assumes that the transport 
  * has provided the thread that's needed
  */
-public abstract class Container implements Service, KeyspaceChangeListener {
+public abstract class Container implements Service, KeyspaceChangeListener, OutputInvoker {
     protected final Logger LOGGER;
 
     private static final AtomicLong containerNumSequence = new AtomicLong(0L);
@@ -67,8 +68,9 @@ public abstract class Container implements Service, KeyspaceChangeListener {
     protected ClusterStatsCollector statCollector;
     protected Set<String> messageTypes;
 
-    protected ExecutorService outputExecutorService = null;
+    private ExecutorService outputExecutorService = null;
     protected int outputConcurrency = -1;
+    private final AtomicLong outputThreadNum = new AtomicLong();
 
     protected Container(final Logger LOGGER) {
         this.LOGGER = LOGGER;
@@ -147,7 +149,7 @@ public abstract class Container implements Service, KeyspaceChangeListener {
             evictionScheduler.shutdownNow();
 
         // the following will close up any output executor that might be running
-        setOutputCycleConcurrency(-1);
+        stopOutput();
 
         isRunning.set(false);
         isRunningLazy = false;
@@ -171,8 +173,12 @@ public abstract class Container implements Service, KeyspaceChangeListener {
         if (messageTypes == null || messageTypes.size() == 0)
             throw new ContainerException("The cluster " + clusterId + " appears to have a MessageProcessor with no messageTypes defined.");
 
+        if (outputConcurrency > 1)
+            outputExecutorService = Executors.newFixedThreadPool(outputConcurrency,
+                    r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
     }
 
+    @Override
     public void invokeOutput() {
         try (final StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted()) {
             outputPass();
@@ -195,19 +201,20 @@ public abstract class Container implements Service, KeyspaceChangeListener {
     // This method MUST NOT THROW
     protected abstract void outputPass();
 
-    private final AtomicLong outputThreadNum = new AtomicLong();
+    protected ExecutorService getOutputExecutorService() {
+        return outputExecutorService;
+    }
 
-    // This should be called prior to starting the container
-    public void setOutputCycleConcurrency(final int concurrency) {
+    @Override
+    public void setOutputConcurrency(final int concurrency) {
         outputConcurrency = concurrency;
-        if (outputConcurrency > 1)
-            outputExecutorService = Executors.newFixedThreadPool(outputConcurrency,
-                    r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
-        else {
-            if (outputExecutorService != null)
-                outputExecutorService.shutdown();
-            outputExecutorService = null;
-        }
+    }
+
+    private void stopOutput() {
+        if (outputExecutorService != null)
+            outputExecutorService.shutdown();
+
+        outputExecutorService = null;
     }
 
     public void setEvictionCycle(final long evictionCycleTime, final TimeUnit timeUnit) {

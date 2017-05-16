@@ -44,6 +44,8 @@ public class Cluster {
     // default to negative cycle time means no eviction cycle runs
     private EvictionFrequency evictionFrequency = new EvictionFrequency(-1L, TimeUnit.DAYS);
 
+    private Object outputExecutor = null;
+
     public static class EvictionFrequency {
         public final long evictionFrequency;
         public final TimeUnit evictionTimeUnit;
@@ -117,6 +119,11 @@ public class Cluster {
         this.evictionFrequency = new EvictionFrequency(evictionFrequency, timeUnit);
         return this;
     }
+
+    public Cluster outputScheduler(final Object outputExecutor) {
+        this.outputExecutor = outputExecutor;
+        return this;
+    }
     // ============================================================================
 
     // ============================================================================
@@ -138,6 +145,14 @@ public class Cluster {
     public Cluster setEvictionFrequency(final EvictionFrequency evictionFrequency) {
         this.evictionFrequency = evictionFrequency;
         return this;
+    }
+
+    public Object getOutputScheduler() {
+        return outputExecutor;
+    }
+
+    public Cluster setOutputScheduler(final Object outputScheduler) {
+        return outputScheduler(outputScheduler);
     }
 
     /**
@@ -224,5 +239,4 @@ public class Cluster {
             throw new IllegalStateException("No routing strategy set for " + clusterId + ". This should be set on the "
                     + Cluster.class.getSimpleName() + " or on the " + Node.class.getSimpleName());
     }
-
 }

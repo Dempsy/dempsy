@@ -26,6 +26,7 @@ import net.dempsy.messages.MessageProcessorLifecycle;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.ClusterStatsCollectorFactory;
 import net.dempsy.monitoring.NodeStatsCollector;
+import net.dempsy.output.OutputScheduler;
 import net.dempsy.router.RoutingInboundManager;
 import net.dempsy.router.RoutingStrategy;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
@@ -129,6 +130,10 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                 if (c.getRoutingStrategyId() != null && !"".equals(c.getRoutingStrategyId().trim()) && !" ".equals(c.getRoutingStrategyId().trim()))
                     LOGGER.warn("The cluster " + c.getClusterId()
                             + " contains an adaptor but also has the routingStrategy set. The routingStrategy will be ignored.");
+
+                if (c.getOutputScheduler() != null)
+                    LOGGER.warn("The cluster " + c.getClusterId()
+                            + " contains an adaptor but also has an output executor set. The output executor will never be used.");
             } else {
                 final Container con = makeContainer(node.getContainerTypeId()).setMessageProcessor(c.getMessageProcessor())
                         .setClusterId(c.getClusterId());
@@ -136,7 +141,21 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                 // TODO: This is a hack for now.
                 final Manager<RoutingStrategy.Inbound> inboundManager = new RoutingInboundManager();
                 final RoutingStrategy.Inbound is = inboundManager.getAssociatedInstance(c.getRoutingStrategyId());
-                containers.add(new PerContainer(con, is, c));
+
+                final boolean outputSupported = c.getMessageProcessor().isOutputSupported();
+                final Object outputScheduler = c.getOutputScheduler();
+
+                // if there mp handles output but there's no output scheduler then we should warn.
+                if (outputSupported && outputScheduler == null)
+                    LOGGER.warn("The cluster " + c.getClusterId()
+                            + " contains a message processor that supports an output cycle but there's no executor set so it will never be invoked.");
+
+                if (!outputSupported && outputScheduler != null)
+                    LOGGER.warn("The cluster " + c.getClusterId()
+                            + " contains a message processor that doesn't support an output cycle but there's an output cycle executor set. The output cycle executor will never be used.");
+
+                final OutputScheduler os = (outputSupported && outputScheduler != null) ? (OutputScheduler) outputScheduler : null;
+                containers.add(new PerContainer(con, is, c, os));
             }
         });
         // =====================================
@@ -246,11 +265,17 @@ public class NodeManager implements Infrastructure, AutoCloseable {
             c.inboundStrategy.setContainerDetails(c.clusterDefinition.getClusterId(), new ContainerAddress(nodeAddress, i), c.container);
         }
 
+        // setup the output executors by passing the containers
+        containers.stream().filter(pc -> pc.outputScheduler != null).forEach(pc -> pc.outputScheduler.setOutputInvoker(pc.container));
+
         // start containers after setting inbound
         containers.forEach(pc -> tr.start(pc.container.setInbound(pc.inboundStrategy), this));
 
         // set up adaptors
         adaptors.values().forEach(a -> a.setDispatcher(router));
+
+        // start the output schedulers now that the containers have been started.
+        containers.stream().filter(pc -> pc.outputScheduler != null).forEach(pc -> tr.start(pc.outputScheduler, this));
 
         // start IB routing strategy
         containers.forEach(pc -> tr.start(pc.inboundStrategy, this));
@@ -404,11 +429,13 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         final Container container;
         final RoutingStrategy.Inbound inboundStrategy;
         final Cluster clusterDefinition;
+        final OutputScheduler outputScheduler;
 
-        public PerContainer(final Container container, final Inbound inboundStrategy, final Cluster clusterDefinition) {
+        public PerContainer(final Container container, final Inbound inboundStrategy, final Cluster clusterDefinition, final OutputScheduler os) {
             this.container = container;
             this.inboundStrategy = inboundStrategy;
             this.clusterDefinition = clusterDefinition;
+            this.outputScheduler = os;
         }
     }
 

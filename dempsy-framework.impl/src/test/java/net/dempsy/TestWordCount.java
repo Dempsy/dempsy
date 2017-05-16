@@ -15,12 +15,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
@@ -42,6 +44,7 @@ import net.dempsy.lifecycle.annotation.MessageKey;
 import net.dempsy.lifecycle.annotation.MessageProcessor;
 import net.dempsy.lifecycle.annotation.MessageType;
 import net.dempsy.lifecycle.annotation.Mp;
+import net.dempsy.lifecycle.annotation.Output;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
@@ -100,7 +103,6 @@ public class TestWordCount extends DempsyBaseTest {
         public String toString() {
             return "[ " + word + " ]";
         }
-
     }
 
     @MessageType
@@ -237,13 +239,28 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    public static class Rank {
+    static final Long dumbKey = Long.valueOf(0L);
+
+    @MessageType
+    public static class Rank implements Serializable {
+        private static final long serialVersionUID = 1L;
         public final String word;
         public final Long rank;
 
-        public Rank(final String work, final long rank) {
-            this.word = work;
+        @SuppressWarnings("unused")
+        private Rank() {
+            word = null;
+            rank = null;
+        }
+
+        public Rank(final String word, final long rank) {
+            this.word = word;
             this.rank = rank;
+        }
+
+        @MessageKey
+        public Long dumbKey() {
+            return dumbKey;
         }
 
         @Override
@@ -273,6 +290,69 @@ public class TestWordCount extends DempsyBaseTest {
                 ret.add(new Rank(cur.getKey(), cur.getValue()));
             Collections.sort(ret, (o1, o2) -> o2.rank.compareTo(o1.rank));
             return ret;
+        }
+    }
+
+    @Mp
+    public static class WordCountLastOutput implements Cloneable {
+        protected WordCount last = null;
+
+        @MessageHandler
+        public void handle(final WordCount wordCount) {
+            // keep the largest count only.
+            if (last == null || last.count < wordCount.count)
+                last = wordCount;
+        }
+
+        @Override
+        public WordCountLastOutput clone() throws CloneNotSupportedException {
+            return (WordCountLastOutput) super.clone();
+        }
+
+        @Output
+        public Rank emit() {
+            return (last != null) ? new Rank(last.word, last.count) : null;
+        }
+    }
+
+    @Mp
+    public static class RankCatcher implements Cloneable {
+        // This list is shared among clones - though there should be only 1.
+        private final AtomicReference<List<Rank>> topRef = new AtomicReference<>(new ArrayList<>());
+
+        @Override
+        public RankCatcher clone() throws CloneNotSupportedException {
+            return (RankCatcher) super.clone();
+        }
+
+        @MessageHandler
+        public void handle(final Rank rank) {
+            // is this ranking on top?
+            final LinkedList<Rank> newList = new LinkedList<>();
+            boolean takenCareOf = false;
+            final List<Rank> top = topRef.get();
+            for (final Rank cur : top) {
+                if (cur.word.equals(rank.word)) {
+                    // which one goes in the list?
+                    newList.add(cur.rank > rank.rank ? cur : rank);
+                    takenCareOf = true;
+                } else {
+                    newList.add(cur);
+                }
+            }
+            if (!takenCareOf) {
+                newList.add(rank);
+            }
+
+            Collections.sort(newList, (o1, o2) -> {
+                return o2.rank.compareTo(o1.rank);
+            });
+
+            while (newList.size() > 10)
+                newList.removeLast();
+
+            if (!top.equals(newList))
+                topRef.set(newList);
         }
     }
 
@@ -539,5 +619,67 @@ public class TestWordCount extends DempsyBaseTest {
                 }
             });
         }
+    }
+
+    @Test
+    public void testWithOutputCycleCron() throws Exception {
+        runTestWithOutputCycle("testWithOutputCycleCron", "classpath:/word-count/output-scheduler-cron.xml");
+    }
+
+    @Test
+    public void testWithOutputCycleRelative() throws Exception {
+        runTestWithOutputCycle("testWithOutputCycleRelative", "classpath:/word-count/output-scheduler-relative.xml");
+    }
+
+    private void runTestWithOutputCycle(final String testName, final String outputSchedCtx) throws Exception {
+        final String[][] ctxs = {
+                { "classpath:/word-count/adaptor-kjv.xml", }, // adaptor only node
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-count-output.xml", outputSchedCtx },
+                { "classpath:/word-count/mp-word-count.xml", "classpath:/word-count/mp-word-count-output.xml", outputSchedCtx },
+                { "classpath:/word-count/mp-rank-catcher.xml" },
+        };
+
+        final int NUM_WC = ctxs.length - 2; // the adaptor is the first one, rank catcher the last.
+
+        try (@SuppressWarnings("resource")
+        final SystemPropertyManager props = new SystemPropertyManager()
+                .set("min_nodes", Integer.toString(NUM_WC))
+                .set("routing-group", ":group")
+                .set("send_threads", "1")
+                .set("receive_threads", "1")
+                .set("blocking-queue-size", "500000")) {
+
+            WordProducer.latch = new CountDownLatch(1); // need to make it wait.
+            runCombos(testName, (r, c, s, t, ser) -> isElasticRoutingStrategy(r), ctxs, n -> {
+                final List<NodeManagerWithContext> nodes = n.nodes;
+                final NodeManager[] managers = nodes.stream().map(nm -> nm.manager).toArray(NodeManager[]::new);
+
+                // wait until I can reach the cluster from the adaptor.
+                assertTrue(poll(o -> managers[0].getRouter().allReachable("test-cluster1").size() == NUM_WC));
+                assertTrue(poll(o -> managers[0].getRouter().allReachable("test-cluster2").size() == NUM_WC));
+                assertTrue(poll(o -> managers[0].getRouter().allReachable("test-cluster3").size() == 1));
+
+                for (int i = 0; i < NUM_WC; i++) {
+                    final int managerIndex = i + 1; // the +1 is because the first (0th) manager is the adaptor
+                    assertTrue(poll(o -> managers[managerIndex].getRouter().allReachable("test-cluster3").size() == 1));
+                }
+
+                WordProducer.latch.countDown();
+                final WordProducer adaptor = nodes.get(0).ctx.getBean(WordProducer.class);
+                waitForAllSent(adaptor);
+
+                final NodeManager manager = nodes.get(nodes.size() - 1).manager; // the last node has the RankCatcher
+                final MessageProcessorLifecycle<?> mp = AccessUtil.getMp(manager, "test-cluster3");
+                @SuppressWarnings("unchecked")
+                final RankCatcher prototype = ((MessageProcessor<RankCatcher>) mp).getPrototype();
+                final HashSet<String> expected = new HashSet<>(Arrays.asList("the", "that", "unto", "in", "and", "And", "of", "shall", "to", "he"));
+                assertTrue(poll(prototype.topRef, tr -> {
+                    final List<Rank> cur = tr.get();
+                    final HashSet<String> topSet = new HashSet<>(cur.stream().map(r -> r.word).collect(Collectors.toSet()));
+                    return expected.equals(topSet);
+                }));
+            });
+        }
+
     }
 }

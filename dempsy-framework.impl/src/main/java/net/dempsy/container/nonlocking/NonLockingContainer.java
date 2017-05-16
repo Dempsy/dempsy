@@ -427,7 +427,7 @@ public class NonLockingContainer extends Container {
 
         Executor executorService = null;
         Semaphore taskLock = null;
-        executorService = outputExecutorService;
+        executorService = super.getOutputExecutorService();
         if (executorService != null)
             taskLock = new Semaphore(outputConcurrency);
 

@@ -352,7 +352,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         // take a snapshot of the current container state.
         final LinkedList<Object> toOutput = new LinkedList<Object>(instances.keySet());
 
-        final Executor executorService = outputExecutorService;
+        final Executor executorService = getOutputExecutorService();
         final Semaphore taskLock = (executorService != null) ? new Semaphore(outputConcurrency) : null;
 
         // This keeps track of the number of concurrently running

@@ -514,7 +514,7 @@ public class TestContainer {
         final int numInstances = 20;
         final int concurrency = 5;
 
-        container.setOutputCycleConcurrency(concurrency);
+        container.setOutputConcurrency(concurrency);
 
         final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
         assertNotNull(adaptor.dispatcher);
