@@ -121,20 +121,15 @@ public abstract class DempsyBaseTest {
     private static List<String> transportsThatRequireSerializer = Arrays.asList("nio");
     private static List<String> grouRoutingStrategies = Arrays.asList("group");
 
-    public static Object[][] threadingModelDetails = {
-            { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                    .setAdditionalThreads(0)
-                    .setCoresFactor(1.0)
-                    .setBlocking(true)
-                    .setMaxNumberOfQueuedLimitedTasks(10L)
-            },
-            { "non-blocking", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                    .setAdditionalThreads(0)
-                    .setCoresFactor(1.0)
-                    .setBlocking(false)
-                    .setMaxNumberOfQueuedLimitedTasks(-1)
-            },
-    };
+    // ======================================================
+    // These define how the tests use the threading model. Don't
+    // forget that there's a separate DefaultThreadingModel for
+    // each node.
+    // ======================================================
+    public static final double TM_CORES_FACTOR = 0.0;
+    public static final int TM_ADDITIONAL_THREADS = 1;
+    public static final long TM_QUEUE_DEPTH_WHEN_LIMITED = 100000L;
+    // ======================================================
 
     public static Combos hardcore() {
         return new Combos(
@@ -144,15 +139,15 @@ public abstract class DempsyBaseTest {
                 new String[] { "bq", "passthrough", "nio" },
                 new String[] { "json", "java", "kryo" },
                 new Object[][] {
-                        { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                                .setAdditionalThreads(2)
-                                .setCoresFactor(0.0)
+                        { "blocking", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                                .setAdditionalThreads(TM_ADDITIONAL_THREADS)
+                                .setCoresFactor(TM_CORES_FACTOR)
                                 .setBlocking(true)
-                                .setMaxNumberOfQueuedLimitedTasks(10L)
+                                .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
                         },
-                        { "non-blocking", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                                .setAdditionalThreads(2)
-                                .setCoresFactor(0.0)
+                        { "unbounded", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                                .setAdditionalThreads(TM_ADDITIONAL_THREADS)
+                                .setCoresFactor(TM_CORES_FACTOR)
                                 .setBlocking(false)
                                 .setMaxNumberOfQueuedLimitedTasks(-1)
                         },
@@ -161,23 +156,17 @@ public abstract class DempsyBaseTest {
 
     public static Combos production() {
         return new Combos(
-                new String[] { "group" },
+                new String[] { "managed", "group" },
                 new String[] { "altnonlocking" },
                 new String[] { "zookeeper" },
                 new String[] { "nio" },
                 new String[] { "kryo" },
                 new Object[][] {
-                        { "blocking-limited", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                                .setAdditionalThreads(0)
-                                .setCoresFactor(1.0)
+                        { "blocking", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
+                                .setAdditionalThreads(TM_ADDITIONAL_THREADS)
+                                .setCoresFactor(TM_CORES_FACTOR)
                                 .setBlocking(true)
-                                .setMaxNumberOfQueuedLimitedTasks(1000L)
-                        },
-                        { "unbounded", (Function<String, ThreadingModel>) (testName) -> new DefaultThreadingModel(testName)
-                                .setAdditionalThreads(0)
-                                .setCoresFactor(1.0)
-                                .setBlocking(false)
-                                .setMaxNumberOfQueuedLimitedTasks(-1)
+                                .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
                         },
                 });
     }

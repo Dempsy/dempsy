@@ -1,5 +1,6 @@
 package net.dempsy;
 
+import static net.dempsy.utils.test.ConditionPoll.assertTrue;
 import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -15,7 +16,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -267,6 +267,26 @@ public class TestWordCount extends DempsyBaseTest {
         public String toString() {
             return "[ " + word + " count:" + rank + " ]";
         }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((rank == null) ? 0 : rank.hashCode());
+            result = prime * result + ((word == null) ? 0 : word.hashCode());
+            return result;
+        }
+
+        // ignores any possible nulls
+        @Override
+        public boolean equals(final Object obj) {
+            final Rank other = (Rank) obj;
+            if (!rank.equals(other.rank))
+                return false;
+            if (!word.equals(other.word))
+                return false;
+            return true;
+        }
     }
 
     @Mp
@@ -319,6 +339,7 @@ public class TestWordCount extends DempsyBaseTest {
     public static class RankCatcher implements Cloneable {
         // This list is shared among clones - though there should be only 1.
         private final AtomicReference<List<Rank>> topRef = new AtomicReference<>(new ArrayList<>());
+        private long minInList = -1;
 
         @Override
         public RankCatcher clone() throws CloneNotSupportedException {
@@ -327,8 +348,11 @@ public class TestWordCount extends DempsyBaseTest {
 
         @MessageHandler
         public void handle(final Rank rank) {
+            if (rank.rank.longValue() < minInList)
+                return;
+
             // is this ranking on top?
-            final LinkedList<Rank> newList = new LinkedList<>();
+            final ArrayList<Rank> newList = new ArrayList<>();
             boolean takenCareOf = false;
             final List<Rank> top = topRef.get();
             for (final Rank cur : top) {
@@ -336,20 +360,21 @@ public class TestWordCount extends DempsyBaseTest {
                     // which one goes in the list?
                     newList.add(cur.rank > rank.rank ? cur : rank);
                     takenCareOf = true;
-                } else {
+                } else
                     newList.add(cur);
-                }
             }
-            if (!takenCareOf) {
+
+            if (!takenCareOf)
                 newList.add(rank);
-            }
 
             Collections.sort(newList, (o1, o2) -> {
                 return o2.rank.compareTo(o1.rank);
             });
 
             while (newList.size() > 10)
-                newList.removeLast();
+                newList.remove(newList.size() - 1);
+
+            minInList = newList.get(newList.size() - 1).rank.longValue();
 
             if (!top.equals(newList))
                 topRef.set(newList);
@@ -673,10 +698,18 @@ public class TestWordCount extends DempsyBaseTest {
                 @SuppressWarnings("unchecked")
                 final RankCatcher prototype = ((MessageProcessor<RankCatcher>) mp).getPrototype();
                 final HashSet<String> expected = new HashSet<>(Arrays.asList("the", "that", "unto", "in", "and", "And", "of", "shall", "to", "he"));
-                assertTrue(poll(prototype.topRef, tr -> {
+                assertTrue(() -> {
+                    return "FAILURE:" + expected.toString() + " != " + prototype.topRef.get();
+                }, poll(prototype.topRef, tr -> {
                     final List<Rank> cur = tr.get();
                     final HashSet<String> topSet = new HashSet<>(cur.stream().map(r -> r.word).collect(Collectors.toSet()));
-                    return expected.equals(topSet);
+                    // once more than 1/2 of the list is there then we're done.
+                    final int threshold = (expected.size() / 2) + 1;
+                    int matches = 0;
+                    for (final String exp : expected)
+                        if (topSet.contains(exp))
+                            matches++;
+                    return matches >= threshold;
                 }));
             });
         }
