@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,9 +58,12 @@ public final class NioSender implements Sender {
     public void send(final Object message) throws MessageTransportException {
         boolean done = false;
         while (running && !done) {
-            if (running)
-                dontInterrupt(() -> messages.put(message));
-            done = true;
+            if (running) {
+                try {
+                    // let's not try forever in case we're locked up and shutting down.
+                    done = messages.offer(message, 1, TimeUnit.SECONDS);
+                } catch (final InterruptedException ie) {}
+            }
         }
     }
 
