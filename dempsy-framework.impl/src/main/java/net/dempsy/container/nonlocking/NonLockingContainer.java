@@ -18,6 +18,7 @@ package net.dempsy.container.nonlocking;
 
 import static net.dempsy.util.SafeString.objectDescription;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -253,6 +254,7 @@ public class NonLockingContainer extends Container {
             if (alreadyThere == null) { // we're it!
                 final WorkingPlaceholder wp = wph.ref;
                 keepTrying = false; // we're not going to keep trying.
+                List<KeyedMessageWithType> response = null; // these will be dispatched while NOT having the lock
                 try { // if we don't get the WorkingPlaceholder out of the working map then that Mp will forever be lost.
                     numBeingWorked.incrementAndGet(); // we're working one.
 
@@ -283,7 +285,13 @@ public class NonLockingContainer extends Container {
                     } else {
                         KeyedMessage curMessage = message;
                         while (curMessage != null) { // can't be null the first time
-                            invokeOperation(instance, Operation.handle, curMessage);
+                            final List<KeyedMessageWithType> resp = invokeOperation(instance, Operation.handle, curMessage);
+                            if (resp != null) { // these responses will be dispatched after we release the lock.
+                                if (response == null)
+                                    response = new ArrayList<>();
+                                response.addAll(resp);
+                            }
+
                             numBeingWorked.decrementAndGet(); // decrement the initial increment.
 
                             // work off the queue.
@@ -306,12 +314,18 @@ public class NonLockingContainer extends Container {
                                 // queue. Since we're about to give up the Mp we cannot allow the mailbox to become available
                                 // therefore we cannot allow any other threads to spin on it.
                             }
-
                         }
                     }
                 } finally {
                     if (working.remove(key) == null)
                         LOGGER.error("IMPOSSIBLE! Null key removed from working set.", new RuntimeException());
+                }
+                if (response != null) {
+                    try {
+                        dispatcher.dispatch(response);
+                    } catch (final Exception de) {
+                        LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
+                    }
                 }
             } else { // ... we didn't get the lock
                 if (!block) { // blocking means no collisions allowed.
@@ -461,9 +475,12 @@ public class NonLockingContainer extends Container {
 
                             @Override
                             public void run() {
+                                final List<KeyedMessageWithType> response;
                                 try {
                                     if (isRunning.get())
-                                        invokeOperation(instance, Operation.output, null);
+                                        response = invokeOperation(instance, Operation.output, null);
+                                    else
+                                        response = null;
                                 } finally {
                                     working.remove(key); // releases this back to the world
 
@@ -474,6 +491,15 @@ public class NonLockingContainer extends Container {
                                     }
                                     if (taskSepaphore != null)
                                         taskSepaphore.release();
+                                }
+
+                                if (response != null) {
+                                    try {
+                                        dispatcher.dispatch(response);
+                                    } catch (final Exception de) {
+                                        if (isRunning.get())
+                                            LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
+                                    }
                                 }
                             }
                         };
@@ -551,7 +577,7 @@ public class NonLockingContainer extends Container {
     /**
      * helper method to invoke an operation (handle a message or run output) handling all of the exceptions and forwarding any results.
      */
-    private void invokeOperation(final Object instance, final Operation op, final KeyedMessage message) {
+    private List<KeyedMessageWithType> invokeOperation(final Object instance, final Operation op, final KeyedMessage message) {
         if (instance != null) { // possibly passivated ...
             List<KeyedMessageWithType> result;
             try {
@@ -590,14 +616,9 @@ public class NonLockingContainer extends Container {
                 if (op == Operation.handle)
                     throw e;
             }
-            if (result != null) {
-                try {
-                    dispatcher.dispatch(result);
-                } catch (final Exception de) {
-                    LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
-                }
-            }
+            return result;
         }
+        return null;
     }
 
 }

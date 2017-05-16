@@ -238,10 +238,11 @@ public class LockingContainer extends Container {
                 // wrapper will be null if the activate returns 'false'
                 if (wrapper != null) {
                     final Object instance = wrapper.getExclusive(block);
-
                     if (instance != null) { // null indicates we didn't get the lock
+                        final List<KeyedMessageWithType> response;
                         try {
                             if (wrapper.isEvicted()) {
+                                response = null;
                                 // if we're not blocking then we need to just return a failure. Otherwise we want to try again
                                 // because eventually the current Mp will be passivated and removed from the container and
                                 // a subsequent call to getInstanceForDispatch will create a new one.
@@ -255,10 +256,19 @@ public class LockingContainer extends Container {
 
                                     statCollector.messageCollision(message);
                                 }
-                            } else
-                                invokeOperation(wrapper.getInstance(), Operation.handle, message);
+                            } else {
+                                response = invokeOperation(wrapper.getInstance(), Operation.handle, message);
+                            }
                         } finally {
                             wrapper.releaseLock();
+                        }
+                        if (response != null) {
+                            try {
+                                dispatcher.dispatch(response);
+                            } catch (final Exception de) {
+                                if (isRunning.get())
+                                    LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
+                            }
                         }
                     } else { // ... we didn't get the lock
                         if (LOGGER.isTraceEnabled())
@@ -402,9 +412,12 @@ public class LockingContainer extends Container {
                     final Runnable task = new Runnable() {
                         @Override
                         public void run() {
+                            final List<KeyedMessageWithType> response;
                             try {
                                 if (isRunning.get() && !wrapper.isEvicted())
-                                    invokeOperation(instance, Operation.output, null);
+                                    response = invokeOperation(instance, Operation.output, null);
+                                else
+                                    response = null;
                             } finally {
                                 wrapper.releaseLock();
 
@@ -415,6 +428,14 @@ public class LockingContainer extends Container {
                                 }
                                 if (taskSepaphore != null)
                                     taskSepaphore.release();
+                            }
+                            if (response != null) {
+                                try {
+                                    dispatcher.dispatch(response);
+                                } catch (final Exception de) {
+                                    if (isRunning.get())
+                                        LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
+                                }
                             }
                         }
                     };
@@ -561,13 +582,12 @@ public class LockingContainer extends Container {
     /**
      * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and forwarding any results.
      */
-    private void invokeOperation(final Object instance, final Operation op, final KeyedMessage message) {
+    private List<KeyedMessageWithType> invokeOperation(final Object instance, final Operation op, final KeyedMessage message) {
         if (instance != null) { // possibly passivated ...
             List<KeyedMessageWithType> result;
             try {
                 statCollector.messageDispatched(message);
-                result = op == Operation.output ? prototype.invokeOutput(instance)
-                        : prototype.invoke(instance, message);
+                result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message);
                 statCollector.messageProcessed(message);
             } catch (final ContainerException e) {
                 result = null;
@@ -601,15 +621,9 @@ public class LockingContainer extends Container {
                 if (op == Operation.handle)
                     throw e;
             }
-            if (result != null) {
-                try {
-                    dispatcher.dispatch(result);
-                } catch (final Exception de) {
-                    if (isRunning.get())
-                        LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
-                }
-            }
+            return result;
         }
+        return null;
     }
 
 }
