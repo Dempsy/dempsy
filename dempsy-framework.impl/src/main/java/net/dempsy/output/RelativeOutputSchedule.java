@@ -35,7 +35,7 @@ import net.dempsy.Infrastructure;
 public class RelativeOutputSchedule implements OutputScheduler {
 
     /** The logger. */
-    private static Logger logger = LoggerFactory.getLogger(RelativeOutputSchedule.class);
+    private static Logger LOGGER = LoggerFactory.getLogger(RelativeOutputSchedule.class);
 
     /** The interval. */
     private final long interval;
@@ -97,7 +97,7 @@ public class RelativeOutputSchedule implements OutputScheduler {
             scheduler.scheduleJob(jobDetail, trigger);
             scheduler.start();
         } catch (final SchedulerException se) {
-            logger.error("Error occurred while starting the relative scheduler : " + se.getMessage(), se);
+            LOGGER.error("Error occurred while starting the relative scheduler : " + se.getMessage(), se);
         }
     }
 
@@ -113,9 +113,9 @@ public class RelativeOutputSchedule implements OutputScheduler {
     public void stop() {
         try {
             // gracefully shutting down
-            scheduler.shutdown(true);
+            scheduler.shutdown(false);
         } catch (final SchedulerException se) {
-            logger.error("Error occurred while stopping the relative scheduler : " + se.getMessage(), se);
+            LOGGER.error("Error occurred while stopping the relative scheduler : " + se.getMessage(), se);
         }
     }
 }
