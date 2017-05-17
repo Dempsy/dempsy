@@ -36,7 +36,7 @@ public abstract class DempsyBaseTest {
      * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
      * every runCombos call. This can make tests run for a loooooong time.
      */
-    public static boolean hardcore = Boolean.parseBoolean(System.getProperty("hardcore", "true"));
+    public static boolean hardcore = Boolean.parseBoolean(System.getProperty("hardcore", "false"));
 
     /**
      * If this is set to <code>true</code> then the serializers will be rotated through but
@@ -45,7 +45,7 @@ public abstract class DempsyBaseTest {
      * this to false isn't likely to provide any better results than running the test multiple
      * times.
      */
-    public static boolean butRotateSerializer = Boolean.parseBoolean(System.getProperty("butRotateSerializer", "false"));
+    public static boolean butRotateSerializer = Boolean.parseBoolean(System.getProperty("butRotateSerializer", "true"));
 
     protected Logger LOGGER;
 
