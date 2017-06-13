@@ -8,4 +8,12 @@ public class KeyedMessage {
         this.key = key;
         this.message = message;
     }
+
+    @Override
+    public String toString() {
+        return new StringBuilder()
+                .append("KeyedMessage [key=").append(key)
+                .append(", message=").append(message)
+                .append("]").toString();
+    }
 }
