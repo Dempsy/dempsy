@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
+  <parent>
+    <groupId>net.dempsy</groupId>
+    <artifactId>dempsy-commons-settings</artifactId>
+    <version>2.1.1</version>
+  </parent>
+
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>net.dempsy</groupId>
   <artifactId>dempsy-framework.parent</artifactId>
-  <version>0.9-SNAPSHOT</version>
+  <version>0.9</version>
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>
 
@@ -24,7 +30,7 @@
   </scm>
 
   <properties>
-    <dempsy-commons-bom.version>2.1.2-SNAPSHOT</dempsy-commons-bom.version>
+    <dempsy-commons-bom.version>2.1.2</dempsy-commons-bom.version>
     <spring.version>4.2.5.RELEASE</spring.version>
     <metrics.version>3.2.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
