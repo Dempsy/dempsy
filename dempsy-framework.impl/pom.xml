@@ -21,15 +21,17 @@
        <groupId>io.dropwizard.metrics</groupId>
        <artifactId>metrics-core</artifactId>
      </dependency>
-     <dependency>
+     <dependency> <!-- Required for Dropwizard reporter monitoring implementation Graphite or Ganglia -->
        <groupId>io.dropwizard.metrics</groupId>
        <artifactId>metrics-graphite</artifactId>
+       <optional>true</optional>
      </dependency>
-     <dependency>
+     <dependency> <!-- Required for Dropwizard reporter monitoring implementation Graphite or Ganglia -->
        <groupId>io.dropwizard.metrics</groupId>
        <artifactId>metrics-ganglia</artifactId>
+       <optional>true</optional>
      </dependency>
-     <dependency>
+     <dependency> <!-- Required if the output scheduler is going to be used. -->
        <groupId>org.quartz-scheduler</groupId>
        <artifactId>quartz</artifactId>
        <optional>true</optional>
