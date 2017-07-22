@@ -1,0 +1,7 @@
+net.dempsy
+net.dempsy.config
+net.dempsy.lifecycle.annotation
+net.dempsy.lifecycle.annotation.internal
+net.dempsy.lifecycle.annotation.utils
+net.dempsy.lifecycle.simple
+net.dempsy.messages
