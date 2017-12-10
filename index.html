@@ -1,0 +1,307 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>The Dempsy Real-Time BigData Framework</title>
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script src="javascripts/main.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+  </head>
+  <body>
+
+      <header>
+        <h1>Dempsy</h1>
+        <p>Distributed Elastic Message Processing System</p>
+      </header>
+
+      <div id="banner">
+        <span id="logo"></span>
+
+        <a href="https://github.com/Dempsy/Dempsy" class="button fork"><strong>View On GitHub</strong></a>
+        <div class="downloads">
+          <span>Downloads:</span>
+          <ul>
+            <li><a href="https://github.com/Dempsy/Dempsy/zipball/master" class="button">ZIP</a></li>
+            <li><a href="https://github.com/Dempsy/Dempsy/tarball/master" class="button">TAR</a></li>
+          </ul>
+        </div>
+      </div><!-- end banner -->
+
+    <div class="wrapper">
+      <nav>
+        <ul></ul>
+      </nav>
+      <section>
+        <h1>Project&nbsp;
+        </h1>
+          <div align="right" style="float: right;" >
+            <table>
+              <tr><td colspan="2"><div align="center" style="font-size:16px" >Dempsy Project Sponsors</div></td></tr>
+              <tr>
+                <td><a href="http://www.yourkit.com/java/profiler/index.jsp"><img src="yourkit2.png" width="100" height="30" /></a></td>
+                <td><a href="https://www.cloudbees.com"><img src="https://www.cloudbees.com/sites/default/files/Button-Built-on-CB-1.png" width="125" /></a></td>
+              </tr>
+              <tr><td colspan="2" width="100" >
+                  <div align="center" style="font-size:12px;font-weight: normal;">
+                      YourKit is kindly supporting open source projects with its full-featured Java Profiler.
+                      YourKit, LLC is the creator of innovative and intelligent tools for profiling
+                      Java and .NET applications. Take a look at YourKit's leading software products:
+                      <a href="http://www.yourkit.com/java/profiler/index.jsp">YourKit Java Profiler</a> and
+                      <a href="http://www.yourkit.com/.net/profiler/index.jsp">YourKit .NET Profiler</a>.
+              </div></td></tr>
+            </table>
+          </div>
+<p>Welcome to the Dempsy project - a framework for the easy implementation of stream-based real-time fully-distributed elastic analytics processing applications.</p>
+
+<h2>Features</h2>
+
+<p>If you're already familiar with real-time stream based BigData engines, the following list of features will distinguish Dempsy from the others:</p>
+
+<p>
+<li><em>Fine grained "actor model":</em> Dempsy provides for the fine grained distribution and lifecycle management of (potentially) millions of "actors" (<em>message processors</em> in Dempsy parlance) across a large cluster of machines allowing developers to write code that concentrates on handling individual data points in a stream without any concern for concurrency.</li>
+
+<li><em>Inversion of control programming paradigm:</em> Dempsy allows developers to construct these large-scale processing applications decoupled from all infrastructure concerns providing a means for simple and testable POJO implementations.</li>
+
+<li><em>Dynamic Topology Autoconfiguration:</em> Dempsy doesn't require the prior definition of a topology for the stream processing. Not only does it dynamically discover the topology, but an application's topology can morph at runtime. Therefore, there's no complicated topology defining DSL or configuration necessary.</li>
+
+<li><em>Integrates with available IAAS and PAAS tools:</em> Dempsy doesn't pretend to be an application server or a batch processing system and therefore the provisioning, deployment and management of nodes in an application are provided by cloud management tools already part of your DevOps infrastructure. It fully integrates with various monitoring solutions including: <a href="http://www.oracle.com/technetwork/java/javase/tech/javamanagement-140525.html">JMX</a>, <a href="http://graphite.wikidot.com/">Graphite</a>, and <a href="http://ganglia.sourceforge.net/">Ganglia</a>.</li>
+
+<li><em>Fully elastic:</em> Expanding Dempsy's cooperation with existing IAAS/PAAS tools, <em>elasticity</em> allows for the dynamic provisioning and deprovisioning of nodes of the application at runtime. This allows for optimizing the use of computational resources over time (<em>Currently available in the trunk revision</em>).</li>
+
+<li><em>Reliable/guaranteed message delivery:</em> Dempsy provides for a simple means of handling reliable message processing providing <em>at-least once</em> message handling (<em>coming in April, 2013</em>).</li>
+</p>
+
+<h2>Documentation</h2>
+
+<p>See the <a href="https://github.com/Dempsy/Dempsy/wiki/User-Guide">Dempsy User Guide</a>.</p>
+
+<p>Since we are updating the documentation frequently, we recommend that you watch the <a href="https://github.com/Dempsy/Dempsy/issues/23">Documentation issue</a> (at the bottom of the issue page click on "Enable notifications for this issue")  </p>
+
+<p>If you prefer, you can go straight to the initial tutorial "<a href="https://github.com/Dempsy/Dempsy/wiki/Simple-Example">Simple Example</a>"</p>
+
+<p>The <a href="https://github.com/Dempsy/Dempsy-examples">Dempsy Examples</a> repository has several versions of the WordCount example. When reading through the "<a href="https://github.com/Dempsy/Dempsy/wiki/Simple-Example">Simple Example</a>" you'll want to be viewing the code in the <a href="https://github.com/Dempsy/Dempsy-examples/tree/master/userguide-wordcount">userguide-wordcount</a> sub-project.</p>
+
+<p>Dempsy recognizes three types of developers and the api documentation is organized accordingly.</p>
+
+<table>
+<tr>
+<th> Developer </th>
+<th> Description </th>
+<th>Api Documentation</th>
+</tr>
+<tr>
+<td>Application Developer</td>
+<td>Developers that are going to build real-time stream based analytics fall into this category.</td>
+<td><a href="0.9/dempsy-framework.api/apidocs/index.html">Application Developer Api Documentation</a></td>
+</tr>
+<tr>
+<td>Framework Developer</td>
+<td>Dempsy is built on a set of abstractions that allow it to be extended with new transports, routing strategies, monitoring techniques, as well as others. Developers interested in adding new implementations or techniques fall into this category. This Api extends the Applicaiton Developer Api above.</td>
+<td><a href="0.9/dempsy-framework.core/apidocs/index.html">Framework Developer Api Documentation</a></td>
+</tr>
+<tr>
+<td>Dempsy Contributors</td>
+<td>Any developer changing the existing framework or any of the default implementations of the core abstractions will need the complete Api documentation for the entire codebase.</td>
+<td><a href="0.9/dempsy-framework.impl/apidocs/index.html">The Complete Api Documentation</a></td>
+</tr>
+</table><p>This Api documentation is currently for the released 0.9 revision.</p>
+
+<h2>Download</h2>
+
+<p>Dempsy is currently released as a set of jar files and version 0.9 is now in the Maven Central Repository so you can build against released Dempsy code directly by including the appropriate dependency.</p>
+
+<p>To build an application against Dempsy you will need to add the Dempsy dependencies to your build. This should be as simple as including the following dependency in your maven <code>pom.xml</code> file (or the gradle equivalent).</p>
+
+<div class="highlight">
+<pre><span class="nt">&lt;dependency&gt;</span>
+   <span class="nt">&lt;groupId&gt;</span>net.dempsy<span class="nt">&lt;/groupId&gt;</span>
+   <span class="nt">&lt;artifactId&gt;</span>lib-dempsyspring<span class="nt">&lt;/artifactId&gt;</span>
+   <span class="nt">&lt;version&gt;</span>0.9<span class="nt">&lt;/version&gt;</span> <span class="c">&lt;!-- Current version --&gt;</span>
+<span class="nt">&lt;/dependency&gt;</span>
+</pre>
+</div>
+
+
+<p>Please review the section on <a href="https://github.com/Dempsy/Dempsy/wiki/Codebase">Understanding the Dempsy Codebase</a> for an overview of how the library jar files are organized.</p>
+
+<p>You can download the source code by cloning the GitHub repository</p>
+
+<div class="highlight">
+<pre>git clone git://github.com/Dempsy/Dempsy.git
+</pre>
+</div>
+
+
+<p>or you can download a released version of the sourcecode:</p>
+
+<ol>
+<li>Zip file: <a href="https://github.com/Dempsy/Dempsy/zipball/0.9">Dempsy version 0.9 zip</a>
+</li>
+<li>Tar and gzipped: <a href="https://github.com/Dempsy/Dempsy/tarball/0.9">Dempsy version 0.9 tar.gz</a>
+</li>
+</ol><h2>Current Work</h2>
+
+<p>See the <a href="https://github.com/Dempsy/Dempsy/issues">issues</a> list for a backlog. The primary tasks are currently:</p>
+
+<ol>
+<li>Full Elasticity - While Dempsy was built from the ground up to be elastic, the ability for the topology to dynamically morph available in the current trunk but not yet in a release version.</li>
+<li>AWS push button deployment and an example integration with an elastic provisioning tool</li>
+</ol><h2>Getting Help</h2>
+
+<p>The team is available through several channels.</p>
+
+<ul>
+<li>If you have a specific issue like a bug report or feature request, you can use the <a href="https://github.com/Dempsy/Dempsy/issues">issues</a> list.</li>
+<li>Comment on any discussion on any <a href="https://github.com/Dempsy/Dempsy/issues">issues</a>, <a href="https://github.com/Dempsy/Dempsy/commits/master">commit</a>, or <a href="https://github.com/Dempsy/Dempsy/pulls">Pull Request</a> </li>
+<li>You can subscribe to the <a href="http://tech.groups.yahoo.com/group/DempsyUser/">Dempsy Email Group</a>
+</li>
+</ul><h1>Overview</h1>
+
+<ul>
+<li>See the recent <a href="http://www.infoq.com/news/2012/04/Dempsy">InfoQ post</a> on Dempsy</li>
+</ul><h2>What is Dempsy?</h2>
+
+<p>In a nutshell, Dempsy is a framework that provides for the easy implementation Stream-based, Real-time, BigData applications.</p>
+
+<p>Dempsy is the Nokia's "Distributed Elastic Message Processing System."</p>
+
+<ul>
+<li>Dempsy is <em>Distributed</em>. That is to say a dempsy application can run on multiple JVMs on multiple physical machines.</li>
+<li>Dempsy is <em>Elastic</em>. That is, it is relatively simple to scale an application to more (or fewer) nodes. This does not require code or configuration changes but allows the dynamic insertion and removal of processing nodes.</li>
+<li>Dempsy is <em>Message Processing</em>. Dempsy fundamentally works by message passing. It moves messages between Message processors, which act on the messages to perform simple atomic operations such as enrichment, transformation, or other processing. Generally an application is intended to be broken down into more smaller simpler processors rather than fewer large complex processors.</li>
+<li>Dempsy is a <em>Framework</em>. It is not an application container like a J2EE container, nor a simple library. Instead, like the <a href="http://www.springsource.org">Spring Framework</a> it is a collection of patterns, the libraries to enable those patterns, and the interfaces one must implement to use those libraries to implement the patterns.</li>
+</ul><h2>What Problem is Dempsy solving?</h2>
+
+<p>Dempsy is not designed to be a general purpose framework, but is intended to solve two specific classes of "stream processing" problems while encouraging the use of the best software development practices. These two classes include:</p>
+
+<h3>Statistical Analytics</h3>
+
+<p>Dempsy can be used to solve the problem of processing large amounts of "near real time" stream data with the lowest lag possible. <em>Statistical Analytics</em> are problems where latency is more important than "guaranteed delivery." This class of problems includes use cases such as:</p>
+
+<ul>
+<li>Real time statistical monitoring of large distributed systems</li>
+<li>Monitoring statistics on rich streams of social networking data</li>
+<li>Real time analytics on log information generated from widely distributed systems</li>
+<li>Statistical analytics on real-time vehicle traffic information on a global basis</li>
+<li>Large scale financial market trending analysis.</li>
+</ul>
+
+<h3>Deterministic Analytics <em>(Coming in April 2013)</em></h3>
+
+<p>In the case where guaranteed delivery is more important than lag reduction, Dempsy provides for the ability to run analytics where stream messages are processed with at-least-once semantics:</p>
+
+<ul>
+<li>Banking and Credit Card fraud detection.</li>
+<li>Widely distributed sensor/device monitoring.</li>
+<li>Individual customer based services.</li>
+</ul>
+
+<p>It is meant to provide developers with a tool that allows them to solve these problems in a simple straightforward manner by allowing them to concentrate on the analytics themselves rather than the infrastructure. Dempsy heavily emphasizes "separation of concerns" through "dependency injection" and out of the box supports both Spring and Guice. It does all of this by supporting what can be (almost) described as a "distributed actor model."</p>
+
+<p>In short Dempsy is a framework to enable decomposing a large class of message processing applications into flows of messages to relatively simple processing units implemented as <a href="http://en.wikipedia.org/wiki/Plain_Old_Java_Object">POJOs</a></p>
+
+<h3>Features</h3>
+
+<p>Important features of Dempsy include:</p>
+
+<ul>
+<li>Built to support an “inversion of control” programming paradigm, making it extremely easy to use, and resulting in smaller and easier to test application codebases, reducing the total cost of ownership of applications that employ Dempsy.</li>
+<li>Fine grained message processing allows the developer to decompose complex analytics into simple small steps. </li>
+<li>Invisible Scalability. While Dempsy is completely horizontally scalable and multithreaded, the development paradigm supported by Dempsy removes all scalability and threading concerns from the application developer. </li>
+<li>Dynamic topologies. There is no need to hard wire application stages into a configuration or into the code. Topologies (by default) are discovered at run-time.</li>
+<li>Full elasticity (for May). Dempsy can handle the dynamic provisioning and decommissioning of computational resources.</li>
+</ul><p>Dempsy is intentionally not an “Application Server” and runs in a completely distributed manner relying on Apache ZooKeeper for coordination. In sticking with one of the development teams guiding principles, it doesn’t try to solve problems well solved in other parts of the industry. As DevOps tools become the norm in cloud computing environments, where it’s “easier to re-provision that to repair,” Dempsy defers to such systems the management of computational resources, however, being fully elastic (May 2012), it cooperates to produce true dynamic fault tolerance.</p>
+
+<h3>What is a Distributed Actor Framework?</h3>
+
+<p>Dempsy has been described as a distributed actor framework. While not strictly speaking an <a href="http://en.wikipedia.org/wiki/Actor_model">actor</a> framework in the sense of <a href="http://www.erlang.org">Erlang</a> or <a href="http://akka.io">Akka</a> actors, in that actors typically direct messages directly to other actors, the Message Processors in Dempsy are "actor like POJOs" similar to Processor Elements in <a href="http://s4.io">S4</a> and less so like Bolts in <a href="https://github.com/nathanmarz/storm">Storm</a>. Message processors are similar to actors in that Message processors act on a single message at a time, and need not deal with concurrency directly. Unlike actors, Message Processors also are relieved of the the need to know the destination(s) for their output messages, as this is handled inside Dempsy itself.</p>
+
+<p>The Actor model is an approach to concurrent programming that has the following features:</p>
+
+<ul>
+<li><strong>Fine-grained processing</strong></li>
+</ul><p>A traditional (linear) programming model processes input sequentially, maintaining whatever state is needed to represent the entire input space. In an "Fine Grained Actor" model, input is divided into messages and distributed to a large number of independent actors. An individual actor maintains only the state needed to process the messages that it receives.</p>
+
+<ul>
+<li><strong>Shared-Nothing</strong></li>
+</ul><p>Each actor maintains its own state, and does not expose that state to any other actor. This eliminates concurrency bottlenecks and the potential for deadlocks. Immutable state may be shared between actors.</p>
+
+<ul>
+<li><strong>Message-Passing</strong></li>
+</ul><p>Actors communicate by sending immutable messages to one-another. Each message has a key, and the framework is responsible for directing the message to the actor responsible for that key.</p>
+
+<p>A distributed actor model takes an additional step, of allowing actors to exist on multiple nodes in a cluster, and supporting communication of messages between nodes. It adds the following complexities to the Actor model:</p>
+
+<ul>
+<li><strong>Distribution of Messages</strong></li>
+</ul><p>A message may or may not be consumed by an actor residing in the same JVM as the actor that sent the message. The required network communication will add delay to processing, and require physical network configuration to support bandwidth requirements and minimize impact to other consumers.</p>
+
+<ul>
+<li><strong>Load-Balancing</strong></li>
+</ul><p>The framework must distribute work evenly between nodes, potentially using different strategies for different message types (eg: regional grouping for map-matcher, simple round-robin for vehicles).</p>
+
+<ul>
+<li><strong>Node Failure</strong></li>
+</ul><p>If a node fails, the workload on that node must be shifted to other nodes. All state maintained by actors on the failed node is presumed lost.</p>
+
+<ul>
+<li><strong>Network Partition</strong></li>
+</ul><p>If the network connection to a node temporarily drops, it will appear as a node failure to other nodes in the cluster. The node must itself recognize that it is no longer part of the cluster, and its actors must stop sending messages (which may conflict with those sent by the cluster's "replacement" node).</p>
+
+<ul>
+<li><strong>Node Addition</strong></li>
+</ul><p>To support elastic scalability (adding nodes on demand to service load, as well as re-integration of a previously failed node), the framework must support redistribution of actors <em>and their state</em> based on changes to the cluster.</p>
+
+<h2>Guiding philosophy</h2>
+
+<p>Above all, and in many ways, Dempsy is meant to be <em>SIMPLE</em>. It doesn't try to be the solution for every problem. It tries to do one thing well and it is meant to support developers that think this way. Dempsy is built emphasizing, and built to emphasize several interrelated principles. These principles are meant to reduce the longer term total cost of ownership of the software written using Dempsy. These include:</p>
+
+<ul>
+<li><p>Separation of Concerns (SoC) - Dempsy expects the developer to be able to concentrate on writing the analytics and business logic with (virtually) no consideration for framework or infrastructure.</p></li>
+<li><p>Decoupling - SoC provides the means to isolate cross-cutting concerns so that code written for Dempsy will have little to no (with due respect to annotations) dependence on even the framework itself. Developer's code can be easily run separate from the framework and, in the spirit of Dependency Injection, the framework uses the developer's code rather than the developer having to use the framework. This type of decoupling provides for analytics/business code that has no infrastructure concerns: no framework dependencies, no messaging code, no threading code, etc.</p></li>
+<li><p>Testability - All of this provides a basis to write code that's more testable.</p></li>
+<li><p>"Do one thing well" - Dempsy is written to provide one service: support for the type of "Distributed Actor Model" (with all of the acknowledged caveats) programming paradigm. For this reason it does not pretend to be an Application Server. Nor does it substitute for the lack of an automated provistioning/deployment system. </p></li>
+</ul><h2>What about other options?</h2>
+
+<h4>Complex Event Processing systems (CEP)</h4>
+
+<p>CEP is really trying to solve a different problem. If you have a large stream of data you want to mine by separating it into subsets and executing different analytics on each subset (which can including ignoring entire subsets), then CEP solutions make sense. If, however, you’re going to do the same thing to every message then you will be underutilizing the power of CEP. Underutilized functionality usually means an increased total cost of ownership, and Dempsy is ALL ABOUT reducing the total cost of ownership for systems that do this type of processing.</p>
+
+<h4>Pure Actor Model Frameworks and Languages</h4>
+
+<p>There are several pure <a href="http://en.wikipedia.org/wiki/Actor_model">"Actor Model"</a> frameworks and languages that have been posed as alternatives for Dempsy. Dempsy is not a pure actor model and primarily solves a different problem. As described above Dempsy is primarily a routing mechanism for messages for "fine grained" actors. The reason we still (though loosely) call it an "actor model" is because Dempsy supports concurrency the way a typical Actor Model does.</p>
+
+<h4>Other Stream Processors</h4>
+
+<p>Dempsy emphasizes reducing the total cost of ownership of real-time analytics applications and as a direct result we feel it has some advantages over the alternatives.</p>
+
+<p>First, as mentioned, Dempsy supports “fine grained” message processing. Because of this, by writing parallel use-cases in Dempsy and alternatives that don't support this programming model, we find that Dempsy leads to a lower code-line count.</p>
+
+<p>Also, because of Dempsy’s emphasis on “Inversion of Control” the resulting applications are more easily testable. With the exception of annotations, Message Processors, which are the atomic unit of work in Dempsy, have no dependency on the framework itself. Every alternative we've found requires that the application be written against and written to use that framework.</p>
+
+<p>Also, in following the adage to never require the system to be told something that it can deduce, the topology of a Dempsy application’s pipeline is discovered at runtime and doesn’t need to be preconfigured. This is primarily a by-product of the fact that Dempsy was designed from the ground up to be “elastic” and as a result, the topology can morph dynamically.</p>
+
+<p>This means that applications with complicated topologies with many branches and merges can be trivially configured since the dependency relationship between stages is discovered by the framework.</p>
+
+<h2>Now that you've decided to give it a try</h2>
+
+<ul>
+<li>See "<a href="https://github.com/Dempsy/Dempsy/wiki/User-Guide">The Dempsy User Guide</a>" and the "<a href="https://github.com/Dempsy/Dempsy/wiki/Simple-Example">Simple Example</a>" to get a better idea of what it can do.</li>
+</ul>
+      </section>
+      <footer>
+        <p>Project maintained by <a href="https://github.com/Dempsy">Dempsy</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="http://twitter.com/#!/michigangraham">mattgraham</a></small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><!--<![endif]-->
+    
+  </body>
+</html>
