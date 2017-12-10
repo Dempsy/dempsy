@@ -17,7 +17,7 @@
 package net.dempsy;
 
 /**
- * Checked Exception used by the Dispatch interface and also internal to the Dempsy framework.
+ * General Dempsy unchecked exception
  */
 public class DempsyException extends RuntimeException {
     private static final long serialVersionUID = 1L;

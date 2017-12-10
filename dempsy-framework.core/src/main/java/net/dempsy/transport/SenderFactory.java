@@ -20,7 +20,7 @@ import net.dempsy.Infrastructure;
 import net.dempsy.Service;
 
 /**
- * Abstraction to create multiple sender based on destination.
+ * Abstraction to create multiple {@link Sender}s based on destination.
  */
 public interface SenderFactory extends Service {
 

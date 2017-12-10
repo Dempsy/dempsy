@@ -20,13 +20,15 @@ import java.util.function.Supplier;
 
 /**
  * <p>
- * This is the core abstraction for receiving messages. The client side of a transport implementation (called an "Adaptor") needs to be wired to a MessageTransportListener
+ * This is the core abstraction for receiving messages. The client side of a transport implementation
+ * (called an "Adaptor") needs to be wired to a MessageTransportListener
  * </p>
  */
 public interface Listener<T> extends AutoCloseable {
     /**
      * <p>
-     * Method that accepts the callback for received messages. Given that the transport is responsible for managing threads, the transport will also let the Listener implementation know if it should make every
+     * Method that accepts the callback for received messages. Given that the transport is responsible
+     * for managing threads, the transport will also let the Listener implementation know if it should make every
      * effort to handle the request or if it should "fail-fast."
      * </p>
      * 

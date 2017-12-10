@@ -18,7 +18,7 @@ package net.dempsy.messages;
 
 /**
  * An {@link Adaptor} is used to adapt data streams from external sources
- * into Dempsy. Most Dempsy applictations contain at least one adaptor. The
+ * into Dempsy. Most Dempsy applications contain at least one adaptor. The
  * Adaptor needs to simply acquire the data meant to be processed by Dempsy 
  * and use the {@link Dispatcher} to send the message onward.
  */

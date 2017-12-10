@@ -1,5 +1,8 @@
 package net.dempsy.messages;
 
+/**
+ * A {@link KeyedMessage} is a simple wrapper around a message, and its corresponding key.
+ */
 public class KeyedMessage {
     public final Object key;
     public final Object message;

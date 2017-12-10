@@ -18,21 +18,15 @@ package net.dempsy.config;
 
 /**
  * <p>
- * This class represents the Id of a message processor cluster within a Dempsy application. Cluster Id's are essentially a two level name: application name, cluster name, and they correspond to the
- * {@link ApplicationDefinition}'s applicationName and the {@link Cluster}'s clusterName.
- * </p>
- * 
- * <p>
- * A cluster Id should be unique.
+ * {@link ClusterId}s are a unique Id of a message processor {@link Cluster} within a Dempsy application.
+ * Cluster Id's are essentially a two level unique name made up by the application name and a cluster name.
  * </p>
  * 
  * <p>
  * ClusterIds are immutable.
  * </p>
  * 
- * <p>
- * See the User Guide for an explanation of what a 'message processor cluster' is.
- * </p>
+ * @see Cluster
  */
 public class ClusterId {
     public final String applicationName;

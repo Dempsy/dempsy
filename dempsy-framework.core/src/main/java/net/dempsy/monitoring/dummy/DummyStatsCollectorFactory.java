@@ -5,6 +5,9 @@ import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.ClusterStatsCollectorFactory;
 import net.dempsy.transport.NodeAddress;
 
+/**
+ * Stubbed out Stats Collector implementations that do record no stats. Primarily for testing
+ */
 public class DummyStatsCollectorFactory implements ClusterStatsCollectorFactory {
 
     @Override
@@ -14,5 +17,4 @@ public class DummyStatsCollectorFactory implements ClusterStatsCollectorFactory 
 
     @Override
     public void close() throws Exception {}
-
 }

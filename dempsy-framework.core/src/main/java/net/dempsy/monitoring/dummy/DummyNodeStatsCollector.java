@@ -4,6 +4,9 @@ import java.util.function.LongSupplier;
 
 import net.dempsy.monitoring.NodeStatsCollector;
 
+/**
+ * Stubbed out Stats Collector implementations that do record no stats. Primarily for testing
+ */
 public class DummyNodeStatsCollector implements NodeStatsCollector {
 
     @Override

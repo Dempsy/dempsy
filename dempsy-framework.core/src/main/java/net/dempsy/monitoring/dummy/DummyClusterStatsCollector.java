@@ -2,6 +2,9 @@ package net.dempsy.monitoring.dummy;
 
 import net.dempsy.monitoring.ClusterStatsCollector;
 
+/**
+ * Stubbed out Stats Collector implementations that do record no stats. Primarily for testing
+ */
 public class DummyClusterStatsCollector implements ClusterStatsCollector {
 
     @Override

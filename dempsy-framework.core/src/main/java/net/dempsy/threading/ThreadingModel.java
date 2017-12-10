@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
  * The Threading model for Dempsy needs to work in close concert with the Transport. 
  * The implementation of the DempsyExecutor should be chosen along with the Transport.
  * If, for example, the transport can handle acknowledged delivery of messages then
- * the Executor should be able to apply 'back pressure' but blocking in the submitLimted.
+ * the Executor should be able to apply 'back pressure' by blocking in the submitLimted.
  * </p>
  */
 public interface ThreadingModel extends AutoCloseable {
@@ -77,8 +77,6 @@ public interface ThreadingModel extends AutoCloseable {
 
     /**
      * This return value may not be valid prior to start().
-     * 
-     * @return
      */
     public int getNumThreads();
 

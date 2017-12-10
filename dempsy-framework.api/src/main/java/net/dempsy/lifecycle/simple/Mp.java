@@ -3,6 +3,10 @@ package net.dempsy.lifecycle.simple;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.KeyedMessageWithType;
 
+/**
+ * When using the 'simple' message processor lifecycle, this interface will be implemented by the framework user
+ * to do the actual message processing. 
+ */
 public interface Mp {
     public KeyedMessageWithType[] handle(KeyedMessage message);
 

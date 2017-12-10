@@ -5,37 +5,50 @@ import java.util.Set;
 
 import net.dempsy.DempsyException;
 import net.dempsy.config.ClusterId;
+import net.dempsy.config.Node;
 
+/**
+ * @param <T> is the type of the message processor being managed.
+ */
 public interface MessageProcessorLifecycle<T> {
 
     /**
-     * Creates a new instance from the prototype.
+     * This lifecycle phase should be implemented to return a new instance of the message processor. It will
+     * be invoked by Dempsy when it needs a fresh instance. This happens, for eample, when a message is dispatched
+     * to a cluster with a key that the framework hasn't seen before. 
      */
     public T newInstance() throws DempsyException;
 
     /**
-     * Invokes the activation method of the passed instance.
+     * The 'activation' lifecycle phase is invoked by Dempsy after a new instance is instantiated
+     * (see {@link MessageProcessorLifecycle#newInstance()}) and before the message handling is invoked to give the
+     * message processor a chance to prepare.
      */
     public void activate(T instance, Object key) throws DempsyException;
 
     /**
-     * Invokes the passivation method of the passed instance. Will return the object's passivation data, 
-     * <code>null</code> if there is none.
+     * The 'passivation' lifecycle phase is invoked by Dempsy just prior to the framework giving up
+     * control of the message processor. This is done when a message processor is being evicted or in 
+     * the case of elasticity where it's not managed in the current {@link Node} anymore.
      */
     public void passivate(T instance) throws DempsyException;
 
     /**
-     * Invokes the appropriate message handler of the passed instance. Caller is responsible for not passing
-     * <code>null</code> messages.
+     * This method is invoked by the framework when a message is ready to be processed by its target
+     * message processor 'instance'.
      */
     public List<KeyedMessageWithType> invoke(T instance, KeyedMessage message) throws DempsyException;
 
     /**
-     * Invokes the output method, if it exists. If the instance does not have an annotated output method,
-     *  this is a no-op (this is simpler than requiring the caller to check every instance).
+     * This method is invoked by the framework when output is enabled (see {@link #isOutputSupported()})
+     * and it's time to invoke the output phase of the particular message processor 'instance.'
      */
     public List<KeyedMessageWithType> invokeOutput(T instance) throws DempsyException;
 
+    /**
+     * This method is invoked by Dempsy to determine whether or not the Mps managed by this {@link MessageProcessorLifecycle}
+     * support an output cycle.
+     */
     public boolean isOutputSupported();
 
     /**
@@ -43,11 +56,33 @@ public interface MessageProcessorLifecycle<T> {
      */
     public boolean invokeEvictable(T instance) throws DempsyException;
 
+    /**
+     * This method is invoked by Dempsy to determine whether or not the Mps managed by this {@link MessageProcessorLifecycle}
+     * support being notified of evictions.
+     */
     public boolean isEvictionSupported();
 
+    /**
+     * This method is invoked by Dempsy to determine what message types are handled by the processors managed
+     * by this {@link MessageProcessorLifecycle}.
+     * 
+     * @return the list of message types handled.
+     */
     public Set<String> messagesTypesHandled();
 
+    /**
+     * The implementor can put validation checks here. This method will be invoked by Dempsy when the cluster
+     * is started to check for a valid state. This method should NOT be overloaded to intercept the startup.
+     * please see {@link MessageProcessorLifecycle#start(ClusterId)}
+     *  
+     * @throws IllegalStateException when the {@link MessageProcessorLifecycle} is configured incorrectly
+     */
     public void validate() throws IllegalStateException;
 
+    /**
+     * This method should be implemented to handle carrout out the actual 'start' message processor 
+     * lifecycle phase. Please see the User Guild for more information on the message processor 
+     * lifecycle.
+     */
     public void start(ClusterId myCluster);
 }

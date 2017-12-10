@@ -25,13 +25,16 @@ import net.dempsy.messages.MessageProcessorLifecycle;
 
 /**
  * <p>
- * A {@link Cluster} is part of an {@link ApplicationDefinition}. For a full description of the {@link Cluster} please see the {@link ApplicationDefinition} documentation.
+ * Conceptually, a {@link Cluster} is the collection of all Message Processors that handle the same 'message type' across a
+ * an entire application and potentially distributed across a network. It represents a logical step in the processing stream
+ * of an application.
+ * </p>
+ * <p>
+ * For example, in the Word Count example from the User Guide, all of the instances of WordCount that represent the step in
+ * the chain of processing after the {@link Adaptor} are in the same {@link Cluster}.
  * </p>
  * 
- * <p>
- * Note: for ease of use when configuring by hand (not using a dependency injection framework like Spring or Guice) all "setters" (all 'mutators' in general) return the {@link Cluster} itself for the
- * purpose of chaining.
- * </p>
+ * @see ClusterId
  */
 public class Cluster {
     private ClusterId clusterId;

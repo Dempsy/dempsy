@@ -24,7 +24,7 @@ import net.dempsy.transport.NodeAddress;
  * {@link StatsCollector} implementation.</p>
  * 
  * <p>There are two provided with Dempsy.
- * The StatsCollectorCoda is built from Yammer Metrics and can be configured 
+ * The DropwizardClusterStatsCollector is built from Dropwizard Metrics and can be configured 
  * to connect to any number of delivery mechanisms include Ganglia and Graphite.</p>
  * 
  * <p>The BasicStatsCollector should only be used in tests as it doesn't provide
