@@ -45,7 +45,8 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     private final NodeStatsCollector statsCollector;
 
-    public OutgoingDispatcher(final RoutingStrategyManager manager, final NodeAddress thisNode, final String thisNodeId, final NodeReceiver nodeReciever,
+    public OutgoingDispatcher(final RoutingStrategyManager manager, final NodeAddress thisNode, final String thisNodeId,
+            final NodeReceiver nodeReciever,
             final TransportManager tmanager, final NodeStatsCollector statsCollector) {
         this.manager = manager;
         this.thisNode = thisNode;
@@ -171,7 +172,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                         }
 
                         // see if node info is dupped.
-                        if (alreadySeen.contains(ni.nodeAddress)) {
+                        if (alreadySeen.contains(ni)) {
                             LOGGER.warn("The node " + ni.nodeAddress + " seems to be registed more than once.");
                             continue;
                         }
