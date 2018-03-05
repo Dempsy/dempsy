@@ -2,12 +2,15 @@ package net.dempsy.transport.tcp;
 
 import static net.dempsy.transport.tcp.nio.internal.NioUtils.dontInterrupt;
 import static net.dempsy.util.Functional.chain;
+import static net.dempsy.util.Functional.uncheck;
 import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.net.NetworkInterface;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +87,51 @@ public class TcpTransportTest {
             LOGGER.debug(addr.toString());
             r.start(null, infra);
             assertTrue(resolverCalled.get());
+        }
+    }
+
+    @Test
+    public void testReceiverStartOnSpecifiedIf() throws Exception {
+        final List<NetworkInterface> ifs = Collections.list(TcpUtils.getInterfaces(null)).stream()
+                .filter(nif -> !uncheck(() -> nif.isLoopback()))
+                .collect(Collectors.toList());
+
+        final NetworkInterface nif = (ifs.size() > 1) ? ifs.get(1) : ((ifs.size() == 1) ? ifs.get(0) : null);
+
+        if (nif != null) { // otherwise we can do no testing.
+            final String ifname = nif.getDisplayName();
+            if (Collections.list(nif.getInetAddresses()).size() > 0) { // otherwise, we still can't really do anything without a lot of work
+
+                final AtomicBoolean resolverCalled = new AtomicBoolean(false);
+                try (ServiceTracker tr = new ServiceTracker();) {
+                    final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
+                            .setResolver(a -> {
+                                resolverCalled.set(true);
+                                return a;
+                            }).setNumHandlers(2)
+                            .setUseLocalHost(false);
+
+                    final Infrastructure infra = tr
+                            .track(new TestInfrastructure(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testReceiverStart")) {
+                                @Override
+                                public Map<String, String> getConfiguration() {
+                                    final HashMap<String, String> config = new HashMap<>();
+                                    config.put(NioReceiver.class.getPackage().getName() + "." + NioReceiver.CONFIG_KEY_RECEIVER_NETWORK_IF_NAME,
+                                            ifname);
+                                    return config;
+                                }
+
+                            });
+
+                    final TcpAddress addr = r.getAddress(infra);
+
+                    assertTrue(Collections.list(nif.getInetAddresses()).contains(addr.inetAddress));
+
+                    LOGGER.debug(addr.toString());
+                    r.start(null, infra);
+                    assertTrue(resolverCalled.get());
+                }
+            }
         }
     }
 
