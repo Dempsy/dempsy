@@ -46,7 +46,7 @@ public class PassthroughSenderFactory implements SenderFactory {
     }
 
     synchronized void imDone(final PassthroughSender sender) {
-        senders.remove(sender.reciever.getAddress());
+        senders.remove(sender.reciever.getAddress(null /* Infrastructure is ignored in PassthroughReceiver */ ));
     }
 
 }

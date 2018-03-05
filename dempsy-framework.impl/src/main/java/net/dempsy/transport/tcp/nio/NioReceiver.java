@@ -39,6 +39,9 @@ import net.dempsy.util.io.MessageBufferInput;
 public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<T>> implements DisruptableRecevier {
     private static Logger LOGGER = LoggerFactory.getLogger(NioReceiver.class);
 
+    public static final String CONFIG_KEY_RECEIVER_NETWORK_IF_NAME = "reciever_network_if";
+    public static final String DEFAULT_RECEIVER_NETWORK_IF_NAME = null;
+
     private final AtomicBoolean isRunning = new AtomicBoolean(true);
 
     private NioAddress internal = null;
@@ -71,11 +74,27 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     }
 
     @Override
-    public synchronized NioAddress getAddress() {
+    public synchronized NioAddress getAddress(final Infrastructure infra) {
         if (internal == null) {
+            final String ifNameToGetAddrFrom = infra.getConfigValue(NioReceiver.class, CONFIG_KEY_RECEIVER_NETWORK_IF_NAME,
+                    DEFAULT_RECEIVER_NETWORK_IF_NAME);
+
+            if (useLocalHost) {
+                if (ifNameToGetAddrFrom != null)
+                    LOGGER.warn("Both \"useLocalHost\" as well as the property " + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for "
+                            + NioReceiver.class.getPackage().getName() + ". The property will be ignored.");
+                if (addrSupplier != null)
+                    LOGGER.warn("Both IP address supplier (" + addrSupplier.getClass().getName()
+                            + ") as well as \"useLocalHost\" was set. The address supplier will be ignored.");
+            } else {
+                if (addrSupplier != null && ifNameToGetAddrFrom != null)
+                    LOGGER.warn("Both IP Address supplier (" + addrSupplier.getClass().getName() + ") as well as the property "
+                            + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for " + NioReceiver.class.getPackage().getName()
+                            + ". The property will be ignored.");
+            }
             try {
                 final InetAddress addr = useLocalHost ? Inet4Address.getLocalHost()
-                        : (addrSupplier == null ? TcpUtils.getFirstNonLocalhostInetAddress() : addrSupplier.get());
+                        : (addrSupplier == null ? TcpUtils.getFirstNonLocalhostInetAddress(ifNameToGetAddrFrom) : addrSupplier.get());
                 binding = new Binding(addr, internalPort);
                 final InetSocketAddress inetSocketAddress = binding.bound;
                 internalPort = inetSocketAddress.getPort();
@@ -95,7 +114,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             throw new IllegalStateException("Cannot restart an " + NioReceiver.class.getSimpleName());
 
         if (binding == null)
-            getAddress(); // sets binding via side affect.
+            getAddress(infra); // sets binding via side affect.
 
         // before starting the acceptor, make sure we have Readers created.
         try {
@@ -257,8 +276,8 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
         /**
          * Read the size
-         * @return -1 if there aren't enough bytes read in to figure out the size. -2 if the
-         * socket channel reached it's eof. Otherwise, the size actually read.
+         * 
+         * @return -1 if there aren't enough bytes read in to figure out the size. -2 if the socket channel reached it's eof. Otherwise, the size actually read.
          */
         private final int readSize(final SocketChannel channel, final ByteBuffer bb) throws IOException {
             final int size;

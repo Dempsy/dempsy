@@ -22,7 +22,7 @@ public interface Receiver extends AutoCloseable {
     /**
      * What address can a Sender use to send messages to this receiver. This is called PRIOR to start
      */
-    public NodeAddress getAddress();
+    public NodeAddress getAddress(Infrastructure infra);
 
     /**
      * A receiver is started with a Listener and a threading model.
@@ -30,9 +30,8 @@ public interface Receiver extends AutoCloseable {
     public void start(Listener<?> listener, Infrastructure threadingModel) throws MessageTransportException;
 
     /**
-     * What is a unique Id for the transport that this {@link Receiver} is associated with. This information is used
-     * by the TransportManager to look up a {@link SenderFactory} that's compatible with this {@link Receiver}. The default
-     * behavior for this method is to provide the package name of the implementing class
+     * What is a unique Id for the transport that this {@link Receiver} is associated with. This information is used by the TransportManager to look up a {@link SenderFactory} that's compatible with this
+     * {@link Receiver}. The default behavior for this method is to provide the package name of the implementing class
      */
     public default String transportTypeId() {
         return this.getClass().getPackage().getName();

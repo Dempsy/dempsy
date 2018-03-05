@@ -3,6 +3,7 @@ package net.dempsy.transport.tcp;
 import java.net.InetAddress;
 import java.util.function.Supplier;
 
+import net.dempsy.Infrastructure;
 import net.dempsy.serialization.Serializer;
 import net.dempsy.transport.Receiver;
 
@@ -51,7 +52,7 @@ public abstract class AbstractTcpReceiver<A extends TcpAddress, T extends Abstra
     }
 
     @Override
-    public abstract TcpAddress getAddress();
+    public abstract TcpAddress getAddress(Infrastructure infra);
 
     public abstract AbstractTcpReceiver<A, T> setNumHandlers(int numHandlerThreads);
 

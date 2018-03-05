@@ -2,12 +2,15 @@ package net.dempsy.transport.tcp;
 
 import static net.dempsy.transport.tcp.nio.internal.NioUtils.dontInterrupt;
 import static net.dempsy.util.Functional.chain;
+import static net.dempsy.util.Functional.uncheck;
 import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.net.NetworkInterface;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +29,7 @@ import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.dempsy.Infrastructure;
 import net.dempsy.ServiceTracker;
 import net.dempsy.TestWordCount;
 import net.dempsy.serialization.Serializer;
@@ -77,10 +81,57 @@ public class TcpTransportTest {
                     }).setNumHandlers(2)
                     .setUseLocalHost(true);
 
-            final TcpAddress addr = r.getAddress();
+            final Infrastructure infra = tr
+                    .track(new TestInfrastructure(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testReceiverStart")));
+            final TcpAddress addr = r.getAddress(infra);
             LOGGER.debug(addr.toString());
-            r.start(null, tr.track(new TestInfrastructure(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testReceiverStart"))));
+            r.start(null, infra);
             assertTrue(resolverCalled.get());
+        }
+    }
+
+    @Test
+    public void testReceiverStartOnSpecifiedIf() throws Exception {
+        final List<NetworkInterface> ifs = Collections.list(TcpUtils.getInterfaces(null)).stream()
+                .filter(nif -> !uncheck(() -> nif.isLoopback()))
+                .collect(Collectors.toList());
+
+        final NetworkInterface nif = (ifs.size() > 1) ? ifs.get(1) : ((ifs.size() == 1) ? ifs.get(0) : null);
+
+        if (nif != null) { // otherwise we can do no testing.
+            final String ifname = nif.getDisplayName();
+            if (Collections.list(nif.getInetAddresses()).size() > 0) { // otherwise, we still can't really do anything without a lot of work
+
+                final AtomicBoolean resolverCalled = new AtomicBoolean(false);
+                try (ServiceTracker tr = new ServiceTracker();) {
+                    final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
+                            .setResolver(a -> {
+                                resolverCalled.set(true);
+                                return a;
+                            }).setNumHandlers(2)
+                            .setUseLocalHost(false);
+
+                    final Infrastructure infra = tr
+                            .track(new TestInfrastructure(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testReceiverStart")) {
+                                @Override
+                                public Map<String, String> getConfiguration() {
+                                    final HashMap<String, String> config = new HashMap<>();
+                                    config.put(NioReceiver.class.getPackage().getName() + "." + NioReceiver.CONFIG_KEY_RECEIVER_NETWORK_IF_NAME,
+                                            ifname);
+                                    return config;
+                                }
+
+                            });
+
+                    final TcpAddress addr = r.getAddress(infra);
+
+                    assertTrue(Collections.list(nif.getInetAddresses()).contains(addr.inetAddress));
+
+                    LOGGER.debug(addr.toString());
+                    r.start(null, infra);
+                    assertTrue(resolverCalled.get());
+                }
+            }
         }
     }
 
@@ -91,14 +142,15 @@ public class TcpTransportTest {
                     .setNumHandlers(2)
                     .setUseLocalHost(true);
 
-            final TcpAddress addr = r.getAddress();
+            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testMessage"));
+            final Infrastructure infra = tr.track(new TestInfrastructure(tm));
+            final TcpAddress addr = r.getAddress(infra);
             LOGGER.debug(addr.toString());
             final AtomicReference<RoutedMessage> rm = new AtomicReference<>(null);
-            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testMessage"));
             r.start((Listener<RoutedMessage>) msg -> {
                 rm.set(msg);
                 return true;
-            }, tr.track(new TestInfrastructure(tm)));
+            }, infra);
 
             try (final SenderFactory sf = senderFactory.get();) {
                 sf.start(new TestInfrastructure(tm) {
@@ -125,15 +177,16 @@ public class TcpTransportTest {
                     .setUseLocalHost(true)
                     .setMaxMessageSize(1024 * 1024 * 1024);
 
-            final TcpAddress addr = r.getAddress();
+            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testLargeMessage"));
+            final Infrastructure infra = tr.track(new TestInfrastructure(tm));
+            final TcpAddress addr = r.getAddress(infra);
             LOGGER.debug(addr.toString());
             final AtomicReference<RoutedMessage> rm = new AtomicReference<>(null);
-            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testLargeMessage"));
 
             r.start((Listener<RoutedMessage>) msg -> {
                 rm.set(msg);
                 return true;
-            }, tr.track(new TestInfrastructure(tm)));
+            }, infra);
 
             try (final SenderFactory sf = senderFactory.get();) {
                 sf.start(new TestInfrastructure(null, null));
@@ -156,14 +209,15 @@ public class TcpTransportTest {
                     .setUseLocalHost(true)
                     .setMaxMessageSize(1024 * 1024 * 1024);
 
-            final TcpAddress addr = r.getAddress();
+            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + "." + testName));
+            final Infrastructure infra = tr.track(new TestInfrastructure(tm));
+            final TcpAddress addr = r.getAddress(infra);
             LOGGER.debug(addr.toString());
             final AtomicLong msgCount = new AtomicLong();
-            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + "." + testName));
             r.start((Listener<RoutedMessage>) msg -> {
                 msgCount.incrementAndGet();
                 return true;
-            }, tr.track(new TestInfrastructure(tm)));
+            }, infra);
 
             final AtomicBoolean letMeGo = new AtomicBoolean(false);
             final CountDownLatch waitToExit = new CountDownLatch(1);
@@ -235,14 +289,15 @@ public class TcpTransportTest {
             if (!(r instanceof DisruptableRecevier))
                 return;
 
-            final TcpAddress addr = r.getAddress();
+            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testConnectionRecovery"));
+            final Infrastructure infra = tr.track(new TestInfrastructure(tm));
+            final TcpAddress addr = r.getAddress(infra);
             LOGGER.debug(addr.toString());
             final AtomicReference<RoutedMessage> rm = new AtomicReference<>(null);
-            final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testConnectionRecovery"));
             r.start((Listener<RoutedMessage>) msg -> {
                 rm.set(msg);
                 return true;
-            }, tr.track(new TestInfrastructure(tm)));
+            }, infra);
 
             try (final SenderFactory sf = senderFactory.get();) {
                 sf.start(new TestInfrastructure(tm) {
