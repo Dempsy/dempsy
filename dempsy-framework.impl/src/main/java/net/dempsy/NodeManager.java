@@ -167,13 +167,13 @@ public class NodeManager implements Infrastructure, AutoCloseable {
 
         // it we're all adaptor then don't bother to get the receiver.
         if (containers.size() == 0) {
-            // here there's no point in a reciever since there's nothing to recieve.
+            // here there's no point in a receiver since there's nothing to receive.
             if (firstAdaptorClusterName.get() == null)
                 throw new IllegalStateException("There seems to be no clusters or adaptors defined for this node \"" + node.toString() + "\"");
         } else {
             receiver = (Receiver) node.getReceiver();
             if (receiver != null) // otherwise we're all adaptor
-                nodeAddress = receiver.getAddress();
+                nodeAddress = receiver.getAddress(this);
             else if (firstAdaptorClusterName.get() == null)
                 throw new IllegalStateException("There seems to be no clusters or adaptors defined for this node \"" + node.toString() + "\"");
         }
@@ -193,8 +193,10 @@ public class NodeManager implements Infrastructure, AutoCloseable {
 
         nodeStatsCollector.setMessagesPendingGauge(() -> threading.getNumberLimitedPending());
 
-        final NodeReceiver nodeReciever = receiver == null ? null : tr
-                .track(new NodeReceiver(containers.stream().map(pc -> pc.container).collect(Collectors.toList()), threading, nodeStatsCollector));
+        final NodeReceiver nodeReciever = receiver == null ? null
+                : tr
+                        .track(new NodeReceiver(containers.stream().map(pc -> pc.container).collect(Collectors.toList()), threading,
+                                nodeStatsCollector));
 
         final Map<ClusterId, ClusterInformation> messageTypesByClusterId = new HashMap<>();
         containers.stream().map(pc -> pc.clusterDefinition).forEach(c -> {

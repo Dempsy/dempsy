@@ -71,7 +71,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     }
 
     @Override
-    public synchronized NioAddress getAddress() {
+    public synchronized NioAddress getAddress(final Infrastructure infra) {
         if (internal == null) {
             try {
                 final InetAddress addr = useLocalHost ? Inet4Address.getLocalHost()
@@ -95,7 +95,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             throw new IllegalStateException("Cannot restart an " + NioReceiver.class.getSimpleName());
 
         if (binding == null)
-            getAddress(); // sets binding via side affect.
+            getAddress(infra); // sets binding via side affect.
 
         // before starting the acceptor, make sure we have Readers created.
         try {
@@ -257,8 +257,8 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
         /**
          * Read the size
-         * @return -1 if there aren't enough bytes read in to figure out the size. -2 if the
-         * socket channel reached it's eof. Otherwise, the size actually read.
+         * 
+         * @return -1 if there aren't enough bytes read in to figure out the size. -2 if the socket channel reached it's eof. Otherwise, the size actually read.
          */
         private final int readSize(final SocketChannel channel, final ByteBuffer bb) throws IOException {
             final int size;

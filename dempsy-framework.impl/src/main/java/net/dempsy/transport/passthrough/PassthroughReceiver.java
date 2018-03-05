@@ -24,7 +24,7 @@ public class PassthroughReceiver implements Receiver {
     }
 
     @Override
-    public NodeAddress getAddress() throws MessageTransportException {
+    public NodeAddress getAddress(final Infrastructure infra) throws MessageTransportException {
         return destination;
     }
 

@@ -146,7 +146,7 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
     }
 
     @Override
-    public NodeAddress getAddress() {
+    public NodeAddress getAddress(final Infrastructure infra) {
         return this.address;
     }
 

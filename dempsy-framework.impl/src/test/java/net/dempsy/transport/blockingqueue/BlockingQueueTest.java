@@ -51,7 +51,7 @@ public class BlockingQueueTest {
                 final TestInfrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueue-"));
                 final TransportManager tranMan = chain(new TransportManager(), c -> c.start(infra));
                 SenderFactory sf = tranMan.getAssociatedInstance(transportTypeId);) {
-            final Sender sender = sf.getSender(r.getAddress());
+            final Sender sender = sf.getSender(r.getAddress(infra));
             r.start((final String msg) -> {
                 message.set(new String(msg));
                 return true;
@@ -75,7 +75,7 @@ public class BlockingQueueTest {
                 final Receiver r = new BlockingQueueReceiver(input);
                 final TransportManager tranMan = chain(new TransportManager(), c -> c.start(infra));
                 final SenderFactory sf = tranMan.getAssociatedInstance(transportTypeId);) {
-            final Sender sender = sf.getSender(r.getAddress());
+            final Sender sender = sf.getSender(r.getAddress(infra));
 
             final AtomicBoolean finallySent = new AtomicBoolean(false);
             final AtomicLong receiveCount = new AtomicLong();
