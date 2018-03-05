@@ -182,7 +182,8 @@ public class NioSenderFactory implements SenderFactory {
             int numNothing = 0;
             while (isRunning.get()) {
                 try {
-                    // blocking causes attempts to register to block creating a potential deadlock
+                    // blocking causes attempts to register to block creating a potential deadlock,
+                    // so we do this in a non-blocking manner
                     final int numSelected = selector.selectNow();
 
                     // are there any sockets ready to write?

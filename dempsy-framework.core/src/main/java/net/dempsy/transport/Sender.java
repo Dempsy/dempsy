@@ -21,9 +21,10 @@ package net.dempsy.transport;
  */
 public interface Sender {
     /**
-     * Sends the message. The implementor needs to handle exceptions from the underlying system correctly.
-     * The user of the <em>Sender</em> should not be required to release the sender and reaquire
-     * it. The Sender should do that work.
+     * Sends the message. The implementor needs to take special care to handle exceptions
+     * from the underlying system correctly. The user of the <em>Sender</em> should not be
+     * required to release the sender and reaquire it or another one. The Sender should do
+     * that work.
      * 
      * @param message
      *            The pre-serialized message to send
