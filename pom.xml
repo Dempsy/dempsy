@@ -29,13 +29,11 @@
   </scm>
 
   <properties>
-    <dempsy-commons-bom.version>2.1.2</dempsy-commons-bom.version>
-    <spring.version>4.2.5.RELEASE</spring.version>
+    <dempsy-commons-bom.version>2.2.0-SNAPSHOT</dempsy-commons-bom.version>
+    <spring.version>5.1.2.RELEASE</spring.version>
     <metrics.version>3.2.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <quartz.version>2.3.0</quartz.version>
-    <kryo.version>2.20</kryo.version>
-    <jackson.version>2.2.3</jackson.version>
   </properties>
 
   <modules>
