@@ -1,6 +1,7 @@
 package net.dempsy;
 
 import net.dempsy.container.Container;
+import net.dempsy.intern.OutgoingDispatcher;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.MessageProcessorLifecycle;
 

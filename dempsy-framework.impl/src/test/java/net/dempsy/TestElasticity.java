@@ -49,15 +49,15 @@ public class TestElasticity extends DempsyBaseTest {
     private static final int profilerTestNumberCount = 100000;
 
     public static final String[][] actxPath = {
-            { "elasticity/adaptor.xml", },
-            { "elasticity/mp-num-count.xml", },
-            { "elasticity/mp-num-count.xml", },
-            { "elasticity/mp-num-count.xml", },
-            { "elasticity/mp-num-rank.xml", },
+        {"elasticity/adaptor.xml",},
+        {"elasticity/mp-num-count.xml",},
+        {"elasticity/mp-num-count.xml",},
+        {"elasticity/mp-num-count.xml",},
+        {"elasticity/mp-num-rank.xml",},
     };
 
     public TestElasticity(final String routerId, final String containerId, final String sessCtx, final String tpCtx, final String serType,
-            final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
+        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
         super(LOGGER, routerId, containerId, sessCtx, tpCtx, serType, threadingModelDescription, threadingModelSource);
     }
 
@@ -119,7 +119,7 @@ public class TestElasticity extends DempsyBaseTest {
 
         public NumberCount() {} // for kryo
 
-        static final Integer one = new Integer(1);
+        static final Integer one = Integer.valueOf(1);
 
         @MessageKey
         public Integer getKey() {
@@ -168,7 +168,7 @@ public class TestElasticity extends DempsyBaseTest {
 
         @Override
         public NumberCounter clone() throws CloneNotSupportedException {
-            return (NumberCounter) super.clone();
+            return (NumberCounter)super.clone();
         }
     }
 
@@ -191,11 +191,10 @@ public class TestElasticity extends DempsyBaseTest {
     public static class NumberRank implements Cloneable {
         public final AtomicLong totalMessages = new AtomicLong(0);
 
-        @SuppressWarnings({ "unchecked", "rawtypes" })
-        final public AtomicReference<Map<Integer, Long>[]> countMap = new AtomicReference(new Map[1000]);
+        @SuppressWarnings({"unchecked","rawtypes"}) final public AtomicReference<Map<Integer, Long>[]> countMap = new AtomicReference(new Map[1000]);
 
         {
-            for (int i = 0; i < 1000; i++)
+            for(int i = 0; i < 1000; i++)
                 countMap.get()[i] = new ConcurrentHashMap<Integer, Long>();
         }
 
@@ -207,12 +206,12 @@ public class TestElasticity extends DempsyBaseTest {
 
         @Override
         public NumberRank clone() throws CloneNotSupportedException {
-            return (NumberRank) super.clone();
+            return (NumberRank)super.clone();
         }
 
         public List<Rank> getPairs(final int rankIndex) {
             final List<Rank> ret = new ArrayList<>(countMap.get()[rankIndex].size() + 10);
-            for (final Map.Entry<Integer, Long> cur : countMap.get()[rankIndex].entrySet())
+            for(final Map.Entry<Integer, Long> cur: countMap.get()[rankIndex].entrySet())
                 ret.add(new Rank(cur.getKey(), cur.getValue()));
             Collections.sort(ret, (o1, o2) -> o2.rank.compareTo(o1.rank));
             return ret;
@@ -226,12 +225,12 @@ public class TestElasticity extends DempsyBaseTest {
     }
 
     protected void waitForEvenShardDistribution(final ClusterInfoSession session, final String cluster, final int numNodes,
-            final List<NodeManagerWithContext> nodes) throws InterruptedException {
+        final List<NodeManagerWithContext> nodes) throws InterruptedException {
         waitForEvenShardDistribution(session, cluster, NUM_MICROSHARDS, numNodes, nodes);
     }
 
     protected void waitForEvenShardDistribution(final ClusterInfoSession session, final String cluster, final int numShardsToExpect,
-            final int numNodes, final List<NodeManagerWithContext> nodes) throws InterruptedException {
+        final int numNodes, final List<NodeManagerWithContext> nodes) throws InterruptedException {
         final MutableInt iters = new MutableInt();
         iters.val = 0;
         // now wait until we can see it from every other node.
@@ -239,28 +238,28 @@ public class TestElasticity extends DempsyBaseTest {
             iters.val++;
             final boolean showLog = LOGGER.isTraceEnabled() && (iters.val % 100 == 0);
             final List<Set<NodeAddress>> reachable = nodes.stream()
-                    // pick off the Router
-                    .map(n -> n.manager.getRouter())
-                    // gather the collection of reachable ContainerAddresses from each Router to the given cluster.
-                    .map(r -> {
-                        if (showLog)
-                            LOGGER.trace("From {}", r.thisNodeId());
-                        return r.allReachable(cluster);
-                    })
-                    // extract a set of NodeAddresses from each of the ContainerAddress collections
-                    .map(c -> {
-                        final Set<NodeAddress> ret = c.stream().map(ca -> ca.node).collect(Collectors.toSet());
-                        if (showLog)
-                            LOGGER.trace(" ... can see {}", ret);
-                        return ret;
-                    })
-                    // Gather up the sets of NodeAddresses into a list, one for each Router.
-                    .collect(Collectors.toList());
+                // pick off the Router
+                .map(n -> n.manager.getRouter())
+                // gather the collection of reachable ContainerAddresses from each Router to the given cluster.
+                .map(r -> {
+                    if(showLog)
+                        LOGGER.trace("From {}", r.thisNodeId());
+                    return r.allReachable(cluster);
+                })
+                // extract a set of NodeAddresses from each of the ContainerAddress collections
+                .map(c -> {
+                    final Set<NodeAddress> ret = c.stream().map(ca -> ca.node).collect(Collectors.toSet());
+                    if(showLog)
+                        LOGGER.trace(" ... can see {}", ret);
+                    return ret;
+                })
+                // Gather up the sets of NodeAddresses into a list, one for each Router.
+                .collect(Collectors.toList());
 
             // go through each reachable set and make sure they each contain all
             // of the appropriate destinations.
-            for (final Set<NodeAddress> fromOne : reachable) {
-                if (fromOne.size() != numNodes)
+            for(final Set<NodeAddress> fromOne: reachable) {
+                if(fromOne.size() != numNodes)
                     return false;
             }
             return true;
@@ -273,17 +272,17 @@ public class TestElasticity extends DempsyBaseTest {
             // set up the test.
             final Number[] numbers = new Number[profilerTestNumberCount];
             final Random random = new Random();
-            for (int i = 0; i < numbers.length; i++)
+            for(int i = 0; i < numbers.length; i++)
                 numbers[i] = new Number(random.nextInt(1000), 0);
 
             final KeyExtractor ke = new KeyExtractor();
 
             runCombos("testForProfiler", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, new String[][][] {
-                    null,
-                    { { "min_nodes", "3" } },
-                    { { "min_nodes", "3" } },
-                    { { "min_nodes", "3" } },
-                    null,
+                null,
+                {{"min_nodes","3"}},
+                {{"min_nodes","3"}},
+                {{"min_nodes","3"}},
+                null,
             }, ns -> {
                 final List<NodeManagerWithContext> nodes = ns.nodes;
 
@@ -295,10 +294,10 @@ public class TestElasticity extends DempsyBaseTest {
 
                     // get the Adaptor Router's statCollector
                     final List<NodeMetricGetters> scs = nodes.stream()
-                            .map(nwm -> nwm.manager)
-                            .map(nm -> nm.getNodeStatsCollector())
-                            .map(sc -> (NodeMetricGetters) sc)
-                            .collect(Collectors.toList());
+                        .map(nwm -> nwm.manager)
+                        .map(nm -> nm.getNodeStatsCollector())
+                        .map(sc -> (NodeMetricGetters)sc)
+                        .collect(Collectors.toList());
 
                     // grab the adaptor from the 0'th cluster + the 0'th (only) node.
                     final NumberProducer adaptor = nodes.get(0).ctx.getBean(NumberProducer.class);
@@ -308,29 +307,29 @@ public class TestElasticity extends DempsyBaseTest {
 
                     final long startTime = System.currentTimeMillis();
 
-                    for (int i = 0; i < numbers.length; i++)
+                    for(int i = 0; i < numbers.length; i++)
                         dispatcher.dispatch(ke.extract(numbers[i]));
 
                     LOGGER.info("====> Checking exact count.");
 
                     // keep going as long as they are trickling in.
                     assertTrue(
-                            () -> {
-                                IntStream.range(0, scs.size()).forEach(i -> {
-                                    System.out.println("======> " + i);
-                                    final NodeMetricGetters mg = scs.get(i);
-                                    if (mg != null) {
-                                        System.out.println("discarded: " + mg.getDiscardedMessageCount());
-                                        System.out.println("not sent: " + mg.getMessagesNotSentCount());
-                                    }
-                                });
-                                return "expected: " + profilerTestNumberCount + " but was: "
-                                        + (rank.totalMessages.get() + scs.get(0).getMessagesNotSentCount())
-                                        + ", (delivered: " + rank.totalMessages.get() + ", not sent: " + scs.get(0).getMessagesNotSentCount() + ")";
-                            },
-                            poll(o -> profilerTestNumberCount == (rank.totalMessages.get() + scs.stream()
-                                    .map(sc -> new Long(sc.getMessagesNotSentCount()))
-                                    .reduce(new Long(0), (v1, v2) -> new Long(v1.longValue() + v2.longValue()).longValue()))));
+                        () -> {
+                            IntStream.range(0, scs.size()).forEach(i -> {
+                                System.out.println("======> " + i);
+                                final NodeMetricGetters mg = scs.get(i);
+                                if(mg != null) {
+                                    System.out.println("discarded: " + mg.getDiscardedMessageCount());
+                                    System.out.println("not sent: " + mg.getMessagesNotSentCount());
+                                }
+                            });
+                            return "expected: " + profilerTestNumberCount + " but was: "
+                                + (rank.totalMessages.get() + scs.get(0).getMessagesNotSentCount())
+                                + ", (delivered: " + rank.totalMessages.get() + ", not sent: " + scs.get(0).getMessagesNotSentCount() + ")";
+                        },
+                        poll(o -> profilerTestNumberCount == (rank.totalMessages.get() + scs.stream()
+                            .map(sc -> Long.valueOf(sc.getMessagesNotSentCount()))
+                            .reduce(Long.valueOf(0), (v1, v2) -> Long.valueOf(v1.longValue() + v2.longValue()).longValue()))));
 
                     // assert that at least SOMETHING went through
                     assertTrue(rank.totalMessages.get() > 0);
@@ -339,16 +338,16 @@ public class TestElasticity extends DempsyBaseTest {
 
                     @SuppressWarnings("unchecked")
                     final AtomicLong count = nodes.stream()
-                            .map(nmwc -> (MessageProcessor<NumberCounter>) nmwc.manager.getMp("test-cluster1")) // get the NumberCounter Mp
-                            .filter(l -> l != null) // if it exists
-                            .map(l -> l.getPrototype().messageCount) // pull the prototype
-                            .reduce(new AtomicLong(0), (v1, v2) -> new AtomicLong(v1.get() + v2.get())); // sum up all of the counts
+                        .map(nmwc -> (MessageProcessor<NumberCounter>)nmwc.manager.getMp("test-cluster1")) // get the NumberCounter Mp
+                        .filter(l -> l != null) // if it exists
+                        .map(l -> l.getPrototype().messageCount) // pull the prototype
+                        .reduce(new AtomicLong(0), (v1, v2) -> new AtomicLong(v1.get() + v2.get())); // sum up all of the counts
 
                     assertEquals(profilerTestNumberCount, count.get());
 
                 }
             });
-        } catch (final Throwable th) {
+        } catch(final Throwable th) {
             th.printStackTrace();
             throw th;
         }
@@ -357,7 +356,7 @@ public class TestElasticity extends DempsyBaseTest {
     final static KeyExtractor ke = new KeyExtractor();
 
     private static void runACycle(final AtomicBoolean keepGoing, final int rankIndex, final NumberRank rank, final Runnable sendMessages)
-            throws InterruptedException {
+        throws InterruptedException {
         keepGoing.set(true);
         final Thread tmpThread = chain(new Thread(sendMessages, "Thread-testNumberCountDropOneAndReAdd-data-pump"), t -> t.start());
         // wait for the messages to get all the way through
@@ -392,8 +391,8 @@ public class TestElasticity extends DempsyBaseTest {
                     // send a few numbers. There are 20 shards so in order to cover all
                     // shards we can send in 20 messages. It just so happens that the hashCode
                     // for an integer is the integer itself so we can get every shard by sending
-                    while (keepGoing.get()) {
-                        for (int num = 0; num < 20; num++) {
+                    while(keepGoing.get()) {
+                        for(int num = 0; num < 20; num++) {
                             final int number = num;
                             dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
                         }
@@ -420,7 +419,7 @@ public class TestElasticity extends DempsyBaseTest {
 
                     // now, bring online another instance.
                     LOGGER.trace("==== starting a new one");
-                    nodes.add(makeNode(new String[] { "elasticity/mp-num-count.xml" }));
+                    nodes.add(makeNode(new String[] {"elasticity/mp-num-count.xml"}));
                     waitForEvenShardDistribution(session, "test-cluster1", 3, nodes);
 
                     // make sure everything still goes through
@@ -456,8 +455,8 @@ public class TestElasticity extends DempsyBaseTest {
                     // send a few numbers. There are 20 shards so in order to cover all
                     // shards we can send in 20 messages. It just so happens that the hashCode
                     // for an integer is the integer itself so we can get every shard by sending
-                    while (keepGoing.get()) {
-                        for (int num = 0; num < 20; num++) {
+                    while(keepGoing.get()) {
+                        for(int num = 0; num < 20; num++) {
                             final int number = num;
                             dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
                         }
@@ -474,7 +473,7 @@ public class TestElasticity extends DempsyBaseTest {
 
                     // now, bring online another instance.
                     LOGGER.trace("==== starting a new one");
-                    nodes.add(makeNode(new String[] { "elasticity/mp-num-count.xml" }));
+                    nodes.add(makeNode(new String[] {"elasticity/mp-num-count.xml"}));
                     waitForEvenShardDistribution(session, "test-cluster1", 4, nodes);
 
                     // make sure everything still goes through
@@ -500,9 +499,9 @@ public class TestElasticity extends DempsyBaseTest {
     @Test
     public void testExpansionPassivation() throws Exception {
         final String[][] actxPath = {
-                { "elasticity/adaptor.xml", },
-                { "elasticity/mp-num-count.xml", },
-                { "elasticity/mp-num-rank.xml", },
+            {"elasticity/adaptor.xml",},
+            {"elasticity/mp-num-count.xml",},
+            {"elasticity/mp-num-rank.xml",},
         };
 
         runCombos("testExpansionPassivation", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, ns -> {
@@ -521,8 +520,8 @@ public class TestElasticity extends DempsyBaseTest {
                     // send a few numbers. There are 20 shards so in order to cover all
                     // shards we can send in 20 messages. It just so happens that the hashCode
                     // for an integer is the integer itself so we can get every shard by sending
-                    while (keepGoing.get()) {
-                        for (int num = 0; num < 20; num++) {
+                    while(keepGoing.get()) {
+                        for(int num = 0; num < 20; num++) {
                             final int number = num;
                             dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
                         }
@@ -537,13 +536,13 @@ public class TestElasticity extends DempsyBaseTest {
                     runACycle(keepGoing, rankIndexToSend.get(), rank, sendMessages);
 
                     // now we have 20 Mps in test-cluster1
-                    final ClusterMetricGetters sc = (ClusterMetricGetters) nodes.get(1).manager
-                            .getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
+                    final ClusterMetricGetters sc = (ClusterMetricGetters)nodes.get(1).manager
+                        .getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
 
                     assertEquals(20L, sc.getMessageProcessorCount());
 
                     // add a second node for the cluster test-cluster1
-                    nodes.add(makeNode(new String[] { "elasticity/mp-num-count.xml" }));
+                    nodes.add(makeNode(new String[] {"elasticity/mp-num-count.xml"}));
                     waitForEvenShardDistribution(session, "test-cluster1", 2, nodes);
 
                     // about 1/2 should drop out.

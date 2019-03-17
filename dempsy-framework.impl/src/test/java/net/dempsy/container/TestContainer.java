@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -79,27 +79,27 @@ import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
 import net.dempsy.transport.blockingqueue.BlockingQueueReceiver;
-import net.dempsy.utils.test.SystemPropertyManager;
+import net.dempsy.util.SystemPropertyManager;
 
 //
 // NOTE: this test simply puts messages on an input queue, and expects
-//       messages on an output queue; the important part is the wiring
-//       in TestMPContainer.xml
+// messages on an output queue; the important part is the wiring
+// in TestMPContainer.xml
 //
 @RunWith(Parameterized.class)
 public class TestContainer {
     public static String[] ctx = {
-            "classpath:/spring/container/test-container.xml",
-            "classpath:/spring/container/test-mp.xml",
-            "classpath:/spring/container/test-adaptor.xml"
+        "classpath:/spring/container/test-container.xml",
+        "classpath:/spring/container/test-mp.xml",
+        "classpath:/spring/container/test-adaptor.xml"
     };
 
     @Parameters(name = "{index}: container type={0}")
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { LockingContainer.class.getPackage().getName() },
-                { NonLockingContainer.class.getPackage().getName() },
-                { NonLockingAltContainer.class.getPackage().getName() },
+            {LockingContainer.class.getPackage().getName()},
+            {NonLockingContainer.class.getPackage().getName()},
+            {NonLockingAltContainer.class.getPackage().getName()},
         });
     }
 
@@ -174,9 +174,10 @@ public class TestContainer {
     public NodeManager addOutputCatchStage() throws InterruptedException {
         // =======================================================
         // configure an output catcher tier
-        final Node out = new Node("test-app").defaultRoutingStrategyId("net.dempsy.router.simple")
-                .receiver(new BlockingQueueReceiver(new ArrayBlockingQueue<>(16))).setNodeStatsCollector(new BasicNodeStatsCollector()); // same app as the spring file.
-        out.cluster("output-catch").mp(new MessageProcessor<OutputCatcher>(new OutputCatcher()));
+        final Node out = new Node.Builder("test-app").defaultRoutingStrategyId("net.dempsy.router.simple")
+            .receiver(new BlockingQueueReceiver(new ArrayBlockingQueue<>(16))).nodeStatsCollector(new BasicNodeStatsCollector())
+            .cluster("output-catch").mp(new MessageProcessor<OutputCatcher>(new OutputCatcher()))
+            .build();
         out.validate();
 
         final NodeManager nman = track(new NodeManager()).node(out).collaborator(track(sessionFactory.createSession())).start();
@@ -184,8 +185,8 @@ public class TestContainer {
         assertTrue(poll(o -> {
             try {
                 return canReach(getRouter(manager), "output-catch",
-                        new KeyExtractor().extract(new OutputMessage("foo", 1, 1)).iterator().next());
-            } catch (final Exception e) {
+                    new KeyExtractor().extract(new OutputMessage("foo", 1, 1)).iterator().next());
+            } catch(final Exception e) {
                 return false;
             }
         }));
@@ -246,14 +247,14 @@ public class TestContainer {
 
         @Override
         public TestProcessor clone()
-                throws CloneNotSupportedException {
+            throws CloneNotSupportedException {
             cloneCount.incrementAndGet();
-            return (TestProcessor) super.clone();
+            return (TestProcessor)super.clone();
         }
 
         @Activation
         public void activate(final byte[] data) {
-            if (throwMeInActivation != null)
+            if(throwMeInActivation != null)
                 throw throwMeInActivation;
             activationCount++;
         }
@@ -264,7 +265,7 @@ public class TestContainer {
 
             blockPassivate.await();
 
-            if (throwPassivateException.get()) {
+            if(throwPassivateException.get()) {
                 passivateExceptionCount.incrementAndGet();
                 throw new RuntimeException("Passivate");
             }
@@ -274,7 +275,7 @@ public class TestContainer {
         public void handle(final ContainerTestMessage message) throws InterruptedException {
             myKey = message.getKey();
 
-            if (cache != null)
+            if(cache != null)
                 cache.put(myKey, this);
 
             invocationCount++;
@@ -284,12 +285,12 @@ public class TestContainer {
 
         @MessageHandler
         public ContainerTestMessage handle(final MyMessage message) throws InterruptedException {
-            if (justThrowMe != null)
+            if(justThrowMe != null)
                 throw justThrowMe;
 
             myKey = message.getKey();
 
-            if (cache != null)
+            if(cache != null)
                 cache.put(myKey, this);
 
             invocationCount++;
@@ -319,14 +320,14 @@ public class TestContainer {
     public static class OutputCatcher implements Cloneable {
         @MessageHandler
         public ContainerTestMessage handle(final OutputMessage message) throws InterruptedException {
-            if (outputMessages != null)
+            if(outputMessages != null)
                 outputMessages.add(message);
             return new ContainerTestMessage(message.mpKey);
         }
 
         @Override
         public OutputCatcher clone() throws CloneNotSupportedException {
-            return (OutputCatcher) super.clone();
+            return (OutputCatcher)super.clone();
         }
     }
 
@@ -354,44 +355,44 @@ public class TestContainer {
 
     @Test
     public void testWrongTypeMessage() throws Exception {
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
         container.dispatch(new KeyedMessage(kmwt.key, new Object()), true);
-        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
+        assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
     }
 
     @Test
     public void testMpActivationFails() throws Exception {
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         throwMeInActivation = new RuntimeException("JustThrowMeDAMMIT!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
         container.dispatch(kmwt, true);
-        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+        assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
 
     }
 
     @Test
     public void testMpThrowsDempsyException() throws Exception {
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new DempsyException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
         container.dispatch(kmwt, true);
-        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
-        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+        assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
+        assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
 
     @Test
     public void testMpThrowsException() throws Exception {
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
-        assertEquals(0, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
+        assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new RuntimeException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
         container.dispatch(kmwt, true);
-        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getMessageFailedCount());
-        assertEquals(1, ((ClusterMetricGetters) container.statCollector).getDispatchedMessageCount());
+        assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
+        assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
 
     @Test
@@ -518,7 +519,7 @@ public class TestContainer {
 
         final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
         assertNotNull(adaptor.dispatcher);
-        for (int i = 0; i < numInstances; i++)
+        for(int i = 0; i < numInstances; i++)
             adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo" + i));
 
         assertTrue(poll(container, c -> c.getProcessorCount() > 19));
@@ -644,7 +645,7 @@ public class TestContainer {
         Thread.sleep(500); // let it get going.
         assertFalse(evictIsComplete.get()); // check to see we're hung.
 
-        final ClusterMetricGetters sc = (ClusterMetricGetters) statsCollector;
+        final ClusterMetricGetters sc = (ClusterMetricGetters)statsCollector;
         assertEquals(0, sc.getMessageCollisionCount());
 
         // sending it a message will now cause it to have the collision tick up

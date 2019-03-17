@@ -51,19 +51,19 @@ public class SimpleRoutingStrategy implements RoutingStrategy.Router {
                 try {
                     final Collection<String> clusterDirs = session.getSubdirs(rootDir, this);
 
-                    if (clusterDirs.size() > 1)
+                    if(clusterDirs.size() > 1)
                         LOGGER.warn("There's more than one node registered for " + clusterId + " but it has a "
-                                + SimpleRoutingStrategy.class.getSimpleName());
+                            + SimpleRoutingStrategy.class.getSimpleName());
 
-                    if (clusterDirs.size() == 0) {
+                    if(clusterDirs.size() == 0) {
                         LOGGER.debug("Checking on registered node for " + clusterId + " yields no registed nodes yet");
                         address.set(null);
                         return false;
                     } else {
                         final String nodeToSendTo = clusterDirs.iterator().next();
 
-                        final ContainerAddress addr = (ContainerAddress) session.getData(rootDir + "/" + nodeToSendTo, null);
-                        if (address == null) {
+                        final ContainerAddress addr = (ContainerAddress)session.getData(rootDir + "/" + nodeToSendTo, null);
+                        if(address == null) {
                             LOGGER.debug("ContainerAddress missing for " + clusterId + " at " + nodeToSendTo + ". Trying again.");
                             address.set(null);
                             return false;
@@ -74,7 +74,7 @@ public class SimpleRoutingStrategy implements RoutingStrategy.Router {
                         return true;
                     }
 
-                } catch (final ClusterInfoException e) {
+                } catch(final ClusterInfoException e) {
                     LOGGER.debug("Failed attempt to retreive node destination information:" + e.getLocalizedMessage());
                     return false;
                 }
@@ -84,7 +84,6 @@ public class SimpleRoutingStrategy implements RoutingStrategy.Router {
             public String toString() {
                 return "find nodes using " + SimpleRoutingStrategy.class.getSimpleName() + " for cluster " + clusterId;
             }
-
         };
 
         isRunning.set(true);
@@ -93,9 +92,9 @@ public class SimpleRoutingStrategy implements RoutingStrategy.Router {
 
     @Override
     public ContainerAddress selectDestinationForMessage(final KeyedMessageWithType message) {
-        if (!isRunning.get())
+        if(!isRunning.get())
             throw new IllegalStateException(
-                    "attempt to use " + SimpleRoutingStrategy.class.getSimpleName() + " prior to starting it or after stopping it.");
+                "attempt to use " + SimpleRoutingStrategy.class.getSimpleName() + " prior to starting it or after stopping it.");
 
         return address.get();
     }

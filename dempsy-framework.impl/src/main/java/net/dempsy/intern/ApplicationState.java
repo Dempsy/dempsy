@@ -11,7 +11,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import net.dempsy.ClusterInformation;
 import net.dempsy.NodeInformation;
-import net.dempsy.OutgoingDispatcher;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.router.RoutingStrategy;

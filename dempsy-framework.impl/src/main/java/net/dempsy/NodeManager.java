@@ -1,6 +1,7 @@
 package net.dempsy;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -21,11 +22,14 @@ import net.dempsy.config.Cluster;
 import net.dempsy.config.ClusterId;
 import net.dempsy.config.Node;
 import net.dempsy.container.Container;
+import net.dempsy.intern.OutgoingDispatcher;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.MessageProcessorLifecycle;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.ClusterStatsCollectorFactory;
 import net.dempsy.monitoring.NodeStatsCollector;
+import net.dempsy.monitoring.StatsCollector;
+import net.dempsy.monitoring.dummy.DummyNodeStatsCollector;
 import net.dempsy.output.OutputScheduler;
 import net.dempsy.router.RoutingInboundManager;
 import net.dempsy.router.RoutingStrategy;
@@ -70,7 +74,6 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     private TransportManager tManager = null;
     private NodeAddress nodeAddress = null;
     private String nodeId = null;
-
     AtomicBoolean ptaskReady = new AtomicBoolean(false);
 
     public NodeManager() {}
@@ -88,9 +91,9 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     }
 
     public NodeManager collaborator(final ClusterInfoSession session) {
-        if (session == null)
+        if(session == null)
             throw new NullPointerException("Cannot pass a null collaborator to " + NodeManager.class.getSimpleName());
-        if (this.session != null)
+        if(this.session != null)
             throw new IllegalStateException("Collaborator session is already set on " + NodeManager.class.getSimpleName());
         this.session = session;
         return this;
@@ -111,32 +114,32 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     public NodeManager start() throws DempsyException {
         validate();
 
-        nodeStatsCollector = tr.track((NodeStatsCollector) node.getNodeStatsCollector());
+        nodeStatsCollector = tr.track((NodeStatsCollector)node.getNodeStatsCollector());
 
         // TODO: cleaner?
         statsCollectorFactory = tr.track(new Manager<>(ClusterStatsCollectorFactory.class)
-                .getAssociatedInstance(node.getClusterStatsCollectorFactoryId()));
+            .getAssociatedInstance(node.getClusterStatsCollectorFactoryId()));
 
         // =====================================
         // set the dispatcher on adaptors and create containers for mp clusters
         final AtomicReference<String> firstAdaptorClusterName = new AtomicReference<>(null);
         node.getClusters().forEach(c -> {
-            if (c.isAdaptor()) {
-                if (firstAdaptorClusterName.get() == null)
+            if(c.isAdaptor()) {
+                if(firstAdaptorClusterName.get() == null)
                     firstAdaptorClusterName.set(c.getClusterId().clusterName);
                 final Adaptor adaptor = c.getAdaptor();
                 adaptors.put(c.getClusterId(), adaptor);
 
-                if (c.getRoutingStrategyId() != null && !"".equals(c.getRoutingStrategyId().trim()) && !" ".equals(c.getRoutingStrategyId().trim()))
+                if(c.getRoutingStrategyId() != null && !"".equals(c.getRoutingStrategyId().trim()) && !" ".equals(c.getRoutingStrategyId().trim()))
                     LOGGER.warn("The cluster " + c.getClusterId()
-                            + " contains an adaptor but also has the routingStrategy set. The routingStrategy will be ignored.");
+                        + " contains an adaptor but also has the routingStrategy set. The routingStrategy will be ignored.");
 
-                if (c.getOutputScheduler() != null)
+                if(c.getOutputScheduler() != null)
                     LOGGER.warn("The cluster " + c.getClusterId()
-                            + " contains an adaptor but also has an output executor set. The output executor will never be used.");
+                        + " contains an adaptor but also has an output executor set. The output executor will never be used.");
             } else {
                 final Container con = makeContainer(node.getContainerTypeId()).setMessageProcessor(c.getMessageProcessor())
-                        .setClusterId(c.getClusterId());
+                    .setClusterId(c.getClusterId());
 
                 // TODO: This is a hack for now.
                 final Manager<RoutingStrategy.Inbound> inboundManager = new RoutingInboundManager();
@@ -146,15 +149,15 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                 final Object outputScheduler = c.getOutputScheduler();
 
                 // if there mp handles output but there's no output scheduler then we should warn.
-                if (outputSupported && outputScheduler == null)
+                if(outputSupported && outputScheduler == null)
                     LOGGER.warn("The cluster " + c.getClusterId()
-                            + " contains a message processor that supports an output cycle but there's no executor set so it will never be invoked.");
+                        + " contains a message processor that supports an output cycle but there's no executor set so it will never be invoked.");
 
-                if (!outputSupported && outputScheduler != null)
+                if(!outputSupported && outputScheduler != null)
                     LOGGER.warn("The cluster " + c.getClusterId()
-                            + " contains a message processor that doesn't support an output cycle but there's an output cycle executor set. The output cycle executor will never be used.");
+                        + " contains a message processor that doesn't support an output cycle but there's an output cycle executor set. The output cycle executor will never be used.");
 
-                final OutputScheduler os = (outputSupported && outputScheduler != null) ? (OutputScheduler) outputScheduler : null;
+                final OutputScheduler os = (outputSupported && outputScheduler != null) ? (OutputScheduler)outputScheduler : null;
                 containers.add(new PerContainer(con, is, c, os));
             }
         });
@@ -166,48 +169,53 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         // first gather node information
 
         // it we're all adaptor then don't bother to get the receiver.
-        if (containers.size() == 0) {
+        if(containers.size() == 0) {
             // here there's no point in a receiver since there's nothing to receive.
-            if (firstAdaptorClusterName.get() == null)
+            if(firstAdaptorClusterName.get() == null)
                 throw new IllegalStateException("There seems to be no clusters or adaptors defined for this node \"" + node.toString() + "\"");
         } else {
-            receiver = (Receiver) node.getReceiver();
-            if (receiver != null) // otherwise we're all adaptor
+            receiver = (Receiver)node.getReceiver();
+            if(receiver != null) // otherwise we're all adaptor
                 nodeAddress = receiver.getAddress(this);
-            else if (firstAdaptorClusterName.get() == null)
+            else if(firstAdaptorClusterName.get() == null)
                 throw new IllegalStateException("There seems to be no clusters or adaptors defined for this node \"" + node.toString() + "\"");
         }
 
         nodeId = Optional.ofNullable(nodeAddress).map(n -> n.getGuid()).orElse(firstAdaptorClusterName.get());
+        if(nodeStatsCollector == null) {
+            LOGGER.warn("There is no {} set for the the application '{}'", StatsCollector.class.getSimpleName(), node.application);
+            nodeStatsCollector = new DummyNodeStatsCollector();
+        }
+
         nodeStatsCollector.setNodeId(nodeId);
 
-        if (nodeAddress == null && node.getReceiver() != null)
+        if(nodeAddress == null && node.getReceiver() != null)
             LOGGER.warn("The node at " + nodeId + " contains no message processors but has a Reciever set. The receiver will never be started.");
 
-        if (nodeAddress == null && node.getDefaultRoutingStrategyId() != null)
+        if(nodeAddress == null && node.getDefaultRoutingStrategyId() != null)
             LOGGER.warn("The node at " + nodeId
-                    + " contains no message processors but has a defaultRoutingStrategyId set. The routingStrategyId will never be used.");
+                + " contains no message processors but has a defaultRoutingStrategyId set. The routingStrategyId will never be used.");
 
-        if (threading == null)
+        if(threading == null)
             threading = tr.track(new DefaultThreadingModel("NodeThreadPool-" + nodeId + "-")).configure(node.getConfiguration()).start();
 
         nodeStatsCollector.setMessagesPendingGauge(() -> threading.getNumberLimitedPending());
 
         final NodeReceiver nodeReciever = receiver == null ? null
-                : tr
-                        .track(new NodeReceiver(containers.stream().map(pc -> pc.container).collect(Collectors.toList()), threading,
-                                nodeStatsCollector));
+            : tr
+                .track(new NodeReceiver(containers.stream().map(pc -> pc.container).collect(Collectors.toList()), threading,
+                    nodeStatsCollector));
 
         final Map<ClusterId, ClusterInformation> messageTypesByClusterId = new HashMap<>();
         containers.stream().map(pc -> pc.clusterDefinition).forEach(c -> {
             messageTypesByClusterId.put(c.getClusterId(),
-                    new ClusterInformation(c.getRoutingStrategyId(), c.getClusterId(), c.getMessageProcessor().messagesTypesHandled()));
+                new ClusterInformation(c.getRoutingStrategyId(), c.getClusterId(), c.getMessageProcessor().messagesTypesHandled()));
         });
         final NodeInformation nodeInfo = nodeAddress != null ? new NodeInformation(receiver.transportTypeId(), nodeAddress, messageTypesByClusterId)
-                : null;
+            : null;
 
         // Then actually register the Node
-        if (nodeInfo != null) {
+        if(nodeInfo != null) {
             keepNodeRegstered = new PersistentTask(LOGGER, isRunning, persistenceScheduler, RETRY_PERIOND_MILLIS) {
                 @Override
                 public boolean execute() {
@@ -218,14 +226,14 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                         final String nodePath = rootPaths.nodesDir + "/" + nodeId;
 
                         session.mkdir(nodePath, nodeInfo, DirMode.EPHEMERAL);
-                        final NodeInformation reread = (NodeInformation) session.getData(nodePath, this);
+                        final NodeInformation reread = (NodeInformation)session.getData(nodePath, this);
                         final boolean ret = nodeInfo.equals(reread);
-                        if (ret == true)
+                        if(ret == true)
                             ptaskReady.set(true);
                         return ret;
-                    } catch (final ClusterInfoException e) {
+                    } catch(final ClusterInfoException e) {
                         final String logmessage = "Failed to register the node. Retrying in " + RETRY_PERIOND_MILLIS + " milliseconds.";
-                        if (LOGGER.isDebugEnabled())
+                        if(LOGGER.isDebugEnabled())
                             LOGGER.info(logmessage, e);
                         else
                             LOGGER.info(logmessage, e);
@@ -257,12 +265,12 @@ public class NodeManager implements Infrastructure, AutoCloseable {
 
         // set up containers
         containers.forEach(pc -> pc.container.setDispatcher(router)
-                .setEvictionCycle(pc.clusterDefinition.getEvictionFrequency().evictionFrequency,
-                        pc.clusterDefinition.getEvictionFrequency().evictionTimeUnit));
+            .setEvictionCycle(pc.clusterDefinition.getEvictionFrequency().evictionFrequency,
+                pc.clusterDefinition.getEvictionFrequency().evictionTimeUnit));
 
         // IB routing strategy
         final int numContainers = containers.size();
-        for (int i = 0; i < numContainers; i++) {
+        for(int i = 0; i < numContainers; i++) {
             final PerContainer c = containers.get(i);
             c.inboundStrategy.setContainerDetails(c.clusterDefinition.getClusterId(), new ContainerAddress(nodeAddress, i), c.container);
         }
@@ -288,7 +296,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         final PersistentTask startAdaptorAfterRouterIsRunning = new PersistentTask(LOGGER, isRunning, this.persistenceScheduler, 500) {
             @Override
             public boolean execute() {
-                if (!router.isReady())
+                if(!router.isReady())
                     return false;
 
                 adaptors.entrySet().forEach(e -> threading.runDaemon(() -> tr.track(e.getValue()).start(), "Adaptor-" + e.getKey().clusterName));
@@ -299,14 +307,14 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         // make sure the router is running. Once it is, start the adaptor(s)
         startAdaptorAfterRouterIsRunning.process();
 
-        if (receiver != null)
+        if(receiver != null)
             tr.track(receiver).start(nodeReciever, this);
 
         tr.track(session); // close this session when we're done.
         // =====================================
 
         // make it known we're here and ready
-        if (keepNodeRegstered != null)
+        if(keepNodeRegstered != null)
             keepNodeRegstered.process();
         else
             ptaskReady.set(true);
@@ -335,29 +343,29 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     }
 
     public NodeManager validate() throws DempsyException {
-        if (node == null)
+        if(node == null)
             throw new DempsyException("No node set");
 
         node.validate();
 
         // do we have at least one message processor (or are we all adaptor)?
         boolean hasMessageProc = false;
-        for (final Cluster c : node.getClusters()) {
-            if (!c.isAdaptor()) {
+        for(final Cluster c: node.getClusters()) {
+            if(!c.isAdaptor()) {
                 hasMessageProc = true;
                 break;
             }
         }
 
-        if (node.getReceiver() != null) {
-            if (!Receiver.class.isAssignableFrom(node.getReceiver().getClass()))
+        if(node.getReceiver() != null) {
+            if(!Receiver.class.isAssignableFrom(node.getReceiver().getClass()))
                 throw new DempsyException("The Node doesn't contain a " + Receiver.class.getSimpleName() + ". Instead it has a "
-                        + SafeString.valueOfClass(node.getReceiver()));
-        } else if (hasMessageProc)
+                    + SafeString.valueOfClass(node.getReceiver()));
+        } else if(hasMessageProc)
             throw new DempsyException("Node has a message processor but no reciever.");
 
         // if session is non-null, then so is the Router.
-        if (session == null)
+        if(session == null)
             throw new DempsyException("There's no collaborator set for this \"" + NodeManager.class.getSimpleName() + "\" ");
 
         return this;
@@ -425,6 +433,11 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     Container getContainer(final String clusterName) {
         return containers.stream().filter(pc -> clusterName.equals(pc.clusterDefinition.getClusterId().clusterName)).findFirst().get().container;
     }
+
+    public Collection<ContainerAddress> getReachableContainers(final String clusterName) {
+        return getRouter().allReachable(clusterName);
+    }
+
     // ==============================================================================
 
     private static class PerContainer {
