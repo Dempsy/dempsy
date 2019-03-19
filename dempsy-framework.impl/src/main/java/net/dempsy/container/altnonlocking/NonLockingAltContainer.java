@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -50,12 +50,14 @@ import net.dempsy.util.StupidHashMap;
  * <p>
  * The {@link NonLockingAltContainer} manages the lifecycle of message processors for the node that it's instantiated in.
  * </p>
- * 
- * The container is simple in that it does no thread management. When it's called it assumes that the transport 
+ *
+ * The container is simple in that it does no thread management. When it's called it assumes that the transport
  * has provided the thread that's needed
  */
 public class NonLockingAltContainer extends Container implements KeyspaceChangeListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonLockingAltContainer.class);
+    // This is a bad idea but only used to gate trace logging the invocation.
+    private static final boolean traceEnabled = LOGGER.isTraceEnabled();
 
     private static final int SPIN_TRIES = 100;
 
@@ -129,13 +131,13 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     private static <T> T setIfAbsent(final AtomicReference<T> ref, final Supplier<T> val) {
         do {
             final T maybeRet = ref.get();
-            if (maybeRet != null)
+            if(maybeRet != null)
                 return maybeRet;
 
             final T value = val.get();
-            if (ref.compareAndSet(null, value))
+            if(ref.compareAndSet(null, value))
                 return null;
-        } while (true);
+        } while(true);
     }
 
     protected static class InstanceWrapper {
@@ -168,12 +170,13 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         int counter = SPIN_TRIES;
         do {
             final T ret = condition.get();
-            if (ret != null)
+            if(ret != null)
                 return ret;
-            if (counter > 0)
+            if(counter > 0)
                 counter--;
-            else Thread.yield();
-        } while (isRunning.get());
+            else
+                Thread.yield();
+        } while(isRunning.get());
         throw new DempsyException("Not running.");
     }
 
@@ -182,7 +185,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     }
 
     private static <T> T pushPop(final LinkedList<T> q, final T toPush) {
-        if (q.size() == 0)
+        if(q.size() == 0)
             return toPush;
         q.add(toPush);
         return q.removeFirst();
@@ -191,22 +194,22 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
     public void dispatch(final KeyedMessage message, final boolean block) throws IllegalArgumentException, ContainerException {
-        if (!isRunningLazy) {
+        if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(false);
         }
 
-        if (message == null)
+        if(message == null)
             return; // No. We didn't process the null message
 
-        if (message.message == null)
+        if(message.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
-        if (message.key == null)
+        if(message.key == null)
             throw new ContainerException("Message " + objectDescription(message.message) + " contains no key.");
 
-        if (!inbound.doesMessageKeyBelongToNode(message.key)) {
-            if (LOGGER.isDebugEnabled())
+        if(!inbound.doesMessageKeyBelongToNode(message.key)) {
+            if(LOGGER.isDebugEnabled())
                 LOGGER.debug("Message with key " + SafeString.objectDescription(message.key) + " sent to wrong container. ");
             statCollector.messageFailed(false);
             return;
@@ -215,33 +218,33 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         numBeingWorked.incrementAndGet();
 
         boolean instanceDone = false;
-        while (!instanceDone) {
+        while(!instanceDone) {
             instanceDone = true;
             final InstanceWrapper wrapper = getInstanceForKey(message.key);
 
             // wrapper will be null if the activate returns 'false'
-            if (wrapper != null) {
+            if(wrapper != null) {
                 final MutRef<WorkingQueueHolder> mref = new MutRef<>();
                 boolean messageDone = false;
-                while (!messageDone) {
+                while(!messageDone) {
                     messageDone = true;
 
                     final WorkingQueueHolder mailbox = setIfAbsent(wrapper.mailbox, () -> mref.set(new WorkingQueueHolder(false)));
 
                     // if mailbox is null then I got it.
-                    if (mailbox == null) {
+                    if(mailbox == null) {
                         final WorkingQueueHolder box = mref.ref; // can't be null if I got the mailbox
                         final LinkedList<KeyedMessage> q = getQueue(box); // spin until I get the queue
                         KeyedMessage toProcess = pushPop(q, message);
                         box.queue.lazySet(q); // put the queue back
 
-                        while (toProcess != null) {
+                        while(toProcess != null) {
                             invokeOperation(wrapper.instance, Operation.handle, toProcess);
                             numBeingWorked.getAndDecrement();
 
                             // get the next message
                             final LinkedList<KeyedMessage> queue = getQueue(box);
-                            if (queue.size() == 0)
+                            if(queue.size() == 0)
                                 // we need to leave the queue out
                                 break;
 
@@ -256,12 +259,12 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                         // make one try at putting the message in the mailbox.
                         final LinkedList<KeyedMessage> q = mailbox.queue.getAndSet(null);
 
-                        if (q != null) { // I got it!
+                        if(q != null) { // I got it!
                             q.add(message);
                             mailbox.queue.lazySet(q);
                         } else {
                             // see if we're evicted.
-                            if (wrapper.evicted) {
+                            if(wrapper.evicted) {
                                 instanceDone = false;
                                 break; // start back at getting the instance.
                             }
@@ -271,7 +274,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                 }
             } else {
                 // if we got here then the activate on the Mp explicitly returned 'false'
-                if (LOGGER.isDebugEnabled())
+                if(LOGGER.isDebugEnabled())
                     LOGGER.debug("the container for " + clusterId + " failed to activate the Mp for " + SafeString.valueOf(prototype));
                 // we consider this "processed"
                 break; // leave the do/while loop
@@ -282,7 +285,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
 
     @Override
     protected void doevict(final EvictCheck check) {
-        if (!check.isGenerallyEvitable() || !isRunning.get())
+        if(!check.isGenerallyEvitable() || !isRunning.get())
             return;
 
         final MutRef<WorkingQueueHolder> mref = new MutRef<>();
@@ -292,18 +295,18 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
             final Set<Object> keys = new HashSet<>(instances.size() + 10);
             keys.addAll(instances.keySet());
 
-            while (keys.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
+            while(keys.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
 
                 // store off anything that passes for later removal. This is to avoid a
                 // ConcurrentModificationException.
                 final Set<Object> keysProcessed = new HashSet<Object>();
 
-                for (final Object key : keys) {
+                for(final Object key: keys) {
                     final InstanceWrapper wrapper = instances.get(key);
 
-                    if (wrapper != null) { // if the MP still exists
+                    if(wrapper != null) { // if the MP still exists
                         final WorkingQueueHolder mailbox = setIfAbsent(wrapper.mailbox, () -> mref.set(new WorkingQueueHolder(true)));
-                        if (mailbox == null) { // this means I got it.
+                        if(mailbox == null) { // this means I got it.
 
                             keysProcessed.add(key); // mark this to remove it from the set of keys later since we've dealing with it
 
@@ -312,18 +315,18 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                             boolean evictMe;
                             try {
                                 evictMe = check.shouldEvict(key, instance);
-                            } catch (final RuntimeException e) {
+                            } catch(final RuntimeException e) {
                                 LOGGER.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) +
-                                        " resulted in an exception.", e.getCause());
+                                    " resulted in an exception.", e.getCause());
                                 evictMe = false;
                             }
 
-                            if (evictMe) {
+                            if(evictMe) {
                                 try {
                                     prototype.passivate(instance);
-                                } catch (final Throwable e) {
+                                } catch(final Throwable e) {
                                     LOGGER.warn("Checking the eviction status/passivating of the Mp "
-                                            + SafeString.objectDescription(instance) + " resulted in an exception.", e);
+                                        + SafeString.objectDescription(instance) + " resulted in an exception.", e);
                                 }
 
                                 // even if passivate throws an exception, if the eviction check returned 'true' then
@@ -346,7 +349,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     // This method MUST NOT THROW
     @Override
     protected void outputPass() {
-        if (!prototype.isOutputSupported())
+        if(!prototype.isOutputSupported())
             return;
 
         // take a snapshot of the current container state.
@@ -366,15 +369,15 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         final MutRef<WorkingQueueHolder> mref = new MutRef<>();
 
         // keep going until all of the outputs have been invoked
-        while (toOutput.size() > 0 && isRunning.get()) {
-            for (final Iterator<Object> iter = toOutput.iterator(); iter.hasNext();) {
+        while(toOutput.size() > 0 && isRunning.get()) {
+            for(final Iterator<Object> iter = toOutput.iterator(); iter.hasNext();) {
                 final Object key = iter.next();
 
                 final InstanceWrapper wrapper = instances.get(key);
 
-                if (wrapper != null) { // if the MP still exists
+                if(wrapper != null) { // if the MP still exists
                     final WorkingQueueHolder mailbox = setIfAbsent(wrapper.mailbox, () -> mref.set(new WorkingQueueHolder(true)));
-                    if (mailbox == null) { // this means I got it.
+                    if(mailbox == null) { // this means I got it.
                         // it was created locked so no one else will be able to drop messages in the mailbox.
                         final Semaphore taskSepaphore = taskLock;
 
@@ -384,35 +387,35 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                             @Override
                             public void run() {
                                 try {
-                                    if (isRunning.get())
+                                    if(isRunning.get())
                                         invokeOperation(wrapper.instance, Operation.output, null);
                                 } finally {
                                     wrapper.mailbox.set(null); // releases this back to the world
 
                                     // this signals that we're done.
-                                    synchronized (numExecutingOutputs) {
+                                    synchronized(numExecutingOutputs) {
                                         numExecutingOutputs.decrementAndGet();
                                         numExecutingOutputs.notifyAll();
                                     }
-                                    if (taskSepaphore != null)
+                                    if(taskSepaphore != null)
                                         taskSepaphore.release();
                                 }
                             }
                         };
 
-                        synchronized (numExecutingOutputs) {
+                        synchronized(numExecutingOutputs) {
                             numExecutingOutputs.incrementAndGet();
                         }
 
-                        if (executorService != null) {
+                        if(executorService != null) {
                             try {
                                 taskSepaphore.acquire();
                                 executorService.execute(task);
-                            } catch (final RejectedExecutionException e) {
+                            } catch(final RejectedExecutionException e) {
                                 wrapper.mailbox.set(null); // we never got into the run so we need to release the lock
                                 // this may happen because of a race condition between the
                                 taskSepaphore.release();
-                            } catch (final InterruptedException e) {
+                            } catch(final InterruptedException e) {
                                 // this can happen while blocked in the semaphore.acquire.
                                 // if we're no longer running we should just get out
                                 // of here.
@@ -437,14 +440,14 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
 
         // =======================================================
         // now make sure all of the running tasks have completed
-        synchronized (numExecutingOutputs) {
-            while (numExecutingOutputs.get() > 0) {
+        synchronized(numExecutingOutputs) {
+            while(numExecutingOutputs.get() > 0) {
                 try {
                     numExecutingOutputs.wait();
-                } catch (final InterruptedException e) {
+                } catch(final InterruptedException e) {
                     // if we were interupted for a shutdown then just stop
                     // waiting for all of the threads to finish
-                    if (!isRunning.get())
+                    if(!isRunning.get())
                         break;
                     // otherwise continue checking.
                 }
@@ -465,73 +468,73 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     InstanceWrapper getInstanceForKey(final Object key) throws ContainerException {
         // common case has "no" contention
         InstanceWrapper wrapper = instances.get(key);
-        if (wrapper != null)
+        if(wrapper != null)
             return wrapper;
 
         // otherwise we will be working to get one.
-        final Boolean tmplock = new Boolean(true);
+        final Boolean tmplock = Boolean.TRUE;
         Boolean lock = keysBeingWorked.putIfAbsent(key, tmplock);
-        if (lock == null)
+        if(lock == null)
             lock = tmplock;
 
         // otherwise we'll do an atomic check-and-update
-        synchronized (lock) {
+        synchronized(lock) {
             wrapper = instances.get(key); // double checked lock?????
-            if (wrapper != null)
+            if(wrapper != null)
                 return wrapper;
 
             Object instance = null;
             try {
                 instance = prototype.newInstance();
-            } catch (final DempsyException e) {
-                if (e.userCaused()) {
+            } catch(final DempsyException e) {
+                if(e.userCaused()) {
                     LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
-                            + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
                     statCollector.messageFailed(true);
                     instance = null;
                 } else
                     throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                            SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                            " because the clone method threw an exception.", e);
-            } catch (final RuntimeException e) {
-                throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
                         SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        " because the clone invocation resulted in an unknown exception.", e);
+                        " because the clone method threw an exception.", e);
+            } catch(final RuntimeException e) {
+                throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
+                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                    " because the clone invocation resulted in an unknown exception.", e);
             }
 
-            if (instance == null)
+            if(instance == null)
                 throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        ". The value returned from the clone call appears to be null.");
+                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                    ". The value returned from the clone call appears to be null.");
 
             // activate
             boolean activateSuccessful = false;
             try {
-                if (instance != null) {
-                    if (LOGGER.isTraceEnabled())
+                if(instance != null) {
+                    if(LOGGER.isTraceEnabled())
                         LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                                + " via " + SafeString.valueOf(prototype));
+                            + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
                     prototype.activate(instance, key);
                     activateSuccessful = true;
                 }
-            } catch (final DempsyException e) {
-                if (e.userCaused()) {
+            } catch(final DempsyException e) {
+                if(e.userCaused()) {
                     LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
                     statCollector.messageFailed(true);
                     instance = null;
                 } else
                     throw new ContainerException(
-                            "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
-                                    + ". Is the active method accessible - the class is public and the method is public?",
-                            e);
-            } catch (final RuntimeException e) {
-                throw new ContainerException(
-                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                                " because of an unknown exception.",
+                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
+                            + ". Is the active method accessible - the class is public and the method is public?",
                         e);
+            } catch(final RuntimeException e) {
+                throw new ContainerException(
+                    "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
+                        " because of an unknown exception.",
+                    e);
             }
 
-            if (activateSuccessful) {
+            if(activateSuccessful) {
                 // we only want to create a wrapper and place the instance into the container
                 // if the instance activated correctly. If we got here then the above try block
                 // must have been successful.
@@ -546,57 +549,58 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     }
 
     public enum Operation {
-        handle,
-        output
+        handle, output
     };
 
     /**
      * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and forwarding any results.
      */
     private void invokeOperation(final Object instance, final Operation op, final KeyedMessage message) {
-        if (instance != null) { // possibly passivated ...
+        if(instance != null) { // possibly passivated ...
             List<KeyedMessageWithType> result;
             try {
+                if(traceEnabled)
+                    LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
                 statCollector.messageDispatched(message);
                 result = op == Operation.output ? prototype.invokeOutput(instance)
-                        : prototype.invoke(instance, message);
+                    : prototype.invoke(instance, message);
                 statCollector.messageProcessed(message);
-            } catch (final ContainerException e) {
+            } catch(final ContainerException e) {
                 result = null;
                 LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
-                        SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
+                    SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
                 statCollector.messageFailed(false);
             }
             // this is an exception thrown as a result of the reflected call having an illegal argument.
             // This should actually be impossible since the container itself manages the calling.
-            catch (final IllegalArgumentException e) {
+            catch(final IllegalArgumentException e) {
                 result = null;
                 LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
-                        e);
+                    " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
+                    e);
                 statCollector.messageFailed(true);
             }
             // The app threw an exception.
-            catch (final DempsyException e) {
+            catch(final DempsyException e) {
                 result = null;
                 LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " because an exception was thrown by the Message Processeor itself", e);
+                    " because an exception was thrown by the Message Processeor itself", e);
                 statCollector.messageFailed(true);
             }
             // RuntimeExceptions bookeeping
-            catch (final RuntimeException e) {
+            catch(final RuntimeException e) {
                 result = null;
                 LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to an unknown exception.", e);
+                    " due to an unknown exception.", e);
                 statCollector.messageFailed(false);
 
-                if (op == Operation.handle)
+                if(op == Operation.handle)
                     throw e;
             }
-            if (result != null) {
+            if(result != null) {
                 try {
                     dispatcher.dispatch(result);
-                } catch (final Exception de) {
+                } catch(final Exception de) {
                     LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
                 }
             }

@@ -4,6 +4,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import net.dempsy.container.Container;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.NodeStatsCollector;
@@ -11,8 +14,11 @@ import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.Listener;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.RoutedMessage;
+import net.dempsy.util.SafeString;
 
 public class NodeReceiver implements Listener<RoutedMessage> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(NodeReceiver.class);
+    private static final boolean traceEnabled = LOGGER.isTraceEnabled();
 
     private final Container[] containers;
     private final ThreadingModel threadModel;
@@ -38,7 +44,10 @@ public class NodeReceiver implements Listener<RoutedMessage> {
 
             @Override
             public Object call() throws Exception {
-                doIt(supplier.get());
+                final RoutedMessage message = supplier.get();
+                if(traceEnabled)
+                    LOGGER.trace("Received message {} with key {}", SafeString.valueOf(message.message), SafeString.valueOf(message.key));
+                doIt(message);
                 return null;
             }
 

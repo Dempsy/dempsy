@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -49,12 +49,14 @@ import net.dempsy.util.SafeString;
  * <p>
  * The {@link LockingContainer} manages the lifecycle of message processors for the node that it's instantiated in.
  * </p>
- * 
- * The container is simple in that it does no thread management. When it's called it assumes that the transport 
+ *
+ * The container is simple in that it does no thread management. When it's called it assumes that the transport
  * has provided the thread that's needed
  */
 public class LockingContainer extends Container {
     private static final Logger LOGGER = LoggerFactory.getLogger(LockingContainer.class);
+    // This is a bad idea but only used to gate trace logging the invocation.
+    private static final boolean traceEnabled = LOGGER.isTraceEnabled();
 
     // message key -> instance that handles messages with this key
     // changes to this map will be synchronized; read-only may be concurrent
@@ -129,26 +131,26 @@ public class LockingContainer extends Container {
 
         /**
          * MAKE SURE YOU USE A FINALLY CLAUSE TO RELEASE THE LOCK.
-         * 
+         *
          * @param block
          *            - whether or not to wait for the lock.
          * @return the instance if the lock was acquired. null otherwise.
          */
         public Object getExclusive(final boolean block) {
-            if (block) {
+            if(block) {
                 boolean gotLock = false;
-                while (!gotLock) {
+                while(!gotLock) {
                     try {
                         lock.acquire();
                         gotLock = true;
-                    } catch (final InterruptedException e) {
-                        if (!isRunning.get()) {
+                    } catch(final InterruptedException e) {
+                        if(!isRunning.get()) {
                             throw new DempsyException("Stopped");
                         }
                     }
                 }
             } else {
-                if (!lock.tryAcquire())
+                if(!lock.tryAcquire())
                     return null;
             }
 
@@ -204,16 +206,16 @@ public class LockingContainer extends Container {
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
     public void dispatch(final KeyedMessage message, final boolean block) throws IllegalArgumentException, ContainerException {
-        if (!isRunningLazy) {
+        if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(false);
         }
 
-        if (message == null)
+        if(message == null)
             return; // No. We didn't process the null message
 
-        if (!inbound.doesMessageKeyBelongToNode(message.key)) {
-            if (LOGGER.isDebugEnabled())
+        if(!inbound.doesMessageKeyBelongToNode(message.key)) {
+            if(LOGGER.isDebugEnabled())
                 LOGGER.debug("Message with key " + SafeString.objectDescription(message.key) + " sent to wrong container. ");
             statCollector.messageFailed(false);
             return;
@@ -221,10 +223,10 @@ public class LockingContainer extends Container {
 
         boolean evictedAndBlocking;
 
-        if (message == null || message.message == null)
+        if(message == null || message.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
-        if (message.key == null)
+        if(message.key == null)
             throw new ContainerException("Message " + objectDescription(message.message) + " contains no key.");
 
         try {
@@ -236,23 +238,23 @@ public class LockingContainer extends Container {
                 final InstanceWrapper wrapper = getInstanceForKey(message.key);
 
                 // wrapper will be null if the activate returns 'false'
-                if (wrapper != null) {
+                if(wrapper != null) {
                     final Object instance = wrapper.getExclusive(block);
-                    if (instance != null) { // null indicates we didn't get the lock
+                    if(instance != null) { // null indicates we didn't get the lock
                         final List<KeyedMessageWithType> response;
                         try {
-                            if (wrapper.isEvicted()) {
+                            if(wrapper.isEvicted()) {
                                 response = null;
                                 // if we're not blocking then we need to just return a failure. Otherwise we want to try again
                                 // because eventually the current Mp will be passivated and removed from the container and
                                 // a subsequent call to getInstanceForDispatch will create a new one.
-                                if (block) {
+                                if(block) {
                                     Thread.yield();
                                     evictedAndBlocking = true; // we're going to try again.
                                 } else { // otherwise it's just like we couldn't get the lock. The Mp is busy being killed off.
-                                    if (LOGGER.isTraceEnabled())
+                                    if(LOGGER.isTraceEnabled())
                                         LOGGER.trace("the container for " + clusterId + " failed handle message due to evicted Mp "
-                                                + SafeString.valueOf(prototype));
+                                            + SafeString.valueOf(prototype));
 
                                     statCollector.messageCollision(message);
                                 }
@@ -262,27 +264,27 @@ public class LockingContainer extends Container {
                         } finally {
                             wrapper.releaseLock();
                         }
-                        if (response != null) {
+                        if(response != null) {
                             try {
                                 dispatcher.dispatch(response);
-                            } catch (final Exception de) {
-                                if (isRunning.get())
+                            } catch(final Exception de) {
+                                if(isRunning.get())
                                     LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
                             }
                         }
                     } else { // ... we didn't get the lock
-                        if (LOGGER.isTraceEnabled())
+                        if(LOGGER.isTraceEnabled())
                             LOGGER.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
                         statCollector.messageCollision(message);
                     }
                 } else {
                     // if we got here then the activate on the Mp explicitly returned 'false'
-                    if (LOGGER.isDebugEnabled())
+                    if(LOGGER.isDebugEnabled())
                         LOGGER.debug("the container for " + clusterId + " failed to activate the Mp for " + SafeString.valueOf(prototype));
                     // we consider this "processed"
                     break; // leave the do/while loop
                 }
-            } while (evictedAndBlocking);
+            } while(evictedAndBlocking);
 
         } finally {
             numBeingWorked.decrementAndGet();
@@ -291,7 +293,7 @@ public class LockingContainer extends Container {
 
     @Override
     protected void doevict(final EvictCheck check) {
-        if (!check.isGenerallyEvitable() || !isRunning.get())
+        if(!check.isGenerallyEvitable() || !isRunning.get())
             return;
 
         try (final StatsCollector.TimerContext tctx = statCollector.evictionPassStarted()) {
@@ -301,13 +303,13 @@ public class LockingContainer extends Container {
             final Map<Object, InstanceWrapper> instancesToEvict = new HashMap<Object, InstanceWrapper>(instances.size() + 10);
             instancesToEvict.putAll(instances);
 
-            while (instancesToEvict.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
+            while(instancesToEvict.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
                 // store off anything that passes for later removal. This is to avoid a
                 // ConcurrentModificationException.
                 final Set<Object> keysProcessed = new HashSet<Object>();
 
-                for (final Map.Entry<Object, InstanceWrapper> entry : instancesToEvict.entrySet()) {
-                    if (check.shouldStopEvicting())
+                for(final Map.Entry<Object, InstanceWrapper> entry: instancesToEvict.entrySet()) {
+                    if(check.shouldStopEvicting())
                         break;
 
                     final Object key = entry.getKey();
@@ -315,7 +317,7 @@ public class LockingContainer extends Container {
                     boolean gotLock = false;
                     try {
                         gotLock = wrapper.tryLock();
-                        if (gotLock) {
+                        if(gotLock) {
 
                             // since we got here we're done with this instance,
                             // so add it's key to the list of keys we plan don't
@@ -325,40 +327,40 @@ public class LockingContainer extends Container {
                             boolean removeInstance = false;
 
                             try {
-                                if (check.shouldEvict(key, wrapper.instance)) {
+                                if(check.shouldEvict(key, wrapper.instance)) {
                                     removeInstance = true;
                                     wrapper.markEvicted();
                                     prototype.passivate(wrapper.getInstance());
                                     // wrapper.markPassivated();
                                 }
-                            } catch (final Throwable e) {
+                            } catch(final Throwable e) {
                                 Object instance = null;
                                 try {
                                     instance = wrapper.getInstance();
-                                } catch (final Throwable th) {} // not sure why this would ever happen
+                                } catch(final Throwable th) {} // not sure why this would ever happen
                                 LOGGER.warn("Checking the eviction status/passivating of the Mp "
-                                        + SafeString.objectDescription(instance == null ? wrapper : instance) +
-                                        " resulted in an exception.", e);
+                                    + SafeString.objectDescription(instance == null ? wrapper : instance) +
+                                    " resulted in an exception.", e);
                             }
 
                             // even if passivate throws an exception, if the eviction check returned 'true' then
                             // we need to remove the instance.
-                            if (removeInstance) {
-                                if (LOGGER.isTraceEnabled())
+                            if(removeInstance) {
+                                if(LOGGER.isTraceEnabled())
                                     LOGGER.trace("Evicting Mp with key " + SafeString.objectDescription(key) + " from " + clusterId.toString());
                                 instances.remove(key);
                                 statCollector.messageProcessorDeleted(key);
                             }
                         }
                     } finally {
-                        if (gotLock)
+                        if(gotLock)
                             wrapper.releaseLock();
                     }
 
                 }
 
                 // now clean up everything we managed to get hold of
-                for (final Object key : keysProcessed)
+                for(final Object key: keysProcessed)
                     instancesToEvict.remove(key);
 
             }
@@ -368,7 +370,7 @@ public class LockingContainer extends Container {
     // This method MUST NOT THROW
     @Override
     protected void outputPass() {
-        if (!prototype.isOutputSupported())
+        if(!prototype.isOutputSupported())
             return;
 
         // take a snapshot of the current container state.
@@ -377,7 +379,7 @@ public class LockingContainer extends Container {
         Executor executorService = null;
         Semaphore taskLock = null;
         executorService = super.getOutputExecutorService();
-        if (executorService != null)
+        if(executorService != null)
             taskLock = new Semaphore(outputConcurrency);
 
         // This keeps track of the number of concurrently running
@@ -389,17 +391,17 @@ public class LockingContainer extends Container {
         final AtomicLong numExecutingOutputs = new AtomicLong(0);
 
         // keep going until all of the outputs have been invoked
-        while (toOutput.size() > 0 && isRunning.get()) {
-            for (final Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) {
+        while(toOutput.size() > 0 && isRunning.get()) {
+            for(final Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) {
                 final InstanceWrapper wrapper = iter.next();
                 boolean gotLock = false;
 
                 gotLock = wrapper.tryLock();
 
-                if (gotLock) {
+                if(gotLock) {
                     // If we've been evicted then we're on our way out
                     // so don't do anything else with this.
-                    if (wrapper.isEvicted()) {
+                    if(wrapper.isEvicted()) {
                         iter.remove();
                         wrapper.releaseLock();
                         continue;
@@ -414,7 +416,7 @@ public class LockingContainer extends Container {
                         public void run() {
                             final List<KeyedMessageWithType> response;
                             try {
-                                if (isRunning.get() && !wrapper.isEvicted())
+                                if(isRunning.get() && !wrapper.isEvicted())
                                     response = invokeOperation(instance, Operation.output, null);
                                 else
                                     response = null;
@@ -422,37 +424,37 @@ public class LockingContainer extends Container {
                                 wrapper.releaseLock();
 
                                 // this signals that we're done.
-                                synchronized (numExecutingOutputs) {
+                                synchronized(numExecutingOutputs) {
                                     numExecutingOutputs.decrementAndGet();
                                     numExecutingOutputs.notifyAll();
                                 }
-                                if (taskSepaphore != null)
+                                if(taskSepaphore != null)
                                     taskSepaphore.release();
                             }
-                            if (response != null) {
+                            if(response != null) {
                                 try {
                                     dispatcher.dispatch(response);
-                                } catch (final Exception de) {
-                                    if (isRunning.get())
+                                } catch(final Exception de) {
+                                    if(isRunning.get())
                                         LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
                                 }
                             }
                         }
                     };
 
-                    synchronized (numExecutingOutputs) {
+                    synchronized(numExecutingOutputs) {
                         numExecutingOutputs.incrementAndGet();
                     }
 
-                    if (executorService != null) {
+                    if(executorService != null) {
                         try {
                             taskSepaphore.acquire();
                             executorService.execute(task);
-                        } catch (final RejectedExecutionException e) {
+                        } catch(final RejectedExecutionException e) {
                             // this may happen because of a race condition between the
                             taskSepaphore.release();
                             wrapper.releaseLock(); // we never got into the run so we need to release the lock
-                        } catch (final InterruptedException e) {
+                        } catch(final InterruptedException e) {
                             // this can happen while blocked in the semaphore.acquire.
                             // if we're no longer running we should just get out
                             // of here.
@@ -472,14 +474,14 @@ public class LockingContainer extends Container {
 
         // =======================================================
         // now make sure all of the running tasks have completed
-        synchronized (numExecutingOutputs) {
-            while (numExecutingOutputs.get() > 0) {
+        synchronized(numExecutingOutputs) {
+            while(numExecutingOutputs.get() > 0) {
                 try {
                     numExecutingOutputs.wait();
-                } catch (final InterruptedException e) {
+                } catch(final InterruptedException e) {
                     // if we were interupted for a shutdown then just stop
                     // waiting for all of the threads to finish
-                    if (!isRunning.get())
+                    if(!isRunning.get())
                         break;
                     // otherwise continue checking.
                 }
@@ -500,67 +502,67 @@ public class LockingContainer extends Container {
     InstanceWrapper getInstanceForKey(final Object key) throws ContainerException {
         // common case has "no" contention
         InstanceWrapper wrapper = instances.get(key);
-        if (wrapper != null)
+        if(wrapper != null)
             return wrapper;
 
         // otherwise we will be working to get one.
         final Boolean tmplock = new Boolean(true);
         Boolean lock = keysBeingWorked.putIfAbsent(key, tmplock);
-        if (lock == null)
+        if(lock == null)
             lock = tmplock;
 
         // otherwise we'll do an atomic check-and-update
-        synchronized (lock) {
+        synchronized(lock) {
             wrapper = instances.get(key); // double checked lock?????
-            if (wrapper != null)
+            if(wrapper != null)
                 return wrapper;
 
             Object instance = null;
             try {
                 instance = prototype.newInstance();
-            } catch (final DempsyException e) {
-                if (e.userCaused()) {
+            } catch(final DempsyException e) {
+                if(e.userCaused()) {
                     LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
-                            + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
                     statCollector.messageFailed(true);
                     instance = null;
                 } else
                     throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                            SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                            " because the clone method threw an exception.", e);
-            } catch (final RuntimeException e) {
-                throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
                         SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        " because the clone invocation resulted in an unknown exception.", e);
+                        " because the clone method threw an exception.", e);
+            } catch(final RuntimeException e) {
+                throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
+                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                    " because the clone invocation resulted in an unknown exception.", e);
             }
 
             // activate
             boolean activateSuccessful = false;
             try {
-                if (instance != null) {
-                    if (LOGGER.isTraceEnabled())
+                if(instance != null) {
+                    if(LOGGER.isTraceEnabled())
                         LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                                + " via " + SafeString.valueOf(prototype));
+                            + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
                     prototype.activate(instance, key);
                     activateSuccessful = true;
                 }
-            } catch (final DempsyException e) {
-                if (e.userCaused()) {
+            } catch(final DempsyException e) {
+                if(e.userCaused()) {
                     LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
                     statCollector.messageFailed(true);
                 } else
                     throw new ContainerException(
-                            "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
-                                    + ". Is the active method accessible - the class is public and the method is public?",
-                            e);
-            } catch (final RuntimeException e) {
-                throw new ContainerException(
-                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                                " because of an unknown exception.",
+                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
+                            + ". Is the active method accessible - the class is public and the method is public?",
                         e);
+            } catch(final RuntimeException e) {
+                throw new ContainerException(
+                    "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
+                        " because of an unknown exception.",
+                    e);
             }
 
-            if (activateSuccessful) {
+            if(activateSuccessful) {
                 // we only want to create a wrapper and place the instance into the container
                 // if the instance activated correctly. If we got here then the above try block
                 // must have been successful.
@@ -575,50 +577,51 @@ public class LockingContainer extends Container {
     }
 
     public enum Operation {
-        handle,
-        output
+        handle, output
     };
 
     /**
      * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and forwarding any results.
      */
     private List<KeyedMessageWithType> invokeOperation(final Object instance, final Operation op, final KeyedMessage message) {
-        if (instance != null) { // possibly passivated ...
+        if(instance != null) { // possibly passivated ...
             List<KeyedMessageWithType> result;
             try {
+                if(traceEnabled)
+                    LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
                 statCollector.messageDispatched(message);
                 result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message);
                 statCollector.messageProcessed(message);
-            } catch (final ContainerException e) {
+            } catch(final ContainerException e) {
                 result = null;
                 LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
-                        SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
+                    SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
                 statCollector.messageFailed(false);
             }
             // this is an exception thrown as a result of the reflected call having an illegal argument.
             // This should actually be impossible since the container itself manages the calling.
-            catch (final IllegalArgumentException e) {
+            catch(final IllegalArgumentException e) {
                 result = null;
                 LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
-                        e);
+                    " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
+                    e);
                 statCollector.messageFailed(true);
             }
             // The app threw an exception.
-            catch (final DempsyException e) {
+            catch(final DempsyException e) {
                 result = null;
                 LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " because an exception was thrown by the Message Processeor itself.", e);
+                    " because an exception was thrown by the Message Processeor itself.", e);
                 statCollector.messageFailed(true);
             }
             // RuntimeExceptions bookeeping
-            catch (final RuntimeException e) {
+            catch(final RuntimeException e) {
                 result = null;
                 LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to an unknown exception.", e);
+                    " due to an unknown exception.", e);
                 statCollector.messageFailed(false);
 
-                if (op == Operation.handle)
+                if(op == Operation.handle)
                     throw e;
             }
             return result;
