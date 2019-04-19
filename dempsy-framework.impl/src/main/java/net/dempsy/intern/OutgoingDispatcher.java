@@ -67,7 +67,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
             // if we're in the midst of an update then we really want to wait for the new state.
             while(tmp == null) {
                 if(!isRunning.get()) {
-                    LOGGER.debug("Router dispatch called while stopped.");
+                    LOGGER.debug("[{}] Router dispatch called while stopped.", thisNodeId);
                     return;
                 }
 
@@ -89,7 +89,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
             for(final String mt: message.messageTypes) {
                 final RoutingStrategy.Router[] routers = outboundsByMessageType.get(mt);
                 if(routers == null)
-                    LOGGER.trace("No cluster that handles messages of type {}", mt);
+                    LOGGER.trace("[{}] No cluster that handles messages of type {}", thisNodeId, mt);
                 else {
                     // For this message type we now have all of the Routers. For each Router determine
                     // the set of ContainerAddresses that this message will be sent to.
@@ -97,7 +97,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                         final ContainerAddress ca = routers[i].selectDestinationForMessage(message);
                         // it's possible 'ca' is null when we don't know where to send the message.
                         if(ca == null)
-                            LOGGER.debug("No way to send the message {} to specific cluster for the time being", message.message);
+                            LOGGER.debug("[{}] No way to send the message {} to specific cluster for the time being", thisNodeId, message.message);
                         else {
                             // When the message will be sent to 2 different clusters, but both clusters
                             // are hosted in the same node, then we send 1 message to 1 ContainerAddress
@@ -129,8 +129,8 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                     if(sender == null) {
                         // router update is probably behind the routing strategy update
                         if(isRunning.get())
-                            LOGGER.error("Couldn't send message to " + curNode + " from " + thisNodeId + " because there's no "
-                                + Sender.class.getSimpleName());
+                            LOGGER.error("[{}] Couldn't send message to " + curNode + " from " + thisNodeId + " because there's no "
+                                + Sender.class.getSimpleName(), thisNodeId);
                     } else {
                         sender.send(toSend);
                         messageSentSomewhere = true;
@@ -140,7 +140,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
             if(containerByNodeAddress.size() == 0) {
                 if(LOGGER.isTraceEnabled())
-                    LOGGER.trace("There appears to be no valid destination addresses for the message {}",
+                    LOGGER.trace("[{}] There appears to be no valid destination addresses for the message {}", thisNodeId,
                         SafeString.objectDescription(message.message));
             }
         } finally {
@@ -169,18 +169,18 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                         final NodeInformation ni = (NodeInformation)session.getData(nodesDir + "/" + subdir, null);
 
                         if(ni == null) {
-                            LOGGER.warn("A node directory was empty at " + subdir);
+                            LOGGER.warn("[{}] A node directory was empty at " + subdir, thisNodeId);
                             return false;
                         }
 
                         // see if node info is dupped.
                         if(alreadySeen.contains(ni)) {
-                            LOGGER.warn("The node " + ni.nodeAddress + " seems to be registed more than once.");
+                            LOGGER.warn("[{}] The node " + ni.nodeAddress + " seems to be registed more than once.", thisNodeId);
                             continue;
                         }
 
                         if(ni.clusterInfoByClusterId.size() == 0) { // it's ALL adaptor so there's no sense in dealing with it
-                            LOGGER.trace("NodeInformation {} appears to be only an Adaptor.", ni);
+                            LOGGER.trace("[{}] NodeInformation {} appears to be only an Adaptor.", thisNodeId, ni);
                             continue;
                         }
 
@@ -194,7 +194,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                         isReady.set(true);
                         return true; // nothing to update.
                     } else if(LOGGER.isTraceEnabled())
-                        LOGGER.trace("Updating for " + thisNodeId);
+                        LOGGER.trace("[{}] Updating for {} ", thisNodeId, thisNodeId);
 
                     // otherwise we will be making changes so remove the current ApplicationState
                     final ApplicationState obs = outbounds.getAndSet(null); // this can cause instability.
@@ -206,23 +206,23 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                     } catch(final RuntimeException rte) {
                         // if we threw an exception after clearing the outbounds we need to restore it.
                         // This is likely a configuration error so we should probably warn about it.
-                        LOGGER.warn("Unexpected exception while applying a topology update", rte);
+                        LOGGER.warn("[{}] Unexpected exception while applying a topology update", thisNodeId, rte);
                         outbounds.set(obs);
                         throw rte;
                     }
                 } catch(final ClusterInfoException e) {
                     final String message = "Failed to find outgoing route information. Will retry shortly.";
                     if(LOGGER.isTraceEnabled())
-                        LOGGER.debug(message, e);
+                        LOGGER.debug("[{}] {}", new Object[] {thisNodeId,message,e});
                     else
-                        LOGGER.debug(message);
+                        LOGGER.debug("[{}] {}", thisNodeId, message);
                     return false;
                 }
             }
 
             @Override
             public String toString() {
-                return "find nodes to route to";
+                return thisNodeId + " find nodes to route to";
             }
 
         };
@@ -251,6 +251,8 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
     @Override
     public void stop() {
+        if(LOGGER.isDebugEnabled())
+            LOGGER.debug("{} stopping {}", thisNodeId, OutgoingDispatcher.class.getSimpleName());
         synchronized(isRunning) {
             isRunning.set(false);
             final ApplicationState cur = outbounds.getAndSet(null);
