@@ -122,9 +122,13 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
                 final RoutedMessage toSend = new RoutedMessage(curAddr.clusters, message.key, message.message);
                 if(curNode.equals(thisNode)) {
+                    LOGGER.trace("Sending local {}", message);
+
                     nodeReciever.feedbackLoop(toSend, false); // this shouldn't count since Router is an OUTGOING class
                     messageSentSomewhere = true;
                 } else {
+                    LOGGER.trace("Sending {} to {}", message, curNode);
+
                     final Sender sender = cur.getSender(curNode);
                     if(sender == null) {
                         // router update is probably behind the routing strategy update
