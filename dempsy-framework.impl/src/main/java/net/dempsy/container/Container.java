@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -43,8 +43,8 @@ import net.dempsy.util.executor.RunningEventSwitch;
  * <p>
  * The {@link Container} manages the lifecycle of message processors for the node that it's instantiated in.
  * </p>
- * 
- * The container is simple in that it does no thread management. When it's called it assumes that the transport 
+ *
+ * The container is simple in that it does no thread management. When it's called it assumes that the transport
  * has provided the thread that's needed
  */
 public abstract class Container implements Service, KeyspaceChangeListener, OutputInvoker {
@@ -96,16 +96,16 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     @SuppressWarnings("unchecked")
     public Container setMessageProcessor(final MessageProcessorLifecycle<?> prototype) {
-        if (prototype == null)
+        if(prototype == null)
             throw new IllegalArgumentException("The container for cluster(" + clusterId + ") cannot be supplied a null MessageProcessor");
 
-        this.prototype = (MessageProcessorLifecycle<Object>) prototype;
+        this.prototype = (MessageProcessorLifecycle<Object>)prototype;
 
         return this;
     }
 
     public Container setClusterId(final ClusterId clusterId) {
-        if (clusterId == null)
+        if(clusterId == null)
             throw new IllegalArgumentException("The container must have a cluster id");
 
         this.clusterId = clusterId;
@@ -135,7 +135,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     public abstract int getProcessorCount();
 
     /**
-     * The number of messages the container is currently working on. This may not match the 
+     * The number of messages the container is currently working on. This may not match the
      * stats collector's numberOfInFlight messages which is a measurement of how many messages
      * are currently being handled by MPs. This represents how many messages have been given
      * dispatched to the container that are yet being processed. It includes internal queuing
@@ -145,7 +145,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     @Override
     public void stop() {
-        if (evictionScheduler != null)
+        if(evictionScheduler != null)
             evictionScheduler.shutdownNow();
 
         // the following will close up any output executor that might be running
@@ -164,18 +164,18 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         validate();
 
-        if (evictionCycleTime != -1)
+        if(evictionCycleTime != -1)
             startEvictionThread();
 
         prototype.start(clusterId);
 
-        messageTypes = ((MessageProcessorLifecycle<?>) prototype).messagesTypesHandled();
-        if (messageTypes == null || messageTypes.size() == 0)
+        messageTypes = ((MessageProcessorLifecycle<?>)prototype).messagesTypesHandled();
+        if(messageTypes == null || messageTypes.size() == 0)
             throw new ContainerException("The cluster " + clusterId + " appears to have a MessageProcessor with no messageTypes defined.");
 
-        if (outputConcurrency > 1)
+        if(outputConcurrency > 1)
             outputExecutorService = Executors.newFixedThreadPool(outputConcurrency,
-                    r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
+                r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
     }
 
     @Override
@@ -201,6 +201,13 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // This method MUST NOT THROW
     protected abstract void outputPass();
 
+    /**
+     * This should ONLY be used for testing. It will retrieve the current Mp by key
+     * if it exists. No processing stops and the bookeeping of the container is not affected.
+     * The Mp can be removed from the container at any time.
+     */
+    public abstract Object getMp(Object key);
+
     protected ExecutorService getOutputExecutorService() {
         return outputExecutorService;
     }
@@ -211,7 +218,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     private void stopOutput() {
-        if (outputExecutorService != null)
+        if(outputExecutorService != null)
             outputExecutorService.shutdown();
 
         outputExecutorService = null;
@@ -258,14 +265,14 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     private final static AtomicLong evictionThreadNumber = new AtomicLong(0);
 
     private void startEvictionThread() {
-        if (0 == evictionCycleTime || null == evictionTimeUnit) {
+        if(0 == evictionCycleTime || null == evictionTimeUnit) {
             LOGGER.warn("Eviction Thread cannot start with zero cycle time or null TimeUnit {} {}", evictionCycleTime, evictionTimeUnit);
             return;
         }
 
-        if (prototype != null && prototype.isEvictionSupported()) {
+        if(prototype != null && prototype.isEvictionSupported()) {
             evictionScheduler = Executors.newSingleThreadScheduledExecutor(
-                    r -> new Thread(r, this.getClass().getSimpleName() + "-Eviction-" + evictionThreadNumber.getAndIncrement()));
+                r -> new Thread(r, this.getClass().getSimpleName() + "-Eviction-" + evictionThreadNumber.getAndIncrement()));
 
             evictionScheduler.scheduleWithFixedDelay(new Runnable() {
                 @Override
@@ -291,7 +298,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
                 // Notify that we're running
                 keyspaceChangeSwitch.workerRunning();
 
-                if (shrink) {
+                if(shrink) {
                     LOGGER.trace("Evicting Mps due to keyspace shrinkage.");
                     try {
                         // First do the contract by evicting all
@@ -316,18 +323,18 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
                                 return keyspaceChangeSwitch.wasPreempted();
                             }
                         });
-                    } catch (final RuntimeException rte) {
+                    } catch(final RuntimeException rte) {
                         LOGGER.error("Failed on eviction", rte);
                     }
                 }
 
-                if (grow) {
+                if(grow) {
                     // TODO: the grow only affect pre-instantiation capable containers
                     // no grow yet.
                 }
 
                 grow = shrink = false;
-            } catch (final RuntimeException exception) {
+            } catch(final RuntimeException exception) {
                 LOGGER.error("Failed to shrink the KeySpace.", exception);
             } finally {
                 keyspaceChangeSwitch.workerFinished();
@@ -341,9 +348,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     @Override
     public void keyspaceChanged(final boolean less, final boolean more) {
 
-        if (less) {
+        if(less) {
             // we need to run a special eviction pass.
-            synchronized (changer) { // we only want to do this one at a time.
+            synchronized(changer) { // we only want to do this one at a time.
                 keyspaceChangeSwitch.preemptWorkerAndWait(); // if it's already running the stop it so we can restart it.
 
                 changer.inbound = inbound;
@@ -353,9 +360,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
                 // only when a complete, uninterrupted pass finishes will the states
                 // of grow and shrink be reset (see the last line of the run() method
                 // in the KeyspaceChanger.
-                if (more)
+                if(more)
                     changer.grow = true;
-                if (less)
+                if(less)
                     changer.shrink = true;
 
                 final Thread t = new Thread(changer, clusterId.toString() + "-Keyspace Change Thread-" + keyspaceChangeThreadNum.getAndIncrement());
@@ -373,16 +380,16 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // ----------------------------------------------------------------------------
 
     protected void validate() {
-        if (clusterId == null)
+        if(clusterId == null)
             throw new IllegalStateException("The container must have a cluster id");
 
-        if (prototype == null)
+        if(prototype == null)
             throw new IllegalStateException("The container for \"" + clusterId + "\" cannot be supplied a null MessageProcessor");
 
-        if (dispatcher == null)
+        if(dispatcher == null)
             throw new IllegalStateException("The container for cluster \"" + clusterId + "\" never had the dispatcher set on it.");
 
-        if (statCollector == null)
+        if(statCollector == null)
             throw new IllegalStateException("The container must have a " + ClusterStatsCollector.class.getSimpleName() + " id");
     }
 

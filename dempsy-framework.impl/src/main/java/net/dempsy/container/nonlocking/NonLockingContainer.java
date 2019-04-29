@@ -120,6 +120,10 @@ public class NonLockingContainer extends Container {
     // ----------------------------------------------------------------------------
     // Test Hooks
     // ----------------------------------------------------------------------------
+    @Override
+    public Object getMp(final Object key) {
+        return instances.get(key);
+    }
 
     // ----------------------------------------------------------------------------
     // Internals

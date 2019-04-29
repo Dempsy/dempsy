@@ -112,6 +112,11 @@ public class LockingContainer extends Container {
     // ----------------------------------------------------------------------------
     // Test Hooks
     // ----------------------------------------------------------------------------
+    @Override
+    public Object getMp(final Object key) {
+        final InstanceWrapper iw = instances.get(key);
+        return iw == null ? null : iw.instance;
+    }
 
     // ----------------------------------------------------------------------------
     // Internals
