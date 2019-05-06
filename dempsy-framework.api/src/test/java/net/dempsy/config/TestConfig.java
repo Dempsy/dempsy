@@ -102,7 +102,7 @@ public class TestConfig {
         final Cluster cd = new Cluster("test-slot");
         cd.setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
 
-        node.setClusters(cd);
+        node.addClusters(cd);
 
         // if we get to here without an error we should be okay
         node.validate(); // this throws if there's a problem.
@@ -164,7 +164,7 @@ public class TestConfig {
         assertNotNull(cd.getAdaptor());
         clusterDefs.add(cd);
 
-        node.setClusters(clusterDefs);
+        node.addClusters(clusterDefs);
 
         // if we get to here without an error we should be okay
         node.validate(); // this throws if there's a problem.
@@ -236,7 +236,7 @@ public class TestConfig {
     public void testFailNoPrototypeOrAdaptor() throws Throwable {
         final Node app = new Node("test");
         final Cluster cd = new Cluster("test-slot1");
-        app.setClusters(cd); // no prototype or adaptor
+        app.addClusters(cd); // no prototype or adaptor
         app.validate();
     }
 
@@ -271,13 +271,13 @@ public class TestConfig {
     @Test(expected = IllegalArgumentException.class)
     public void testFailNoClusterDefinition() throws Throwable {
         final Node node = new Node("test");
-        node.setClusters();
+        node.addClusters();
     }
 
     @Test(expected = IllegalStateException.class)
     public void testDupCluster() throws Throwable {
         final Node app = new Node("test-tooMuchWine-needMore").setDefaultRoutingStrategyId("");
-        app.setClusters(
+        app.addClusters(
             new Cluster("notTheSame").setAdaptor(new GoodAdaptor()),
             new Cluster("mp-stage1").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
             new Cluster("mp-stage2-dupped").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
@@ -309,7 +309,7 @@ public class TestConfig {
                 return null;
             }
         });
-        app.setClusters(cd);
+        app.addClusters(cd);
         app.validate();
     }
 
@@ -346,7 +346,7 @@ public class TestConfig {
                 return null;
             }
         });
-        app.setClusters(cd);
+        app.addClusters(cd);
         app.validate();
     }
 
@@ -397,7 +397,7 @@ public class TestConfig {
         }
 
         cd.setMessageProcessor(new MessageProcessor<mp>(new mp()));
-        app.setClusters(cd);
+        app.addClusters(cd);
         app.validate();
     }
 

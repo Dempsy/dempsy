@@ -77,7 +77,7 @@ public class Node {
         }
 
         public Builder clusters(final Cluster... defs) {
-            node.setClusters(defs);
+            node.addClusters(defs);
             return this;
         }
 
@@ -229,11 +229,27 @@ public class Node {
 
     // =======================================================================
 
+    // These are 'set' in order to be autowired by spring
     public Node setClusters(final Cluster... defs) {
-        return setClusters(Arrays.asList(defs));
+        if(!clusters.isEmpty())
+            throw new IllegalStateException("Cannot \"set\" clusters on a " + Node.class.getSimpleName() + " that already has clusters. Attempting to set "
+                + defs + " while the following clusters is already on the node: " + clusters);
+        return addClusters(Arrays.asList(defs));
     }
 
+    // These are 'set' in order to be autowired by spring
     public Node setClusters(final List<Cluster> defs) {
+        if(!clusters.isEmpty())
+            throw new IllegalStateException("Cannot \"set\" clusters on a " + Node.class.getSimpleName() + " that already has clusters. Attempting to set "
+                + defs + " while the following clusters is already on the node: " + clusters);
+        return addClusters(defs);
+    }
+
+    public Node addClusters(final Cluster... defs) {
+        return addClusters(Arrays.asList(defs));
+    }
+
+    public Node addClusters(final List<Cluster> defs) {
         if(defs == null)
             throw new IllegalArgumentException("Cannot pass a null set of " + Cluster.class.getSimpleName() + "s.");
         if(defs.size() == 0)

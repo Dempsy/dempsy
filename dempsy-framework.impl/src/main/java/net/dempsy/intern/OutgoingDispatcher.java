@@ -60,6 +60,12 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
     @Override
     public void dispatch(final KeyedMessageWithType message) {
+        if(message == null)
+            throw new NullPointerException("Attempt to dispatch a null message.");
+
+        final Object messageKey = message.key;
+        if(messageKey == null)
+            throw new NullPointerException("Message " + SafeString.objectDescription(message) + " has a null key.");
         boolean messageSentSomewhere = false;
         try {
             ApplicationState tmp = outbounds.get();
@@ -120,7 +126,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                 final NodeAddress curNode = e.getKey();
                 final ContainerAddress curAddr = e.getValue();
 
-                final RoutedMessage toSend = new RoutedMessage(curAddr.clusters, message.key, message.message);
+                final RoutedMessage toSend = new RoutedMessage(curAddr.clusters, messageKey, message.message);
                 if(curNode.equals(thisNode)) {
                     LOGGER.trace("Sending local {}", message);
 
