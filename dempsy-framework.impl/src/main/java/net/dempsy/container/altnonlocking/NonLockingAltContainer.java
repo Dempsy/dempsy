@@ -524,7 +524,10 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                 }
             } catch(final DempsyException e) {
                 if(e.userCaused()) {
-                    LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
+                    if(LOGGER.isDebugEnabled())
+                        LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.", e.userCause);
+                    else
+                        LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
                     statCollector.messageFailed(true);
                     instance = null;
                 } else

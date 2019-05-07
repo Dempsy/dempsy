@@ -553,7 +553,10 @@ public class LockingContainer extends Container {
                 }
             } catch(final DempsyException e) {
                 if(e.userCaused()) {
-                    LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
+                    if(LOGGER.isDebugEnabled())
+                        LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.", e.userCause);
+                    else
+                        LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
                     statCollector.messageFailed(true);
                 } else
                     throw new ContainerException(
