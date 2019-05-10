@@ -28,7 +28,7 @@ import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
  * Implementations of this interface accept messages pushed from a source.
  * This is primarily exposed to the application developer to support the
  * development of {@link Adaptor}s. An adaptor needs to take data from an external
- * source, and provide a routable message (one with a {@link MessageKey} to the
+ * source, and provide a routable message (one with a {@link MessageKey}) to the
  * Dempsy framework. {@link Adaptor}s will be provided a {@link Dispatcher},
  * which constitutes a handle to the Dempsy message bus.
  * </p>

@@ -20,20 +20,24 @@ import net.dempsy.util.SafeString;
 
 /**
  * <p>
- * In Dempsy parlance, a {@link Node} is the intersection of a {@link Cluster} with physical compute resources.
- * Typically, a process space on a machine will have a single {@link Node} for a given {@link Cluster}. That's
- * NOT to say the process space will have a single {@link Node}. Only that (typically*) you wont have multiple {@link Node}s
+ * In Dempsy parlance, a {@link Node} is the intersection of a {@link Cluster} with physical
+ * compute resources. Typically, a process space on a machine will have a single {@link Node}
+ * for a given set of {@link Cluster}s, possibly only one cluster. That's NOT to say the process space
+ * will have a single {@link Node}. Only that (typically*) you wont have multiple {@link Node}s
  * from the same {@link Cluster} in the same process space.
  * </p>
  * <p>
- * In some rare cases (for example, when unit testing) you can have multiple {@link Node}s from the same {@link Cluster}
- * in a single process space. However, in a real deployment this doesn't make much sense.
+ * In some rare cases (for example, when unit testing) you can have multiple {@link Node}s from the
+ * same {@link Cluster} in a single process space. However, in a real deployment this doesn't make much
+ * sense.
  * </p>
  * <p>
- * The {@link Node} class is really a "Builder" that provides for the easy configuration of a distributed {@link Cluster}.
+ * The {@link Node} class is really a "Builder" that provides for the easy configuration of a
+ * distributed {@link Cluster}.
+ * </p>
  * <p>
- * <p>
- * Please see the User Guide for more information.
+ * * Please see the User Guide for more information.
+ * </p>
  */
 public class Node {
     private static final Logger LOGGER = LoggerFactory.getLogger(Node.class);
