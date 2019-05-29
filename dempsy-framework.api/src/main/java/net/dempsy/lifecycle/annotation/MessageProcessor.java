@@ -405,7 +405,19 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
 
         // Find all of the handle methods and introspect their parameters.
         final String[] methAnn = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, MessageHandler.class).stream()
-            .map(m -> getAllMessageTypeTypeAnnotationValues(m.getParameterTypes()[0], false)).map(Arrays::stream).flatMap(v -> v)
+            // that this method takes exactly 1 parameter was already verified
+            .map(m -> m.getParameterTypes()[0])
+            .map(m -> {
+                final String[] ret = getAllMessageTypeTypeAnnotationValues(m, false);
+                if(ret == null || ret.length == 0)
+                    // this means there's a method annotated with @MessageTypes but the parameter isn't a MessageType
+                    throw new IllegalStateException("The message processor " + mpClass.getName() + " has a @MessageHandler that takes a \"" + m.getName()
+                        + "\" but that class doesn't represent a @MessageType.");
+
+                return ret;
+            })
+            .map(Arrays::stream)
+            .flatMap(v -> v)
             .toArray(String[]::new);
 
         return Arrays.stream(new String[][] {classAnn,methAnn}).map(Arrays::stream).flatMap(v -> v).toArray(String[]::new);

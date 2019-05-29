@@ -14,7 +14,6 @@ import org.junit.rules.ExpectedException;
 import net.dempsy.lifecycle.annotation.MessageProcessor;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.lifecycle.annotations.TestMps.Message;
-import net.dempsy.lifecycle.annotations.TestMps.MessageNoTypeInfo;
 import net.dempsy.lifecycle.annotations.TestMps.TestMp;
 import net.dempsy.lifecycle.annotations.TestMps.TestMpMessageTypeClass;
 import net.dempsy.lifecycle.annotations.TestMps.TestMpWithMultiLevelMessageTypeParameter;
@@ -22,8 +21,7 @@ import net.dempsy.lifecycle.annotations.TestMps.TestMpWithReturn;
 import net.dempsy.messages.KeyedMessageWithType;
 
 public class MessageProcessMessageHandlingTest {
-    @Rule
-    public ExpectedException exception = ExpectedException.none();
+    @Rule public ExpectedException exception = ExpectedException.none();
 
     private static KeyedMessageWithType km(final Object message) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         return new KeyExtractor().extract(message).get(0);
@@ -41,12 +39,8 @@ public class MessageProcessMessageHandlingTest {
 
     @Test
     public void testMpMessageTypeInfo() throws Exception {
-        final MessageProcessor<TestMpMessageTypeClass> helper = new MessageProcessor<TestMpMessageTypeClass>(new TestMpMessageTypeClass());
-        helper.validate();
-
-        final MessageNoTypeInfo m = new MessageNoTypeInfo("yo");
-        final TestMpMessageTypeClass instance = helper.newInstance();
-        helper.invoke(instance, km(m));
+        exception.expect(IllegalStateException.class);
+        new MessageProcessor<TestMpMessageTypeClass>(new TestMpMessageTypeClass());
     }
 
     @Test
@@ -65,7 +59,7 @@ public class MessageProcessMessageHandlingTest {
     @Test
     public void testMpMessageTypeInfoOnParameter() throws Exception {
         final MessageProcessor<TestMpWithMultiLevelMessageTypeParameter> helper = new MessageProcessor<TestMpWithMultiLevelMessageTypeParameter>(
-                new TestMpWithMultiLevelMessageTypeParameter());
+            new TestMpWithMultiLevelMessageTypeParameter());
         helper.validate();
 
         final Set<String> mts = helper.messagesTypesHandled();
