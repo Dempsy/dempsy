@@ -351,7 +351,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                 // if the results are less than zero or WAY to big, we need to assume a corrupt channel.
                 if (size <= 0 || size > maxMessageSize) {
                     // assume the channel is corrupted and close us out.
-                    LOGGER.warn(thisNode + " received what appears to be a corrupt message because it's size is " + size);
+                    LOGGER.warn(thisNode + " received what appears to be a corrupt message because it's size is " + size + " which is greater than the max (" + maxMessageSize + ")");
                     closeup(channel, key);
                     return;
                 }
