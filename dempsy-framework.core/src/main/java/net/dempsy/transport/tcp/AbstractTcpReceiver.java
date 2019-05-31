@@ -29,24 +29,24 @@ public abstract class AbstractTcpReceiver<A extends TcpAddress, T extends Abstra
     }
 
     @SuppressWarnings("unchecked")
-    public T setUseLocalHost(final boolean useLocalHost) {
+    public T useLocalHost(final boolean useLocalHost) {
         this.useLocalHost = useLocalHost;
-        return (T) this;
+        return (T)this;
     }
 
     @SuppressWarnings("unchecked")
-    public T setAddressSupplier(final Supplier<InetAddress> addrSupplier) {
+    public T addressSupplier(final Supplier<InetAddress> addrSupplier) {
         this.addrSupplier = addrSupplier;
-        return (T) this;
+        return (T)this;
     }
 
     @SuppressWarnings("unchecked")
-    public T setResolver(final TcpAddressResolver<A> resolver) {
+    public T resolver(final TcpAddressResolver<A> resolver) {
         this.resolver = resolver;
-        return (T) this;
+        return (T)this;
     }
 
-    public AbstractTcpReceiver<A, T> setMaxMessageSize(final int maxMessageSize) {
+    public AbstractTcpReceiver<A, T> maxMessageSize(final int maxMessageSize) {
         this.maxMessageSize = maxMessageSize;
         return this;
     }
@@ -54,6 +54,43 @@ public abstract class AbstractTcpReceiver<A extends TcpAddress, T extends Abstra
     @Override
     public abstract TcpAddress getAddress(Infrastructure infra);
 
-    public abstract AbstractTcpReceiver<A, T> setNumHandlers(int numHandlerThreads);
+    public abstract AbstractTcpReceiver<A, T> numHandlers(int numHandlerThreads);
+
+    // =============================================================================
+    // These methods are to support spring dependency injection which (stupidly) requires
+    // adherence to a 15 year old JavaBeans spec.
+    // =============================================================================
+    public void setUseLocalHost(final boolean useLocalHost) {
+        useLocalHost(useLocalHost);
+    }
+
+    public boolean getUseLocalHost() {
+        return useLocalHost;
+    }
+
+    public void setAddressSupplier(final Supplier<InetAddress> addrSupplier) {
+        addressSupplier(addrSupplier);
+    }
+
+    public final Supplier<InetAddress> getAddressSupplier() {
+        return addrSupplier;
+    }
+
+    public void setResolver(final TcpAddressResolver<A> resolver) {
+        resolver(resolver);
+    }
+
+    public TcpAddressResolver<A> getResolver() {
+        return resolver;
+    }
+
+    public void setMaxMessageSize(final int maxMessageSize) {
+        maxMessageSize(maxMessageSize);
+    }
+
+    public int getMaxMessageSize() {
+        return maxMessageSize;
+    }
+    // =============================================================================
 
 }

@@ -75,11 +75,11 @@ public class TcpTransportTest {
         final AtomicBoolean resolverCalled = new AtomicBoolean(false);
         try (ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
-                    .setResolver(a -> {
+                    .resolver(a -> {
                         resolverCalled.set(true);
                         return a;
-                    }).setNumHandlers(2)
-                    .setUseLocalHost(true);
+                    }).numHandlers(2)
+                    .useLocalHost(true);
 
             final Infrastructure infra = tr
                     .track(new TestInfrastructure(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testReceiverStart")));
@@ -105,11 +105,11 @@ public class TcpTransportTest {
                 final AtomicBoolean resolverCalled = new AtomicBoolean(false);
                 try (ServiceTracker tr = new ServiceTracker();) {
                     final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
-                            .setResolver(a -> {
+                            .resolver(a -> {
                                 resolverCalled.set(true);
                                 return a;
-                            }).setNumHandlers(2)
-                            .setUseLocalHost(false);
+                            }).numHandlers(2)
+                            .useLocalHost(false);
 
                     final Infrastructure infra = tr
                             .track(new TestInfrastructure(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testReceiverStart")) {
@@ -139,8 +139,8 @@ public class TcpTransportTest {
     public void testMessage() throws Exception {
         try (ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
-                    .setNumHandlers(2)
-                    .setUseLocalHost(true);
+                    .numHandlers(2)
+                    .useLocalHost(true);
 
             final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testMessage"));
             final Infrastructure infra = tr.track(new TestInfrastructure(tm));
@@ -173,9 +173,9 @@ public class TcpTransportTest {
         final String huge = TestWordCount.readBible();
         try (final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
-                    .setNumHandlers(2)
-                    .setUseLocalHost(true)
-                    .setMaxMessageSize(1024 * 1024 * 1024);
+                    .numHandlers(2)
+                    .useLocalHost(true)
+                    .maxMessageSize(1024 * 1024 * 1024);
 
             final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + ".testLargeMessage"));
             final Infrastructure infra = tr.track(new TestInfrastructure(tm));
@@ -205,9 +205,9 @@ public class TcpTransportTest {
             final Serializer serializer) throws Exception {
         try (final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
-                    .setNumHandlers(2)
-                    .setUseLocalHost(true)
-                    .setMaxMessageSize(1024 * 1024 * 1024);
+                    .numHandlers(2)
+                    .useLocalHost(true)
+                    .maxMessageSize(1024 * 1024 * 1024);
 
             final ThreadingModel tm = tr.track(new DefaultThreadingModel(TcpTransportTest.class.getSimpleName() + "." + testName));
             final Infrastructure infra = tr.track(new TestInfrastructure(tm));
@@ -282,8 +282,8 @@ public class TcpTransportTest {
     public void testConnectionRecovery() throws Exception {
         try (final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
-                    .setNumHandlers(2)
-                    .setUseLocalHost(true);
+                    .numHandlers(2)
+                    .useLocalHost(true);
 
             // can't test connection recovery here.
             if (!(r instanceof DisruptableRecevier))

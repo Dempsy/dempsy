@@ -49,8 +49,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     private Binding binding = null;
     private Acceptor acceptor = null;
 
-    @SuppressWarnings("unchecked")
-    private Reader<T>[] readers = new Reader[2];
+    @SuppressWarnings("unchecked") private Reader<T>[] readers = new Reader[2];
 
     public NioReceiver(final Serializer serializer, final int port) {
         super(serializer, port);
@@ -63,44 +62,44 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     @Override
     public void close() {
         isRunning.set(false);
-        if (acceptor != null)
+        if(acceptor != null)
             acceptor.close();
 
-        for (int i = 0; i < readers.length; i++) {
+        for(int i = 0; i < readers.length; i++) {
             final Reader<T> r = readers[i];
-            if (r != null)
+            if(r != null)
                 r.close();
         }
     }
 
     @Override
     public synchronized NioAddress getAddress(final Infrastructure infra) {
-        if (internal == null) {
+        if(internal == null) {
             final String ifNameToGetAddrFrom = infra.getConfigValue(NioReceiver.class, CONFIG_KEY_RECEIVER_NETWORK_IF_NAME,
-                    DEFAULT_RECEIVER_NETWORK_IF_NAME);
+                DEFAULT_RECEIVER_NETWORK_IF_NAME);
 
-            if (useLocalHost) {
-                if (ifNameToGetAddrFrom != null)
+            if(useLocalHost) {
+                if(ifNameToGetAddrFrom != null)
                     LOGGER.warn("Both \"useLocalHost\" as well as the property " + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for "
-                            + NioReceiver.class.getPackage().getName() + ". The property will be ignored.");
-                if (addrSupplier != null)
+                        + NioReceiver.class.getPackage().getName() + ". The property will be ignored.");
+                if(addrSupplier != null)
                     LOGGER.warn("Both IP address supplier (" + addrSupplier.getClass().getName()
-                            + ") as well as \"useLocalHost\" was set. The address supplier will be ignored.");
+                        + ") as well as \"useLocalHost\" was set. The address supplier will be ignored.");
             } else {
-                if (addrSupplier != null && ifNameToGetAddrFrom != null)
+                if(addrSupplier != null && ifNameToGetAddrFrom != null)
                     LOGGER.warn("Both IP Address supplier (" + addrSupplier.getClass().getName() + ") as well as the property "
-                            + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for " + NioReceiver.class.getPackage().getName()
-                            + ". The property will be ignored.");
+                        + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for " + NioReceiver.class.getPackage().getName()
+                        + ". The property will be ignored.");
             }
             try {
                 final InetAddress addr = useLocalHost ? Inet4Address.getLocalHost()
-                        : (addrSupplier == null ? TcpUtils.getFirstNonLocalhostInetAddress(ifNameToGetAddrFrom) : addrSupplier.get());
+                    : (addrSupplier == null ? TcpUtils.getFirstNonLocalhostInetAddress(ifNameToGetAddrFrom) : addrSupplier.get());
                 binding = new Binding(addr, internalPort);
                 final InetSocketAddress inetSocketAddress = binding.bound;
                 internalPort = inetSocketAddress.getPort();
                 internal = new NioAddress(addr, internalPort, serId, binding.recvBufferSize);
                 address = resolver.getExternalAddresses(internal);
-            } catch (final IOException e) {
+            } catch(final IOException e) {
                 throw new DempsyException(e, false);
             }
         }
@@ -110,24 +109,24 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     @SuppressWarnings("unchecked")
     @Override
     public void start(final Listener<?> listener, final Infrastructure infra) throws MessageTransportException {
-        if (!isRunning.get())
+        if(!isRunning.get())
             throw new IllegalStateException("Cannot restart an " + NioReceiver.class.getSimpleName());
 
-        if (binding == null)
+        if(binding == null)
             getAddress(infra); // sets binding via side affect.
 
         // before starting the acceptor, make sure we have Readers created.
         try {
-            for (int i = 0; i < readers.length; i++)
-                readers[i] = new Reader<T>(isRunning, address, (Listener<T>) listener, serializer, maxMessageSize);
-        } catch (final IOException ioe) {
+            for(int i = 0; i < readers.length; i++)
+                readers[i] = new Reader<T>(isRunning, address, (Listener<T>)listener, serializer, maxMessageSize);
+        } catch(final IOException ioe) {
             LOGGER.error(address.toString() + " failed to start up readers", ioe);
             throw new MessageTransportException(address.toString() + " failed to start up readers", ioe);
         }
 
         final ThreadingModel threadingModel = infra.getThreadingModel();
         // now start the readers.
-        for (int i = 0; i < readers.length; i++)
+        for(int i = 0; i < readers.length; i++)
             threadingModel.runDaemon(readers[i], "nio-reader-" + i + "-" + address);
 
         // start the acceptor
@@ -136,9 +135,21 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
     @Override
     @SuppressWarnings("unchecked")
-    public NioReceiver<T> setNumHandlers(final int numHandlers) {
+    public NioReceiver<T> numHandlers(final int numHandlers) {
         readers = new Reader[numHandlers];
         return this;
+    }
+
+    // =============================================================================
+    // These methods are to support spring dependency injection which (stupidly) requires
+    // adherence to a 15 year old JavaBeans spec.
+    // =============================================================================
+    public void setNumHandlers(final int numHandlers) {
+        numHandlers(numHandlers);
+    }
+
+    public int getNumHandlers() {
+        return readers == null ? 0 : readers.length;
     }
 
     // =============================================================================
@@ -147,8 +158,8 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     @Override
     public boolean disrupt(final NodeAddress nodeAddress) {
         return Arrays.stream(readers)
-                .filter(r -> r.disrupt(nodeAddress))
-                .findFirst().orElse(null) != null;
+            .filter(r -> r.disrupt(nodeAddress))
+            .findFirst().orElse(null) != null;
     }
 
     // =============================================================================
@@ -170,7 +181,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             final InetSocketAddress tobind = new InetSocketAddress(addr, lport);
             final ServerSocket sock = serverChannel.socket();
             sock.bind(tobind);
-            bound = (InetSocketAddress) sock.getLocalSocketAddress();
+            bound = (InetSocketAddress)sock.getLocalSocketAddress();
             recvBufferSize = sock.getReceiveBufferSize();
         }
     }
@@ -198,38 +209,38 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             final ServerSocketChannel serverChannel = binding.serverChannel;
 
             try {
-                while (isRunning.get()) {
+                while(isRunning.get()) {
                     try {
                         serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-                        while (isRunning.get()) {
+                        while(isRunning.get()) {
                             final int numSelected = selector.select();
 
-                            if (numSelected == 0)
+                            if(numSelected == 0)
                                 continue;
 
                             final Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-                            while (keys.hasNext()) {
+                            while(keys.hasNext()) {
                                 final SelectionKey key = keys.next();
 
                                 keys.remove();
 
-                                if (!key.isValid())
+                                if(!key.isValid())
                                     continue;
 
-                                if (key.isAcceptable()) {
+                                if(key.isAcceptable()) {
                                     accept(key);
                                 }
                             }
                         }
-                    } catch (final IOException ioe) {
+                    } catch(final IOException ioe) {
                         LOGGER.error("Failed during accept loop.", ioe);
                     }
                 }
             } finally {
                 try {
                     serverChannel.close();
-                } catch (final IOException e) {
+                } catch(final IOException e) {
                     LOGGER.error(thisNode + " had an error trying to close the accept socket channel.", e);
                 }
                 done.set(true);
@@ -237,9 +248,9 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         }
 
         private void accept(final SelectionKey key) throws IOException {
-            final Reader<?> reader = readers[(int) (messageNum.getAndIncrement() % numReaders)];
+            final Reader<?> reader = readers[(int)(messageNum.getAndIncrement() % numReaders)];
 
-            final ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
+            final ServerSocketChannel serverChannel = (ServerSocketChannel)key.channel();
             final SocketChannel channel = serverChannel.accept();
 
             LOGGER.trace(thisNode + " is accepting a connection from " + channel.getRemoteAddress());
@@ -249,7 +260,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
         // assumes isRunning is already set to false
         private void close() {
-            while (!done.get()) {
+            while(!done.get()) {
                 binding.selector.wakeup();
                 Thread.yield();
             }
@@ -276,30 +287,30 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
         /**
          * Read the size
-         * 
+         *
          * @return -1 if there aren't enough bytes read in to figure out the size. -2 if the socket channel reached it's eof. Otherwise, the size actually read.
          */
         private final int readSize(final SocketChannel channel, final ByteBuffer bb) throws IOException {
             final int size;
 
-            if (bb.position() < 2) {
+            if(bb.position() < 2) {
                 // read a Short
                 bb.limit(2);
-                if (channel.read(bb) == -1)
+                if(channel.read(bb) == -1)
                     return -2;
             }
 
-            if (bb.position() >= 2) { // we read the full short in
+            if(bb.position() >= 2) { // we read the full short in
                 final short ssize = bb.getShort(0); // read the short.
 
-                if (ssize == -1) { // we need to read the int ... indication that an int size is there.
-                    if (bb.position() < 6) {
+                if(ssize == -1) { // we need to read the int ... indication that an int size is there.
+                    if(bb.position() < 6) {
                         bb.limit(6); // set the limit to read the int.
-                        if (channel.read(bb) == -1) // read 4 more bytes.
+                        if(channel.read(bb) == -1) // read 4 more bytes.
                             return -2;
                     }
 
-                    if (bb.position() >= 6) // we have an int based size
+                    if(bb.position() >= 6) // we have an int based size
                         size = bb.getInt(2); // read an int starting after the short.
                     else
                         // we need an int based size but don't have it all yet.
@@ -322,16 +333,16 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             LOGGER.debug(thisNode + " had a connection closed by client: " + remoteAddr);
             try {
                 channel.close();
-            } catch (final IOException ioe) {
+            } catch(final IOException ioe) {
                 LOGGER.error(thisNode + " failed to close the receiver channel receiving data from " + remoteAddr + ". Ingoring", ioe);
             }
             key.cancel();
         }
 
         public void read(final SelectionKey key) throws IOException {
-            final SocketChannel channel = (SocketChannel) key.channel();
+            final SocketChannel channel = (SocketChannel)key.channel();
             final ReturnableBufferOutput buf;
-            if (partialRead == null) {
+            if(partialRead == null) {
                 buf = NioUtils.get();
                 buf.getBb().limit(2); // set it to read the short for size initially
                 partialRead = buf; // set the partialRead. We'll unset this when we pass it on
@@ -339,25 +350,26 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                 buf = partialRead;
             ByteBuffer bb = buf.getBb();
 
-            if (bb.limit() <= 6) { // we haven't read the size yet.
+            if(bb.limit() <= 6) { // we haven't read the size yet.
                 final int size = readSize(channel, bb);
-                if (size == -2) { // indication we hit an eof
+                if(size == -2) { // indication we hit an eof
                     closeup(channel, key);
                     return; // we're done
                 }
-                if (size == -1) { // we didn't read the size yet so just go back.
+                if(size == -1) { // we didn't read the size yet so just go back.
                     return;
                 }
                 // if the results are less than zero or WAY to big, we need to assume a corrupt channel.
-                if (size <= 0 || size > maxMessageSize) {
+                if(size <= 0 || size > maxMessageSize) {
                     // assume the channel is corrupted and close us out.
-                    LOGGER.warn(thisNode + " received what appears to be a corrupt message because it's size is " + size + " which is greater than the max (" + maxMessageSize + ")");
+                    LOGGER.warn(thisNode + " received what appears to be a corrupt message because it's size is " + size + " which is greater than the max ("
+                        + maxMessageSize + ")");
                     closeup(channel, key);
                     return;
                 }
 
                 final int limit = bb.limit();
-                if (bb.capacity() < limit + size) {
+                if(bb.capacity() < limit + size) {
                     // we need to grow the underlying buffer.
                     buf.grow(limit + size);
                     bb = buf.getBb();
@@ -367,15 +379,15 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                 bb.limit(limit + size); // set the limit to read the entire message.
             }
 
-            if (bb.position() < bb.limit()) {
+            if(bb.position() < bb.limit()) {
                 // continue reading
-                if (channel.read(bb) == -1) {
+                if(channel.read(bb) == -1) {
                     closeup(channel, key);
                     return;
                 }
             }
 
-            if (bb.position() < bb.limit())
+            if(bb.position() < bb.limit())
                 return; // we need to wait for more data.
 
             // otherwise we have a message ready to go.
@@ -383,11 +395,11 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             partialRead = null;
             typedListener.onMessage(() -> {
                 try (final ReturnableBufferOutput mbo = toGo;
-                        final MessageBufferInput mbi = new MessageBufferInput(mbo.getBuffer(), mbo.messageStart, mbo.getBb().position());) {
+                    final MessageBufferInput mbi = new MessageBufferInput(mbo.getBuffer(), mbo.messageStart, mbo.getBb().position());) {
                     @SuppressWarnings("unchecked")
-                    final T rm = (T) serializer.deserialize(mbi, RoutedMessage.class);
+                    final T rm = (T)serializer.deserialize(mbi, RoutedMessage.class);
                     return rm;
-                } catch (final IOException ioe) {
+                } catch(final IOException ioe) {
                     LOGGER.error(thisNode + " failed on deserialization", ioe);
                     throw new DempsyException(ioe, false);
                 }
@@ -407,7 +419,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         private final AtomicReference<CloseCommand> clientToClose = new AtomicReference<CloseCommand>(null);
 
         public Reader(final AtomicBoolean isRunning, final NioAddress thisNode, final Listener<T> typedListener, final Serializer serializer,
-                final int maxMessageSize) throws IOException {
+            final int maxMessageSize) throws IOException {
             selector = Selector.open();
             this.isRunning = isRunning;
             this.thisNode = thisNode;
@@ -419,49 +431,49 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         @Override
         public void run() {
             try {
-                while (isRunning.get()) {
+                while(isRunning.get()) {
                     try {
                         final int numKeysSelected = selector.select();
 
-                        if (numKeysSelected > 0) {
+                        if(numKeysSelected > 0) {
                             final Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-                            while (keys.hasNext()) {
+                            while(keys.hasNext()) {
                                 final SelectionKey key = keys.next();
 
                                 keys.remove();
 
-                                if (!key.isValid())
+                                if(!key.isValid())
                                     continue;
 
-                                if (key.isReadable()) {
-                                    ((Client<?>) key.attachment()).read(key);
+                                if(key.isReadable()) {
+                                    ((Client<?>)key.attachment()).read(key);
                                 } else // this shouldn't be possible
                                     LOGGER.info(thisNode + " reciever got an unexpexted selection key " + key);
                             }
-                        } else if (isRunning.get() && !done.get()) {
+                        } else if(isRunning.get() && !done.get()) {
                             // if we processed no keys then maybe we have a new client passed over to us.
                             final SocketChannel newClient = landing.getAndSet(null); // mark it as retrieved.
-                            if (newClient != null) {
+                            if(newClient != null) {
                                 // we have a new client
                                 newClient.configureBlocking(false);
                                 final Socket socket = newClient.socket();
                                 final SocketAddress remote = socket.getRemoteSocketAddress();
                                 LOGGER.debug(thisNode + " received connection from " + remote);
                                 newClient.register(selector, SelectionKey.OP_READ,
-                                        new Client<T>(thisNode, typedListener, serializer, maxMessageSize));
-                            } else if (clientToClose.get() != null) {
+                                    new Client<T>(thisNode, typedListener, serializer, maxMessageSize));
+                            } else if(clientToClose.get() != null) {
                                 final NioAddress addr = clientToClose.get().addrToClose;
                                 final Object[] toClose = selector.keys().stream()
-                                        .map(k -> new Object[] { k, (Client<?>) k.attachment() })
-                                        .filter(c -> ((Client<?>) c[1]).thisNode.equals(addr))
-                                        .findFirst()
-                                        .orElse(null);
+                                    .map(k -> new Object[] {k,(Client<?>)k.attachment()})
+                                    .filter(c -> ((Client<?>)c[1]).thisNode.equals(addr))
+                                    .findFirst()
+                                    .orElse(null);
 
-                                if (toClose != null) {
-                                    final SelectionKey key = (SelectionKey) toClose[0];
-                                    final Client<?> client = ((Client<?>) toClose[1]);
+                                if(toClose != null) {
+                                    final SelectionKey key = (SelectionKey)toClose[0];
+                                    final Client<?> client = ((Client<?>)toClose[1]);
                                     try {
-                                        client.closeup((SocketChannel) key.channel(), key);
+                                        client.closeup((SocketChannel)key.channel(), key);
                                     } finally {
                                         clientToClose.get().set(client);
                                     }
@@ -469,7 +481,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                                     clientToClose.set(null);
                             }
                         }
-                    } catch (final IOException ioe) {
+                    } catch(final IOException ioe) {
                         LOGGER.error("Failed during reader loop.", ioe);
                     }
                 }
@@ -495,17 +507,17 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         }
 
         boolean disrupt(final NodeAddress addr) {
-            final CloseCommand cmd = new CloseCommand((NioAddress) addr);
+            final CloseCommand cmd = new CloseCommand((NioAddress)addr);
 
             // wait for the commend landing pad to be clear and claim it once available
-            while (!clientToClose.compareAndSet(null, cmd) && isRunning.get())
+            while(!clientToClose.compareAndSet(null, cmd) && isRunning.get())
                 Thread.yield();
 
             // now wait for the reader thread to pick up the command and respond
             do {
                 selector.wakeup();
                 Thread.yield();
-            } while (!clientToClose.get().done && isRunning.get()); // double volatile read
+            } while(!clientToClose.get().done && isRunning.get()); // double volatile read
 
             clientToClose.set(null); // clear the command
 
@@ -514,7 +526,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
         // assumes isRunning is already set to false
         private void close() {
-            while (!done.get()) {
+            while(!done.get()) {
                 selector.wakeup();
                 Thread.yield();
             }
@@ -522,11 +534,11 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
 
         public synchronized void newClient(final SocketChannel newClient) throws IOException {
             // attempt to set the landing as long as it's null
-            while (landing.compareAndSet(null, newClient))
+            while(landing.compareAndSet(null, newClient))
                 Thread.yield();
 
             // wait until the Reader runnable takes it.
-            while (landing.get() != null && isRunning.get() && !done.get()) {
+            while(landing.get() != null && isRunning.get() && !done.get()) {
                 selector.wakeup();
                 Thread.yield();
             }
