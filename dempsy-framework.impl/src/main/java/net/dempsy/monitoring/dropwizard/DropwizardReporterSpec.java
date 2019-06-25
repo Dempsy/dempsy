@@ -17,8 +17,6 @@ public class DropwizardReporterSpec {
 
     /**
      * Set the type of report to issue.
-     * 
-     * @see MetricsReporterType
      */
     public void setType(final DropwizardReporterType type) {
         this.type = type;
@@ -33,7 +31,7 @@ public class DropwizardReporterSpec {
 
     /**
      * Set the time unit to measure the period in
-     * 
+     *
      * @see TimeUnit
      */
     public void setUnit(final TimeUnit unit) {

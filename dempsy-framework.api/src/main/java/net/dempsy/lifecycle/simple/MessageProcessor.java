@@ -53,8 +53,8 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
 
     /**
      * The default setting for hasOutput is <code>false</code>. If your {@link Mp} implementation actually
-     * implements {@link Mp#ouput()} method then you should set this to <code>true</code> or Dempsy
-     * will never call {@link Mp#ouput()}.
+     * implements {@link Mp#output()} method then you should set this to <code>true</code> or Dempsy
+     * will never call {@link Mp#output()}.
      */
     public MessageProcessor setOutput(final boolean hasOutputCapability) {
         this.hasOutput = hasOutputCapability;

@@ -44,7 +44,7 @@ public class ClusterId {
      * @param applicationName
      *            is the application name that the cluster identified with this Id is part of.
      * 
-     * @param mpClusterName
+     * @param clusterName
      *            is the cluster name within the given application that the cluster identified with this Id is part of.
      */
     public ClusterId(final String applicationName, final String clusterName) {
@@ -87,7 +87,7 @@ public class ClusterId {
      * </p>
      * <br>
      * 
-     * @return: "/" + this.getApplicationName() + "/" + this.getMpClusterName()
+     * @return "/" + this.getApplicationName() + "/" + this.getMpClusterName()
      */
     public String asPath() {
         return "/" + this.applicationName + "/" + this.clusterName;

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,7 @@ import net.dempsy.Service;
  * application will take responsibility to invoke the @output methods of MPs.
  * During startup, Dempsy will provide an instance of OutputInvoker to the
  * scheduler, and executes the start method to trigger the output schedule.
- * 
+ *
  */
 
 public interface OutputScheduler extends Service {
@@ -33,25 +33,26 @@ public interface OutputScheduler extends Service {
     /**
      * This method will be called by Dempsy to provide the instance of
      * outputInvoker.
-     * 
-     * @param outputInvoker   the output invoker
+     *
+     * @param outputInvoker the output invoker
      */
     public void setOutputInvoker(OutputInvoker outputInvoker);
 
     /**
      * This method will be called by Dempsy to tell the OutputExecuter that it can
      * begin executing the @Output methods of MPs with the {@link OutputInvoker}.
-     * {@link #start()} will always be called after {@link #setOutputInvoker()} .
+     * {@link #start(Infrastructure)} will always be called after {@link #setOutputInvoker(OutputInvoker)} .
      * This method execution will be stopped, when {@link #stop()} is called from
      * Dempsy.
      */
+    @Override
     public void start(Infrastructure infra);
 
     /**
      * This method will be called by Dempsy in order to get the OutputExecuter to
      * stop executing @Output methods of MPs. Under normal circumstances the
-     * {@link #start()} is still executing and the {@link #stop()} should cause
-     * the {@link #start()} to stop.
+     * {@link #start(Infrastructure)} is still executing and the {@link #stop()} should cause
+     * the {@link #start(Infrastructure)} to stop.
      */
     @Override
     public void stop();

@@ -36,23 +36,27 @@ public class Utils<C> {
     public final String leaderDir;
 
     /**
-     * <p>EPHEMERAL directory at: {@code /[appname]/clusters/[grouname]/managed/ImIt}</p>
-     * 
-     * <p>This directory is the location for determining who is the master (who is "it"). </p>
+     * <p>
+     * EPHEMERAL directory at: {@code /[appname]/clusters/[grouname]/managed/ImIt}
+     * </p>
+     *
+     * <p>
+     * This directory is the location for determining who is the master (who is "it").
+     * </p>
      */
     public final String masterDetermineDir;
 
     /**
      * PERSISTENT directory at: {@code /[appname]/clusters/[grouname]/shardAssignment}
-     * 
+     *
      * The object here contains the shard assignements.
      */
     public final String shardsAssignedDir;
 
     /**
      * PERSISTENT directory at: {@code /[appname]/clusters/[clustername]/nodes}
-     * 
-     * Subdirectories here are {@link DirMode.EPHEMERAL_SEQUENTIAL} and contain data for each node currently 
+     *
+     * Subdirectories here are {@link DirMode} EPHEMERAL_SEQUENTIAL and contain data for each node currently
      * participating.
      */
     public final String nodesDir;
@@ -75,11 +79,11 @@ public class Utils<C> {
     }
 
     public Collection<String> persistentGetSubdir(final String path, final ClusterInfoWatcher watcher)
-            throws ClusterInfoException {
+        throws ClusterInfoException {
         // first just see if we can get it.
         try {
             return session.getSubdirs(path, watcher);
-        } catch (final NoNodeException nne) {
+        } catch(final NoNodeException nne) {
             // okay, create me.
             session.recursiveMkdir(path, null, DirMode.PERSISTENT, DirMode.PERSISTENT);
             return session.getSubdirs(path, watcher);
@@ -88,13 +92,13 @@ public class Utils<C> {
 
     @SuppressWarnings("unchecked")
     public <T> List<T> persistentGetSubdirData(final String path, final ClusterInfoWatcher dirWatcher, final ClusterInfoWatcher dataWatcher)
-            throws ClusterInfoException {
+        throws ClusterInfoException {
         final Collection<String> subdirs = persistentGetSubdir(path, dirWatcher);
 
         final ArrayList<T> ret = subdirs == null ? new ArrayList<>() : new ArrayList<>(subdirs.size());
-        if (subdirs != null) {
-            for (final String subdir : subdirs) {
-                ret.add((T) session.getData(path + "/" + subdir, dataWatcher));
+        if(subdirs != null) {
+            for(final String subdir: subdirs) {
+                ret.add((T)session.getData(path + "/" + subdir, dataWatcher));
             }
         }
         return ret;
@@ -102,13 +106,13 @@ public class Utils<C> {
 
     @SuppressWarnings("unchecked")
     public <T> T persistentGetData(final String path, final ClusterInfoWatcher dataWatcher)
-            throws ClusterInfoException {
+        throws ClusterInfoException {
         try {
-            return (T) session.getData(path, dataWatcher);
-        } catch (final NoNodeException nne) {
+            return (T)session.getData(path, dataWatcher);
+        } catch(final NoNodeException nne) {
             session.recursiveMkdir(path, null, DirMode.PERSISTENT, DirMode.PERSISTENT);
-            if (dataWatcher != null)
-                return (T) session.getData(path, dataWatcher);
+            if(dataWatcher != null)
+                return (T)session.getData(path, dataWatcher);
             return null;
         }
     }
@@ -125,13 +129,13 @@ public class Utils<C> {
 
     @SuppressWarnings("unchecked")
     public <T> List<SubdirAndData<T>> persistentGetSubdirAndData(final String path, final ClusterInfoWatcher dirWatcher,
-            final ClusterInfoWatcher dataWatcher) throws ClusterInfoException {
+        final ClusterInfoWatcher dataWatcher) throws ClusterInfoException {
         final Collection<String> subdirs = persistentGetSubdir(path, dirWatcher);
 
         final ArrayList<SubdirAndData<T>> ret = subdirs == null ? new ArrayList<>() : new ArrayList<>(subdirs.size());
-        if (subdirs != null) {
-            for (final String subdir : subdirs) {
-                ret.add(new SubdirAndData<T>(subdir, (T) session.getData(path + "/" + subdir, dataWatcher)));
+        if(subdirs != null) {
+            for(final String subdir: subdirs) {
+                ret.add(new SubdirAndData<T>(subdir, (T)session.getData(path + "/" + subdir, dataWatcher)));
             }
         }
         return ret;

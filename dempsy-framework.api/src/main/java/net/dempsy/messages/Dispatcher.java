@@ -22,6 +22,7 @@ import java.util.List;
 import net.dempsy.DempsyException;
 import net.dempsy.lifecycle.annotation.MessageKey;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
+import net.dempsy.lifecycle.simple.Mp;
 
 /**
  * <p>

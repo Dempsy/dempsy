@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
- * The Threading model for Dempsy needs to work in close concert with the Transport. 
+ * The Threading model for Dempsy needs to work in close concert with the Transport.
  * The implementation of the DempsyExecutor should be chosen along with the Transport.
  * If, for example, the transport can handle acknowledged delivery of messages then
  * the Executor should be able to apply 'back pressure' by blocking in the submitLimted.
@@ -22,15 +22,15 @@ public interface ThreadingModel extends AutoCloseable {
     }
 
     /**
-     * Submit a Callable that is guaranteed to execute. Unlike {@link submitLimted} this method acts
+     * Submit a Callable that is guaranteed to execute. Unlike {@link #submitLimited(Rejectable, boolean)} this method acts
      * like the {@link Callable} was added to an unbounded queue and so should eventually execute.
      */
     public <V> Future<V> submit(Callable<V> r);
 
     /**
-     * This method queues {@link Callable}s that can expire or have some maximum number allowed. 
+     * This method queues {@link Callable}s that can expire or have some maximum number allowed.
      * Normal message processing falls into this category since 'shedding' is the standard behavior.
-     * 
+     *
      * If counting is {@code true} then the ThreadingModel should queue it without counting it against
      * the maximum capacity.
      */
@@ -42,8 +42,8 @@ public interface ThreadingModel extends AutoCloseable {
     public <V> Future<V> schedule(Callable<V> r, long delay, TimeUnit timeUnit);
 
     /**
-     * start a daemon process using this ThreadingModel. This defaults to using the 
-     * newThread call with the runnable and name and starting it. Note, this does NOT 
+     * start a daemon process using this ThreadingModel. This defaults to using the
+     * newThread call with the runnable and name and starting it. Note, this does NOT
      * set the thread to a daemon thread.
      */
     public default void runDaemon(final Runnable daemon, final String name) {
