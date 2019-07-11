@@ -27,13 +27,13 @@ import java.lang.annotation.Target;
  *  boolean indicating the state of {@link Mp}.</p>
  *  
  *  <p>Return value of True indicated state of {@link Mp} as ready
- *  to be evicted and hence the {@link Mp} should be used to handle
+ *  to be evicted and hence the {@link Mp} should NOT be used to handle
  *  any new messages or be part of output cycle.</p>
  *  
  *  <p>Only one method in a class should be marked as an Evictable method. If
  *  multiple methods are so annotated, the behavior is undefined. For this
  *  reason, this annotation is not inherited; subclasses must explicitly call
- *  their parent's activation methods.</p>
+ *  their parent's evictable method.</p>
  */
 
 @Target(ElementType.METHOD)
