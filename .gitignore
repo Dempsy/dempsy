@@ -6,3 +6,5 @@ bin
 .settings
 .classpath
 
+# mvn versions:set droppings
+*.versionsBackup
