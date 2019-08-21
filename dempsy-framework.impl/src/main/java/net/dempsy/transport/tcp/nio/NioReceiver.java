@@ -509,15 +509,17 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         boolean disrupt(final NodeAddress addr) {
             final CloseCommand cmd = new CloseCommand((NioAddress)addr);
 
-            // wait for the commend landing pad to be clear and claim it once available
+            // wait for the command landing pad to be clear and claim it once available
             while(!clientToClose.compareAndSet(null, cmd) && isRunning.get())
                 Thread.yield();
 
             // now wait for the reader thread to pick up the command and respond
-            do {
-                selector.wakeup();
-                Thread.yield();
-            } while(!clientToClose.get().done && isRunning.get()); // double volatile read
+            if(isRunning.get()) {
+                do {
+                    selector.wakeup();
+                    Thread.yield();
+                } while(!clientToClose.get().done && isRunning.get()); // double volatile read
+            }
 
             clientToClose.set(null); // clear the command
 
