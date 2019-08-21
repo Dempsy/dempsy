@@ -6,8 +6,9 @@ import net.dempsy.config.Cluster;
 import net.dempsy.config.Node;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
+import net.dempsy.util.QuietCloseable;
 
-public class DispatcherFactory {
+public class DispatcherFactory implements QuietCloseable {
 
     private final NodeManager nodeManager;
     private Dispatcher dispatcher = null;
@@ -38,6 +39,7 @@ public class DispatcherFactory {
             .start();
     }
 
+    @Override
     public void close() {
         nodeManager.close();
     }
