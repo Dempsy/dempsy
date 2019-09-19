@@ -24,6 +24,17 @@
          <groupId>org.reflections</groupId>
          <artifactId>reflections</artifactId>
       </dependency>
+
+     <dependency>
+       <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-log4j12</artifactId>
+       <scope>test</scope>
+     </dependency>
+     <dependency>
+       <groupId>net.dempsy</groupId>
+       <artifactId>dempsy-test-utils</artifactId>
+       <scope>test</scope>
+     </dependency>
    </dependencies>
    
 </project>
