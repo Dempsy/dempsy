@@ -1,0 +1,1 @@
+net.dempsy.serialization.Serializer=net.dempsy.serialization.jackson.JsonSerializer
