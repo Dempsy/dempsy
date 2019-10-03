@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,17 +25,26 @@ import java.lang.annotation.Target;
 import net.dempsy.messages.Dispatcher;
 
 /**
- *  <p>Marker annotation to tell the Message Dispatcher that a method is responsible
- *  for handling a message. The method must take a single parameter, which may be
- *  a concrete class or interface type. If concrete, the {@link Dispatcher} will invoke
- *  the method for messages of any concrete subclass that is not already handled
- *  by another method.</p>
- *  
- *  <p>Multiple methods may be so annotated, and the annotation is inherited.</p>
+ * <p>
+ * Marker annotation to tell the Message Dispatcher that a method is responsible
+ * for handling a message. The method must take a single parameter, which may be
+ * a concrete class or interface type. If concrete, the {@link Dispatcher} will invoke
+ * the method for messages of any concrete subclass that is not already handled
+ * by another method.
+ * </p>
+ *
+ * <p>
+ * Multiple methods may be so annotated, and the annotation is inherited.
+ * </p>
+ *
+ * <p>
+ * The value for the annotation should correspond to the value used when annotating
+ * the {@link MessageKey} for {@link MessageType}s that have multiple keys.
+ * </p>
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 public @interface MessageHandler {
-    String[] value() default {};
+    String value() default "";
 }

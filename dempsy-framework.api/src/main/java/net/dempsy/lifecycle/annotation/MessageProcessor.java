@@ -75,12 +75,20 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         cloneMethod = introspectClone();
 
         invocationMethods = new AnnotatedMethodInvoker(mpClass, MessageHandler.class);
-        final Set<Class<?>> keys = invocationMethods.getClassesHandled();
-        for(final Class<?> key: keys) {
-            final Method messageKey = AnnotatedMethodInvoker.introspectAnnotationSingle(key, MessageKey.class);
+
+        // =====================================================================
+        // Find an activation method
+        // TODO: if there are multiple MessageHandlers then there can be multiple methods
+        // tagged with Activation. Fix this.
+        // =====================================================================
+        final Set<Class<?>> handledTypes = invocationMethods.getClassesHandled();
+        for(final Class<?> handledType: handledTypes) {
+            final Method messageKey = AnnotatedMethodInvoker.introspectAnnotationSingle(handledType, MessageKey.class);
             activationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Activation.class),
                 (messageKey == null) ? null : messageKey.getReturnType());
         }
+        // =====================================================================
+
         passivationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Passivation.class));
         outputMethods = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, Output.class);
         evictableMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Evictable.class));
@@ -406,14 +414,19 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         // Find all of the handle methods and introspect their parameters.
         final String[] methAnn = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, MessageHandler.class).stream()
             // that this method takes exactly 1 parameter was already verified
-            .map(m -> m.getParameterTypes()[0])
-            .map(m -> {
-                final String[] ret = getAllMessageTypeTypeAnnotationValues(m, false);
+            .map(handlerMethod -> {
+                final String keyDescrim = handlerMethod.getAnnotation(MessageHandler.class).value();
+                final boolean hasKeyDiscrim = keyDescrim != null && keyDescrim.length() > 0;
+
+                final Class<?> paramClass = handlerMethod.getParameterTypes()[0];
+                final String[] ret = getAllMessageTypeTypeAnnotationValues(paramClass, false);
                 if(ret == null || ret.length == 0)
                     // this means there's a method annotated with @MessageTypes but the parameter isn't a MessageType
-                    throw new IllegalStateException("The message processor " + mpClass.getName() + " has a @MessageHandler that takes a \"" + m.getName()
-                        + "\" but that class doesn't represent a @MessageType.");
+                    throw new IllegalStateException(
+                        "The message processor " + mpClass.getName() + " has a @MessageHandler that takes a \"" + paramClass.getName()
+                            + "\" but that class doesn't represent a @MessageType.");
 
+                //
                 return ret;
             })
             .map(Arrays::stream)
