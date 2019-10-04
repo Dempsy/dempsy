@@ -63,7 +63,7 @@ public class AnnotatedMethodInvoker {
         throws IllegalArgumentException {
         this.annotationType = annotationType; // not relevant, but maybe useful for debugging
 
-        for(final Method method: introspectAnnotationMultiple(objectKlass, annotationType)) {
+        for(final Method method: introspectAnnotationMultiple(objectKlass, annotationType, true)) {
             final Class<?>[] argTypes = method.getParameterTypes();
             if(argTypes.length == 1)
                 methods.put(argTypes[0], method);
@@ -165,22 +165,32 @@ public class AnnotatedMethodInvoker {
      * annotated. Behavior is undefined if multiple methods
      * have the specified annotation.
      */
-    public static <T extends Annotation> Method introspectAnnotationSingle(
-        final Class<?> klass, final Class<T> annotationType) {
-        final List<Method> methods = introspectAnnotationMultiple(klass, annotationType);
+    public static <T extends Annotation> Method introspectAnnotationSingle(final Class<?> klass, final Class<T> annotationType) {
+        final List<Method> methods = introspectAnnotationMultiple(klass, annotationType, true);
         return (methods.size() > 0) ? methods.get(0) : null;
     }
 
     /**
      * Examines the passed class and extracts all methods that are annotated with the specified annotation type (may be none).
      */
-    public static <T extends Annotation> List<Method> introspectAnnotationMultiple(
-        final Class<?> klass, final Class<T> annotationType) {
+    public static <T extends Annotation> List<Method> introspectAnnotationMultiple(final Class<?> klass, final Class<T> annotationType, final boolean recurse) {
         final List<Method> result = new ArrayList<Method>();
-        for(final Method method: klass.getMethods()) {
+        for(final Method method: klass.getDeclaredMethods()) {
             if(method.getAnnotation(annotationType) != null)
                 result.add(method);
         }
+
+        if(!recurse)
+            return result;
+
+        final Class<?> superClazz = klass.getSuperclass();
+        if(superClazz != null)
+            result.addAll(introspectAnnotationMultiple(superClazz, annotationType, recurse));
+
+        // Now do the interfaces.
+        final Class<?>[] ifaces = klass.getInterfaces();
+        if(ifaces != null && ifaces.length > 0)
+            Arrays.stream(ifaces).forEach(iface -> result.addAll(introspectAnnotationMultiple(iface, annotationType, recurse)));
         return result;
     }
 
@@ -236,13 +246,12 @@ public class AnnotatedMethodInvoker {
 
     /**
      * Get all annotation on the given class, plus all annotations on the parent classes
-     * 
+     *
      * @param clazz
      * @param annotation
      * @return
      */
-    public static <A extends Annotation> List<AnnotatedClass<A>> allTypeAnnotations(final Class<?> clazz, final Class<A> annotation,
-        final boolean recurse) {
+    public static <A extends Annotation> List<AnnotatedClass<A>> allClassAnnotations(final Class<?> clazz, final Class<A> annotation, final boolean recurse) {
         final List<AnnotatedClass<A>> ret = new ArrayList<>();
         final A curClassAnnotation = clazz.getAnnotation(annotation);
         if(curClassAnnotation != null)
@@ -253,12 +262,12 @@ public class AnnotatedMethodInvoker {
 
         final Class<?> superClazz = clazz.getSuperclass();
         if(superClazz != null)
-            ret.addAll(allTypeAnnotations(superClazz, annotation, recurse));
+            ret.addAll(allClassAnnotations(superClazz, annotation, recurse));
 
         // Now do the interfaces.
         final Class<?>[] ifaces = clazz.getInterfaces();
         if(ifaces != null && ifaces.length > 0)
-            Arrays.stream(ifaces).forEach(iface -> ret.addAll(allTypeAnnotations(iface, annotation, recurse)));
+            Arrays.stream(ifaces).forEach(iface -> ret.addAll(allClassAnnotations(iface, annotation, recurse)));
         return ret;
     }
 

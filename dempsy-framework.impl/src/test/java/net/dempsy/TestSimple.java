@@ -1,5 +1,7 @@
 package net.dempsy;
 
+import static org.junit.Assert.assertTrue;
+
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
@@ -85,7 +87,7 @@ public class TestSimple {
 
             nm.start();
 
-            ConditionPoll.poll(o -> count.get() > 100000);
+            assertTrue(ConditionPoll.poll(o -> count.get() > 100000));
         }
     }
 

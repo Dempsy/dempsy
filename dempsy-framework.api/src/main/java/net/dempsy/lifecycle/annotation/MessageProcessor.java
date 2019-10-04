@@ -17,6 +17,7 @@
 package net.dempsy.lifecycle.annotation;
 
 import static net.dempsy.lifecycle.annotation.internal.MessageUtils.getAllMessageTypeTypeAnnotationValues;
+import static net.dempsy.lifecycle.annotation.internal.MessageUtils.getMatchingMessageTypeTypeAnnotationValues;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -90,7 +91,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         // =====================================================================
 
         passivationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Passivation.class));
-        outputMethods = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, Output.class);
+        outputMethods = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, Output.class, true);
         evictableMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Evictable.class));
         typesHandled = new HashSet<>(Arrays.asList(getMessageTypesFromMpClass(prototype.getClass())));
         if(invocationMethods.getNumMethods() > 0 && typesHandled == null || typesHandled.size() == 0)
@@ -412,22 +413,23 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         final String[] classAnn = getAllMessageTypeTypeAnnotationValues(mpClass, false);
 
         // Find all of the handle methods and introspect their parameters.
-        final String[] methAnn = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, MessageHandler.class).stream()
+        final String[] methAnn = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, MessageHandler.class, true).stream()
             // that this method takes exactly 1 parameter was already verified
             .map(handlerMethod -> {
                 final String keyDescrim = handlerMethod.getAnnotation(MessageHandler.class).value();
                 final boolean hasKeyDiscrim = keyDescrim != null && keyDescrim.length() > 0;
 
                 final Class<?> paramClass = handlerMethod.getParameterTypes()[0];
-                final String[] ret = getAllMessageTypeTypeAnnotationValues(paramClass, false);
-                if(ret == null || ret.length == 0)
+                final String[] supportedMessageTypes = getMatchingMessageTypeTypeAnnotationValues(paramClass, hasKeyDiscrim ? keyDescrim : null);
+                if(supportedMessageTypes == null || supportedMessageTypes.length == 0)
                     // this means there's a method annotated with @MessageTypes but the parameter isn't a MessageType
                     throw new IllegalStateException(
                         "The message processor " + mpClass.getName() + " has a @MessageHandler that takes a \"" + paramClass.getName()
                             + "\" but that class doesn't represent a @MessageType.");
 
-                //
-                return ret;
+                // let's validate that there's a possibility that a message will be routed here.
+
+                return supportedMessageTypes;
             })
             .map(Arrays::stream)
             .flatMap(v -> v)

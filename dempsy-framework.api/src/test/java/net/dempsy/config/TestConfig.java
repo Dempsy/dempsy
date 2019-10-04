@@ -411,7 +411,7 @@ public class TestConfig {
         @Mp
         class mp2 implements Cloneable {
             @MessageHandler("key2")
-            public void handle(final GoodMessage string) {}
+            public void handle(final GoodMessageWith2Keys string) {}
 
             @Start
             public void startMethod() {}
@@ -437,7 +437,7 @@ public class TestConfig {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void testConfigMpWithGoodWith2KeysFails() throws Throwable {
+    public void testConfigMpWithGoodWith2KeysButMpFailsToPickOne() throws Throwable {
         final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
 
         @Mp
@@ -459,9 +459,19 @@ public class TestConfig {
             }
         }
 
+        final Cluster cd1 = new Cluster("test-slot-1");
+        cd1.setMessageProcessor(new MessageProcessor<mp1>(new mp1()));
+        app.addClusters(cd1);
+        app.validate();
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testConfigMpWithGoodButMpSelects() throws Throwable {
+        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+
         @Mp
-        class mp2 implements Cloneable {
-            @MessageHandler("key2")
+        class mp1 implements Cloneable {
+            @MessageHandler("key1")
             public void handle(final GoodMessage string) {}
 
             @Start
@@ -479,11 +489,8 @@ public class TestConfig {
         }
 
         final Cluster cd1 = new Cluster("test-slot-1");
-        final Cluster cd2 = new Cluster("test-slot-2");
         cd1.setMessageProcessor(new MessageProcessor<mp1>(new mp1()));
-        cd2.setMessageProcessor(new MessageProcessor<mp2>(new mp2()));
         app.addClusters(cd1);
-        app.addClusters(cd2);
         app.validate();
     }
 

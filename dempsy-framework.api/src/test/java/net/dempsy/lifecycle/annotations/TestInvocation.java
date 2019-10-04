@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -41,8 +41,8 @@ import net.dempsy.messages.MessageProcessorLifecycle;
 
 /**
  * Formerly there were tests that checked the invocations via the Command
-  pattern but as the Command pattern has been removed, so have the tests.
- * 
+ * pattern but as the Command pattern has been removed, so have the tests.
+ *
  */
 
 public class TestInvocation {
@@ -52,6 +52,8 @@ public class TestInvocation {
 
     @MessageType
     public static interface MsgNum {
+
+        @MessageKey
         Number getNumber();
     }
 
@@ -69,7 +71,7 @@ public class TestInvocation {
 
         @Override
         public boolean equals(final Object o) {
-            return value == ((MsgInt) o).value;
+            return value == ((MsgInt)o).value;
         }
 
         @Override
@@ -97,7 +99,7 @@ public class TestInvocation {
 
         @Override
         public boolean equals(final Object o) {
-            return value == ((MsgDoub) o).value;
+            return value == ((MsgDoub)o).value;
         }
 
         @Override
@@ -126,7 +128,7 @@ public class TestInvocation {
 
         @Override
         public boolean equals(final Object o) {
-            return value.equals(((MsgString) o).value);
+            return value.equals(((MsgString)o).value);
         }
 
         @Override
@@ -145,7 +147,7 @@ public class TestInvocation {
 
         @Override
         public InvocationTestMp clone() throws CloneNotSupportedException {
-            return (InvocationTestMp) super.clone();
+            return (InvocationTestMp)super.clone();
         }
 
         @Activation
@@ -187,11 +189,11 @@ public class TestInvocation {
     }
 
     public static class InvalidMP_NoAnnotation
-            implements Cloneable {
+        implements Cloneable {
         @Override
         public InvocationTestMp clone()
-                throws CloneNotSupportedException {
-            return (InvocationTestMp) super.clone();
+            throws CloneNotSupportedException {
+            return (InvocationTestMp)super.clone();
         }
     }
 
@@ -202,13 +204,13 @@ public class TestInvocation {
 
     @Mp
     public static class LifecycleEqualityTestMP
-            extends InvocationTestMp {
+        extends InvocationTestMp {
         // most methods are inherited, but clone() has to be declared
 
         @Override
         public LifecycleEqualityTestMP clone()
-                throws CloneNotSupportedException {
-            return (LifecycleEqualityTestMP) super.clone();
+            throws CloneNotSupportedException {
+            return (LifecycleEqualityTestMP)super.clone();
         }
     }
 

@@ -240,18 +240,6 @@ public class TestMps {
         }
     }
 
-    @MessageType
-    public static class MessageWithMessageTypeMethod extends Message {
-        public MessageWithMessageTypeMethod(final String key) {
-            super(key);
-        }
-
-        @MessageType
-        public String[] messageTypes() {
-            return new String[] { "even", "more", "types" };
-        }
-    }
-
     @Mp
     public static class TestMpNoKey implements Cloneable {
         private final boolean activated = false;
@@ -290,8 +278,8 @@ public class TestMps {
     public static class TestMpWithReturn implements Cloneable {
 
         @MessageHandler
-        public MessageWithMessageTypeMethod handleMsg(final Message val) {
-            return new MessageWithMessageTypeMethod("Yo");
+        public Message handleMsg(final Message val) {
+            return new Message("Yo");
         }
 
         @Override
@@ -299,17 +287,4 @@ public class TestMps {
             return super.clone();
         }
     }
-
-    @Mp
-    public static class TestMpWithMultiLevelMessageTypeParameter implements Cloneable {
-
-        @MessageHandler
-        public void handleMsg(final MessageWithMessageTypeMethod val) {}
-
-        @Override
-        public Object clone() throws CloneNotSupportedException {
-            return super.clone();
-        }
-    }
-
 }
