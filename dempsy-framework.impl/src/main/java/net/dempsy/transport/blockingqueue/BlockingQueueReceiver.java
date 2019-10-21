@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,12 +34,13 @@ import net.dempsy.util.SafeString;
  * <p>
  * The Message transport default library comes with this BlockingQueue implementation.
  * </p>
- * 
+ *
  * <p>
- * This class represents both the MessageTransportSender and the concrete Adaptor (since BlockingQueues don't span process spaces). You need to initialize it with the BlockingQueue to use, as well as the
+ * This class represents both the MessageTransportSender and the concrete Adaptor (since BlockingQueues don't span process spaces). You need to initialize it
+ * with the BlockingQueue to use, as well as the
  * MessageTransportListener to send messages to.
  * </p>
- * 
+ *
  * <p>
  * Optionally you can provide it with a name that will be used in the thread that's started to read messages from the queue.
  * </p>
@@ -58,22 +59,6 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
 
     private final static AtomicLong guidGenerator = new AtomicLong(0);
 
-    /**
-     * <p>
-     * This method starts a background thread that reads messages from the queue and sends them to a registered MessageTransportListener.
-     * </p>
-     * 
-     * <p>
-     * This method is tagged with a @PostConstruct but outside of a dependency injection container that's set up to manage default java lifecycle, it needs to be called explicitly.
-     * </p>
-     * 
-     * <p>
-     * Alternatively you can manage the threading yourself since a BlockingQueueAdaptor itself is the Runnable that's started.
-     * </p>
-     * 
-     * @throws MessageTransportException
-     *             if the BlockingQueue implementation isn't set or if the listener to send the messages to isn't set.
-     */
     public BlockingQueueReceiver(final BlockingQueue<Object> queue) {
         this.queue = queue;
         this.address = new BlockingQueueAddress(queue, "BlockingQueue_" + guidGenerator.getAndIncrement());
@@ -81,10 +66,10 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
 
     @Override
     public void run() {
-        synchronized (this) {
+        synchronized(this) {
             currentThread = Thread.currentThread();
 
-            if (shutdown == true)
+            if(shutdown == true)
                 return;
 
             running.set(true);
@@ -93,17 +78,17 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
         final Listener<Object> curListener = listener;
 
         // This check is cheap but unlocked
-        while (!shutdown) {
+        while(!shutdown) {
             try {
                 final Object val = queue.take();
                 curListener.onMessage(val);
-            } catch (final InterruptedException ie) {
-                synchronized (this) {
+            } catch(final InterruptedException ie) {
+                synchronized(this) {
                     // if we were interrupted we're probably stopping.
-                    if (!shutdown)
+                    if(!shutdown)
                         LOGGER.warn("Superfluous interrupt.", ie);
                 }
-            } catch (final MessageTransportException err) {
+            } catch(final MessageTransportException err) {
                 LOGGER.error("Exception while handling message.", err);
             }
         }
@@ -113,31 +98,31 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
 
     /**
      * A BlockingQueueAdaptor requires a MessageTransportListener to be set in order to adapt a client side.
-     * 
+     *
      * @param listener
-     *            is the MessageTransportListener to push messages to when they come in.
+     *     is the MessageTransportListener to push messages to when they come in.
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @SuppressWarnings({"rawtypes","unchecked"})
     @Override
     public synchronized void start(final Listener listener, final Infrastructure infra) {
-        if (listener == null)
+        if(listener == null)
             throw new IllegalArgumentException("Cannot pass null to " + BlockingQueueReceiver.class.getSimpleName() + ".setListener");
-        if (this.listener != null)
+        if(this.listener != null)
             throw new IllegalStateException(
-                    "Cannot set a new Listener (" + SafeString.objectDescription(listener) + ") on a " + BlockingQueueReceiver.class.getSimpleName()
-                            + " when there's one already set (" + SafeString.objectDescription(this.listener) + ")");
+                "Cannot set a new Listener (" + SafeString.objectDescription(listener) + ") on a " + BlockingQueueReceiver.class.getSimpleName()
+                    + " when there's one already set (" + SafeString.objectDescription(this.listener) + ")");
         this.listener = listener;
         infra.getThreadingModel().runDaemon(this, "BQReceiver-" + address.toString());
     }
 
     @Override
     public void close() {
-        synchronized (this) {
+        synchronized(this) {
             shutdown = true;
         }
 
-        while (running.get()) {
-            if (currentThread != null)
+        while(running.get()) {
+            if(currentThread != null)
                 currentThread.interrupt();
             Thread.yield();
         }
