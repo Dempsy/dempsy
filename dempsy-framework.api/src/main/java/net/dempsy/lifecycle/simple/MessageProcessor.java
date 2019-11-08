@@ -5,14 +5,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import net.dempsy.DempsyException;
 import net.dempsy.config.ClusterId;
 import net.dempsy.config.Node;
-import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.KeyedMessageWithType;
+import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.MessageProcessorLifecycle;
+import net.dempsy.messages.MessageResourceManager;
 
 /**
  * <p>
@@ -30,6 +32,7 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
     private static final KeyedMessageWithType[] EMPTY_KEYED_MESSAGE_WITH_TYPE = new KeyedMessageWithType[0];
 
     private final Supplier<? extends Mp> newMp;
+    private Consumer<KeyedMessage> disposer = null;
     private final Set<String> messageTypes;
     private boolean isEvictable = false;
     private boolean hasOutput = false;
@@ -58,6 +61,15 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
      */
     public MessageProcessor setOutput(final boolean hasOutputCapability) {
         this.hasOutput = hasOutputCapability;
+        return this;
+    }
+
+    /**
+     * Set the default method to handle the disposition of messages. See the full description
+     * at {@link MessageProcessorLifecycle#dispose(KeyedMessage)}
+     */
+    public MessageProcessor setDisposer(final Consumer<KeyedMessage> disposer) {
+        this.disposer = disposer;
         return this;
     }
 
@@ -167,5 +179,10 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
 
     @Override
     public void start(final ClusterId myCluster) {}
+
+    @Override
+    public MessageResourceManager manager() {
+        return null;
+    }
 
 }

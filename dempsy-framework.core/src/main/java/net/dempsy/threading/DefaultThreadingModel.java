@@ -217,8 +217,8 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
-        return submitter.submitLimited(r, count);
+    public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
+        return submitter.submitLimited(r, justArrived);
     }
 
     @Override
@@ -254,12 +254,12 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
-            if (count)
+        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
+            if (justArrived)
                 numLimited.incrementAndGet();
 
             final Future<V> ret = executor.submit(() -> {
-                if (!count)
+                if (!justArrived)
                     return r.call();
 
                 final long num = numLimited.decrementAndGet();
@@ -284,8 +284,8 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
-            if (count) {
+        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
+            if (justArrived) {
                 // only goes in if I get a position less than the max.
                 long spinner = 0;
                 for (boolean done = false; !done;) {
@@ -307,7 +307,7 @@ public class DefaultThreadingModel implements ThreadingModel {
             }
 
             final Future<V> ret = executor.submit(() -> {
-                if (count)
+                if (justArrived)
                     numLimited.decrementAndGet();
                 return r.call();
             });
@@ -323,7 +323,7 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count) {
+        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
             return executor.submit(() -> r.call());
         }
     }

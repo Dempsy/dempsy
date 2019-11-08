@@ -15,7 +15,7 @@ public interface MessageProcessorLifecycle<T> {
     /**
      * This lifecycle phase should be implemented to return a new instance of the message processor. It will
      * be invoked by Dempsy when it needs a fresh instance. This happens, for eample, when a message is dispatched
-     * to a cluster with a key that the framework hasn't seen before. 
+     * to a cluster with a key that the framework hasn't seen before.
      */
     public T newInstance() throws DempsyException;
 
@@ -28,7 +28,7 @@ public interface MessageProcessorLifecycle<T> {
 
     /**
      * The 'passivation' lifecycle phase is invoked by Dempsy just prior to the framework giving up
-     * control of the message processor. This is done when a message processor is being evicted or in 
+     * control of the message processor. This is done when a message processor is being evicted or in
      * the case of elasticity where it's not managed in the current {@link Node} anymore.
      */
     public void passivate(T instance) throws DempsyException;
@@ -65,7 +65,7 @@ public interface MessageProcessorLifecycle<T> {
     /**
      * This method is invoked by Dempsy to determine what message types are handled by the processors managed
      * by this {@link MessageProcessorLifecycle}.
-     * 
+     *
      * @return the list of message types handled.
      */
     public Set<String> messagesTypesHandled();
@@ -74,15 +74,38 @@ public interface MessageProcessorLifecycle<T> {
      * The implementor can put validation checks here. This method will be invoked by Dempsy when the cluster
      * is started to check for a valid state. This method should NOT be overloaded to intercept the startup.
      * please see {@link MessageProcessorLifecycle#start(ClusterId)}
-     *  
+     *
      * @throws IllegalStateException when the {@link MessageProcessorLifecycle} is configured incorrectly
      */
     public void validate() throws IllegalStateException;
 
     /**
-     * This method should be implemented to handle carrout out the actual 'start' message processor 
-     * lifecycle phase. Please see the User Guild for more information on the message processor 
+     * This method should be implemented to handle carrout out the actual 'start' message processor
+     * lifecycle phase. Please see the User Guild for more information on the message processor
      * lifecycle.
      */
     public void start(ClusterId myCluster);
+
+    /**
+     * <p>
+     * If the messages are resources then this method can be overloaded to manage disposing
+     * of the resource. It is guaranteed to be called on all messages passed to the invoke.
+     * </p>
+     *
+     * <p>
+     * It will also be called on messages returned from the invoke IFF the transport is a termination
+     * for these instances or they never get sent on. For example, the Nio Transport will serialize
+     * the messages but then return them to be disposed of while the BlockingQueue transport will
+     * queue the very instances to the next Mps. In this later case the transport isn't the
+     * termination point for the instances as the very instances will be used in the next
+     * stage of Mp processing as a parameter to invoke. Only when they are finally terminated
+     * will a dispose be called and only at that termination Mp.
+     * </p>
+     *
+     * <p>
+     * Note: THIS METHOD MUST BE THREAD SAFE AS IT WILL BE CALLED FROM MULTIPLE THREADS POTENTIALLY
+     * SIMULTANEOUSLY.
+     * </p>
+     */
+    public MessageResourceManager manager();
 }

@@ -34,7 +34,7 @@ public interface ThreadingModel extends AutoCloseable {
      * If counting is {@code true} then the ThreadingModel should queue it without counting it against
      * the maximum capacity.
      */
-    public <V> Future<V> submitLimited(Rejectable<V> r, boolean count);
+    public <V> Future<V> submitLimited(Rejectable<V> r, boolean justArrived);
 
     /**
      * Schedule a task to be executed at some time in the future.

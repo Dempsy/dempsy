@@ -29,8 +29,8 @@ public class DispatcherAdaptor extends Dispatcher implements Adaptor {
     }
 
     @Override
-    public void dispatch(final KeyedMessageWithType message) throws DempsyException {
-        dispatcher.dispatch(message);
+    public void dispatch(final KeyedMessageWithType message, final MessageResourceManager rm) throws DempsyException {
+        dispatcher.dispatch(message, rm);
     }
 
     public synchronized boolean isReady() {

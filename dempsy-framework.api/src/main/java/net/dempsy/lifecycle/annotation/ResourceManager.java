@@ -1,0 +1,32 @@
+package net.dempsy.lifecycle.annotation;
+
+import net.dempsy.messages.MessageResourceManager;
+
+public class ResourceManager implements MessageResourceManager {
+    public static Object first = null;
+
+    @Override
+    public Object replicate(final Object toReplicate) {
+        if(Resource.class.isAssignableFrom(toReplicate.getClass())) {
+            ((Resource)toReplicate).reference();
+        }
+        return toReplicate;
+    }
+
+    @Override
+    public void dispose(final Object message) {
+        if(Resource.class.isAssignableFrom(message.getClass())) {
+            final Resource resource = ((Resource)message);
+            resource.close();
+        }
+    }
+
+    @Override
+    public Object reify(final Object message) {
+        if(Resource.class.isAssignableFrom(message.getClass())) {
+            final Resource resource = ((Resource)message);
+            resource.init();
+        }
+        return message;
+    }
+}

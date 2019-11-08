@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -57,6 +57,7 @@ import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.KeyedMessageWithType;
+import net.dempsy.messages.MessageResourceManager;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.monitoring.StatsCollector;
@@ -66,21 +67,21 @@ import net.dempsy.util.TestInfrastructure;
 
 /**
  * Test load handling / shedding in the MP container. This is probably involved enough to merit
- *  not mixing into the existing MPContainer test cases.
+ * not mixing into the existing MPContainer test cases.
  */
 @RunWith(Parameterized.class)
 public class TestContainerLoadHandling {
     private void checkStat(final ClusterMetricGetters stat) {
         assertEquals(stat.getDispatchedMessageCount(),
-                stat.getMessageFailedCount() + stat.getProcessedMessageCount() + stat.getInFlightMessageCount());
+            stat.getMessageFailedCount() + stat.getProcessedMessageCount() + stat.getInFlightMessageCount());
     }
 
     @Parameters
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { LockingContainer.class.getPackage().getName() },
-                { NonLockingContainer.class.getPackage().getName() },
-                { NonLockingAltContainer.class.getPackage().getName() },
+            {LockingContainer.class.getPackage().getName()},
+            {NonLockingContainer.class.getPackage().getName()},
+            {NonLockingAltContainer.class.getPackage().getName()},
         });
     }
 
@@ -118,8 +119,8 @@ public class TestContainerLoadHandling {
         nodeStats = new BasicNodeStatsCollector();
 
         container = tr.track(new Manager<Container>(Container.class).getAssociatedInstance(containerId))
-                .setMessageProcessor(new MessageProcessor<TestMessageProcessor>(new TestMessageProcessor()))
-                .setClusterId(cid);
+            .setMessageProcessor(new MessageProcessor<TestMessageProcessor>(new TestMessageProcessor()))
+            .setClusterId(cid);
         container.setDispatcher(dispatcher);
 
         container.setInbound(new DummyInbound());
@@ -144,7 +145,7 @@ public class TestContainerLoadHandling {
     @After
     public void tearDown() throws Exception {
         tr.stopAll();
-        ((StatsCollector) clusterStats).stop();
+        ((StatsCollector)clusterStats).stop();
     }
 
     public static boolean failed = false;
@@ -177,18 +178,18 @@ public class TestContainerLoadHandling {
             try {
                 processingCount.incrementAndGet();
                 startLatch.await(); // wait for the command to go
-                if (numMsg < 0) {
-                    while (stillRunning) {
+                if(numMsg < 0) {
+                    while(stillRunning) {
                         final KeyedMessage message = messages[random.nextInt(messages.length)];
-                        mpc.dispatch(message, block);
+                        mpc.dispatch(message, block, true);
                     }
                 } else {
-                    for (int i = 0; i < numMsg; i++) {
+                    for(int i = 0; i < numMsg; i++) {
                         final KeyedMessage message = messages[random.nextInt(messages.length)];
-                        mpc.dispatch(message, block);
+                        mpc.dispatch(message, block, true);
                     }
                 }
-            } catch (final Exception e) {
+            } catch(final Exception e) {
                 failed = true;
                 System.out.println("FAILED!");
                 e.printStackTrace();
@@ -224,7 +225,7 @@ public class TestContainerLoadHandling {
         public List<KeyedMessageWithType> messages = Collections.synchronizedList(new ArrayList<>());
 
         @Override
-        public void dispatch(final KeyedMessageWithType message) {
+        public void dispatch(final KeyedMessageWithType message, final MessageResourceManager manager) {
             assertNotNull(message);
             messages.add(message);
         }
@@ -240,14 +241,14 @@ public class TestContainerLoadHandling {
 
         @Override
         public TestMessageProcessor clone() throws CloneNotSupportedException {
-            final TestMessageProcessor ret = (TestMessageProcessor) super.clone();
+            final TestMessageProcessor ret = (TestMessageProcessor)super.clone();
             return ret;
         }
 
         @MessageHandler
         public MockOutputMessage handleMessage(final MockInputMessage msg) throws InterruptedException {
             logger.trace("handling key " + msg.getKey() + " count is " + messageCount);
-            if (commonLongRunningHandler != null)
+            if(commonLongRunningHandler != null)
                 commonLongRunningHandler.await();
             key = msg.getKey();
             messageCount++;
@@ -261,7 +262,7 @@ public class TestContainerLoadHandling {
             logger.trace("handling output message for mp with key " + key);
             final MockOutputMessage out = new MockOutputMessage(key, "output");
 
-            if (forceOutputException)
+            if(forceOutputException)
                 throw new RuntimeException("Forced Exception!");
 
             return out;
@@ -278,10 +279,10 @@ public class TestContainerLoadHandling {
         // produce the initial MPs
         final ArrayList<Thread> in = new ArrayList<Thread>();
         final KeyedMessage[] messages = new KeyedMessage[NUMMPS];
-        for (int i = 0; i < NUMMPS; i++)
+        for(int i = 0; i < NUMMPS; i++)
             messages[i] = km(new MockInputMessage("key" + i));
 
-        for (int j = 0; j < NUMMPS; j++)
+        for(int j = 0; j < NUMMPS; j++)
             in.add(startMessagePump(container, messages, block));
 
         SendMessageThread.startLatch.countDown(); // let the messages go.
@@ -295,13 +296,13 @@ public class TestContainerLoadHandling {
         dispatcher.messages.clear();
 
         // Send NTHREADS Messages and wait for them to come out, then repeat
-        for (int i = 0; i < NUMRUNS; i++) {
+        for(int i = 0; i < NUMRUNS; i++) {
             SendMessageThread.startLatch = new CountDownLatch(1); // set up a gate for starting
             SendMessageThread.finishedCount.set(0);
             SendMessageThread.processingCount.set(0);
 
             in.clear();
-            for (int j = 0; j < NUMTHREADS; j++)
+            for(int j = 0; j < NUMTHREADS; j++)
                 in.add(sendMessages(container, messages, block, MSGPERTHREAD));
 
             assertTrue(poll(o -> SendMessageThread.processingCount.get() == NUMTHREADS));
@@ -315,13 +316,13 @@ public class TestContainerLoadHandling {
             assertTrue(poll(o -> in.stream().filter(t -> t.isAlive() == true).count() == 0));
 
             final long discarded = clusterStats.getMessageCollisionCount();
-            if (block)
+            if(block)
                 assertEquals(0L, discarded);
 
             final int iter = i;
             assertEquals((NUMTHREADS * MSGPERTHREAD) * (iter + 1), dispatcher.messages.size() + discarded - initialDiscard);
             assertEquals((NUMTHREADS * MSGPERTHREAD) * (iter + 1) + numMessagePumped,
-                    clusterStats.getProcessedMessageCount() + discarded - initialDiscard);
+                clusterStats.getProcessedMessageCount() + discarded - initialDiscard);
         }
 
         checkStat(clusterStats);
@@ -351,11 +352,11 @@ public class TestContainerLoadHandling {
         // produce the initial MPs
         final ArrayList<Thread> in = new ArrayList<Thread>();
         final KeyedMessage[] messages = new KeyedMessage[NUMMPS];
-        for (int i = 0; i < NUMMPS; i++)
+        for(int i = 0; i < NUMMPS; i++)
             messages[i] = km(new MockInputMessage("key" + i));
 
-        for (int j = 0; j < NUMMPS; j++)
-            in.add(sendMessages(container, new KeyedMessage[] { messages[j] }, true, 1));
+        for(int j = 0; j < NUMMPS; j++)
+            in.add(sendMessages(container, new KeyedMessage[] {messages[j]}, true, 1));
 
         SendMessageThread.startLatch.countDown(); // let the messages go.
         assertTrue(poll(o -> in.stream().filter(t -> t.isAlive()).count() == 0));
@@ -366,7 +367,7 @@ public class TestContainerLoadHandling {
         assertEquals(numMessagePumped, clusterStats.getProcessedMessageCount());
         dispatcher.messages.clear();
 
-        for (int i = 0; i < NUMRUNS; i++) {
+        for(int i = 0; i < NUMRUNS; i++) {
             final int iter = i;
             final long initialMessagesDispatched = clusterStats.getDispatchedMessageCount();
 
@@ -377,8 +378,8 @@ public class TestContainerLoadHandling {
             commonLongRunningHandler = new CountDownLatch(1);
 
             in.clear();
-            for (int j = 0; j < NUMMPS; j++)
-                in.add(sendMessages(container, new KeyedMessage[] { km(new MockInputMessage("key" + j % NUMMPS)) }, true, DUPFACTOR));
+            for(int j = 0; j < NUMMPS; j++)
+                in.add(sendMessages(container, new KeyedMessage[] {km(new MockInputMessage("key" + j % NUMMPS))}, true, DUPFACTOR));
 
             assertTrue(poll(o -> SendMessageThread.processingCount.get() == NUMMPS));
             SendMessageThread.startLatch.countDown(); // let the messages go.
@@ -480,7 +481,8 @@ public class TestContainerLoadHandling {
     // finishLatch = new CountDownLatch(NUMMPS * 4); // we expect this many messages to be handled.
     // imIn = new CountDownLatch(4 * NUMMPS); // this is how many times the message processor handler has been entered
     // dispatcher.latch = new CountDownLatch(4 * NUMMPS); // this counts down whenever a message is dispatched
-    // SendMessageThread.latch = new CountDownLatch(4 * NUMMPS); // when spawning a thread to send a message into an Container, this counts down once the message sending is complete
+    // SendMessageThread.latch = new CountDownLatch(4 * NUMMPS); // when spawning a thread to send a message into an Container, this counts down once the
+    // message sending is complete
     //
     // // invoke NTHREADS * 4 discrete messages each of which should cause an Mp to be created
     // for (int i = 0; i < (NUMMPS * 4); i++)
@@ -537,7 +539,8 @@ public class TestContainerLoadHandling {
     // // 2 * NTHREADS are at startLatch while there are 4 * NTHREADS total MPs.
     // // Thererfore two outputs should have executed and two more are thrashing now.
     // assertTrue("Timeout on initial messages", imIn.await(4, TimeUnit.SECONDS)); // wait for the 2 * NTHREADS output calls to be entered
-    // assertTrue("Timeout on initial messages", finishOutputLatch.await(4 * NUMMPS, TimeUnit.SECONDS)); // wait for those two to actually finish output processing
+    // assertTrue("Timeout on initial messages", finishOutputLatch.await(4 * NUMMPS, TimeUnit.SECONDS)); // wait for those two to actually finish output
+    // processing
     //
     // // there's a race condition between finishing the output and the output call being registered so we need to wait
     // for (final long endTime = System.currentTimeMillis() + (NUMMPS * 4000); endTime > System.currentTimeMillis() &&

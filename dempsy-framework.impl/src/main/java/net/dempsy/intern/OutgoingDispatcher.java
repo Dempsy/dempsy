@@ -21,6 +21,7 @@ import net.dempsy.cluster.ClusterInfoSession;
 import net.dempsy.cluster.DirMode;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.KeyedMessageWithType;
+import net.dempsy.messages.MessageResourceManager;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.router.RoutingStrategy;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
@@ -29,6 +30,7 @@ import net.dempsy.transport.NodeAddress;
 import net.dempsy.transport.RoutedMessage;
 import net.dempsy.transport.Sender;
 import net.dempsy.transport.TransportManager;
+import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.SafeString;
 import net.dempsy.utils.PersistentTask;
 
@@ -58,16 +60,36 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
         this.statsCollector = statsCollector;
     }
 
+    private static class ResourceManagerClosable implements QuietCloseable {
+        public final MessageResourceManager disposer;
+        public final KeyedMessageWithType message;
+        public final KeyedMessageWithType toUse;
+
+        public ResourceManagerClosable(final MessageResourceManager disposer, final KeyedMessageWithType message) {
+            this.disposer = disposer;
+            this.message = message;
+            toUse = disposer != null ? new KeyedMessageWithType(message.key, disposer.replicate(message.message), message.messageTypes) : message;
+        }
+
+        @Override
+        public void close() {
+            if(disposer != null)
+                disposer.dispose(toUse.message);
+        }
+    }
+
     @Override
-    public void dispatch(final KeyedMessageWithType message) {
-        if(message == null)
+    public void dispatch(final KeyedMessageWithType messageParam, final MessageResourceManager disposer) {
+        if(messageParam == null)
             throw new NullPointerException("Attempt to dispatch a null message.");
 
-        final Object messageKey = message.key;
+        final Object messageKey = messageParam.key;
         if(messageKey == null)
-            throw new NullPointerException("Message " + SafeString.objectDescription(message) + " has a null key.");
+            throw new NullPointerException("Message " + SafeString.objectDescription(messageParam) + " has a null key.");
         boolean messageSentSomewhere = false;
-        try {
+
+        try (ResourceManagerClosable x = new ResourceManagerClosable(disposer, messageParam);) {
+            final KeyedMessageWithType message = x.toUse;
             ApplicationState tmp = outbounds.get();
 
             // if we're in the midst of an update then we really want to wait for the new state.
@@ -122,15 +144,26 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
             }
             // =================================================================================
 
+            if(containerByNodeAddress.size() == 0) {
+                if(LOGGER.isTraceEnabled())
+                    LOGGER.trace("[{}] There appears to be no valid destination addresses for the message {}", thisNodeId,
+                        SafeString.objectDescription(message.message));
+            }
+
             for(final Map.Entry<NodeAddress, ContainerAddress> e: containerByNodeAddress.entrySet()) {
                 final NodeAddress curNode = e.getKey();
                 final ContainerAddress curAddr = e.getValue();
 
-                final RoutedMessage toSend = new RoutedMessage(curAddr.clusters, messageKey, message.message);
                 if(curNode.equals(thisNode)) {
                     LOGGER.trace("Sending local {}", message);
 
-                    nodeReciever.feedbackLoop(toSend, false); // this shouldn't count since Router is an OUTGOING class
+                    // if the message is a resource then the disposer will be used to dispose of the message
+                    // but it needs an additional replicate. See feedbackLoop javadoc.
+                    nodeReciever.feedbackLoop(
+                        new RoutedMessage(curAddr.clusters, messageKey,
+                            disposer == null ? message.message : disposer.replicate(message.message)),
+                        false,                     // this shouldn't count since Router is an OUTGOING class
+                        disposer);
                     messageSentSomewhere = true;
                 } else {
                     LOGGER.trace("Sending {} to {}", message, curNode);
@@ -142,16 +175,12 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                             LOGGER.error("[{}] Couldn't send message to " + curNode + " from " + thisNodeId + " because there's no "
                                 + Sender.class.getSimpleName(), thisNodeId);
                     } else {
-                        sender.send(toSend);
+                        sender.send(new RoutedMessage(curAddr.clusters, messageKey,
+                            sender.considerMessageOwnsershipTransfered() ? (disposer == null ? message.message : disposer.replicate(message.message))
+                                : message.message));
                         messageSentSomewhere = true;
                     }
                 }
-            }
-
-            if(containerByNodeAddress.size() == 0) {
-                if(LOGGER.isTraceEnabled())
-                    LOGGER.trace("[{}] There appears to be no valid destination addresses for the message {}", thisNodeId,
-                        SafeString.objectDescription(message.message));
             }
         } finally {
             if(!messageSentSomewhere)

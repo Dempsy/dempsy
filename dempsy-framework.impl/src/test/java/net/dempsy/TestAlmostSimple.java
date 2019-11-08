@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
@@ -124,8 +125,8 @@ public class TestAlmostSimple {
 
         final AtomicLong count = new AtomicLong(0);
 
-        try (final NodeManager nm = new NodeManager();
-            final DefaultThreadingModel tm = new DefaultThreadingModel("TB", -1, 1)) {
+        try (final DefaultThreadingModel tm = new DefaultThreadingModel("TB", -1, 1);
+            final NodeManager nm = new NodeManager();) {
             final Node n = new Node.Builder("test-app")
                 .defaultRoutingStrategyId("net.dempsy.router.simple")
                 .receiver(new Dummy())
@@ -134,17 +135,24 @@ public class TestAlmostSimple {
                     private Dispatcher disp;
                     boolean done = false;
                     int cur = 0;
+                    AtomicBoolean exitedLoop = new AtomicBoolean(false);
 
                     @Override
                     public void stop() {
                         done = true;
+                        while(!exitedLoop.get())
+                            Thread.yield();
                     }
 
                     @Override
                     public void start() {
-                        while(!done) {
-                            uncheck(() -> disp.dispatchAnnotated(new Message(cur++)));
-                            count.incrementAndGet();
+                        try {
+                            while(!done) {
+                                uncheck(() -> disp.dispatchAnnotated(new Message(cur++)));
+                                count.incrementAndGet();
+                            }
+                        } finally {
+                            exitedLoop.set(true);
                         }
                     }
 

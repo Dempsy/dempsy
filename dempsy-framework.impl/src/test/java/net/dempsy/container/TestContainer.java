@@ -357,7 +357,7 @@ public class TestContainer {
     public void testWrongTypeMessage() throws Exception {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(new KeyedMessage(kmwt.key, new Object()), true);
+        container.dispatch(new KeyedMessage(kmwt.key, new Object()), true, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
     }
 
@@ -367,7 +367,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         throwMeInActivation = new RuntimeException("JustThrowMeDAMMIT!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true);
+        container.dispatch(kmwt, true, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
 
@@ -379,7 +379,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new DempsyException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true);
+        container.dispatch(kmwt, true, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
@@ -390,7 +390,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new RuntimeException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true);
+        container.dispatch(kmwt, true, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }

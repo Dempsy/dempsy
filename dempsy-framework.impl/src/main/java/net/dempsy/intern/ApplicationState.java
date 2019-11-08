@@ -33,7 +33,7 @@ public class ApplicationState {
     private final ConcurrentHashMap<NodeAddress, Sender> senders = new ConcurrentHashMap<>();
 
     private ApplicationState(final Map<String, RoutingStrategy.Router> outboundByClusterName, final Map<String, Set<String>> cnByType,
-            final Map<NodeAddress, NodeInformation> current, final TransportManager tManager, final NodeAddress thisNode) {
+        final Map<NodeAddress, NodeInformation> current, final TransportManager tManager, final NodeAddress thisNode) {
         this.outboundByClusterName_ = outboundByClusterName;
         this.clusterNameByMessageType = new HashMap<>();
         cnByType.entrySet().forEach(e -> clusterNameByMessageType.put(e.getKey(), new ArrayList<String>(e.getValue())));
@@ -43,18 +43,18 @@ public class ApplicationState {
 
         outboundsByMessageType = new HashMap<>();
         final HashMap<String, Set<RoutingStrategy.Router>> tmp = new HashMap<>();
-        for (final Map.Entry<String, Set<String>> e : cnByType.entrySet()) {
+        for(final Map.Entry<String, Set<String>> e: cnByType.entrySet()) {
             final Set<String> clusterNames = e.getValue();
             final String messageType = e.getKey();
             final Set<RoutingStrategy.Router> cur = tmp.computeIfAbsent(messageType, k -> new HashSet<>());
-            for (final String clusterName : clusterNames) {
+            for(final String clusterName: clusterNames) {
                 final RoutingStrategy.Router router = outboundByClusterName.get(clusterName);
-                if (router != null)
+                if(router != null)
                     cur.add(router);
             }
         }
 
-        for (final Map.Entry<String, Set<RoutingStrategy.Router>> e : tmp.entrySet())
+        for(final Map.Entry<String, Set<RoutingStrategy.Router>> e: tmp.entrySet())
             outboundsByMessageType.put(e.getKey(), e.getValue().stream().toArray(RoutingStrategy.Router[]::new));
     }
 
@@ -79,7 +79,7 @@ public class ApplicationState {
         }
 
         public boolean change() {
-            return (!(toDelete.size() == 0 && toAdd.size() == 0));
+            return(!(toDelete.size() == 0 && toAdd.size() == 0));
         }
     }
 
@@ -91,15 +91,15 @@ public class ApplicationState {
 
         NodeAddress oursOnTheList = null;
 
-        for (final NodeInformation cur : newState) {
+        for(final NodeInformation cur: newState) {
             final NodeInformation known = current.get(cur.nodeAddress);
-            if (cur.nodeAddress.equals(thisNodeX))
+            if(cur.nodeAddress.equals(thisNodeX))
                 oursOnTheList = cur.nodeAddress;
-            if (known == null) // then we don't know about this one yet.
+            if(known == null) // then we don't know about this one yet.
                 // we need to add this one
                 toAdd.add(cur);
             else {
-                if (!known.equals(cur)) { // known but changed ... we need to add and delete it
+                if(!known.equals(cur)) { // known but changed ... we need to add and delete it
                     toAdd.add(cur);
                     toDelete.add(known.nodeAddress);
                 } else
@@ -111,9 +111,9 @@ public class ApplicationState {
             }
         }
 
-        if (oursOnTheList == null && thisNodeX != null) // we don't seem to have our own address registered with the collaborator.
-                                                        // this condition is actually okay since the Router is started before the
-                                                        // node is registered with the collaborator.
+        if(oursOnTheList == null && thisNodeX != null) // we don't seem to have our own address registered with the collaborator.
+                                                       // this condition is actually okay since the Router is started before the
+                                                       // node is registered with the collaborator.
             OutgoingDispatcher.LOGGER.trace("Router at {} doesn't seem to have its own address registered with the collaborator yet", thisNodeId);
 
         // dump the remaining knownAddrs on the toDelete list
@@ -123,14 +123,14 @@ public class ApplicationState {
     }
 
     public ApplicationState apply(final ApplicationState.Update update, final TransportManager tmanager, final NodeStatsCollector statsCollector,
-            final RoutingStrategyManager manager) {
+        final RoutingStrategyManager manager) {
         // apply toDelete first.
         final Set<NodeAddress> toDelete = update.toDelete;
 
-        if (toDelete.size() > 0) { // just clear all senders.
-            for (final NodeAddress a : toDelete) {
+        if(toDelete.size() > 0) { // just clear all senders.
+            for(final NodeAddress a: toDelete) {
                 final Sender s = senders.get(a);
-                if (s != null)
+                if(s != null)
                     s.stop();
             }
         }
@@ -139,13 +139,13 @@ public class ApplicationState {
 
         // the one's to carry over.
         final Set<NodeInformation> leaveAlone = update.leaveAlone;
-        for (final NodeInformation cur : leaveAlone) {
+        for(final NodeInformation cur: leaveAlone) {
             newCurrent.put(cur.nodeAddress, cur);
         }
 
         // add new senders
         final Set<NodeInformation> toAdd = update.toAdd;
-        for (final NodeInformation cur : toAdd) {
+        for(final NodeInformation cur: toAdd) {
             newCurrent.put(cur.nodeAddress, cur);
         }
 
@@ -160,11 +160,11 @@ public class ApplicationState {
 
         final Set<String> knownClusterOutbounds = new HashSet<>(outboundByClusterName_.keySet());
 
-        for (final ClusterInformation ci : allCis) {
+        for(final ClusterInformation ci: allCis) {
             final String clusterName = ci.clusterId.clusterName;
             final RoutingStrategy.Router ob = outboundByClusterName_.get(clusterName);
             knownClusterOutbounds.remove(clusterName);
-            if (ob != null)
+            if(ob != null)
                 newOutboundByClusterName.put(clusterName, ob);
             else {
                 final RoutingStrategy.Factory obfactory = manager.getAssociatedInstance(ci.routingStrategyTypeId);
@@ -175,7 +175,7 @@ public class ApplicationState {
             // add all of the message types handled.
             ci.messageTypesHandled.forEach(mt -> {
                 Set<String> entry = cnByType.get(mt);
-                if (entry == null) {
+                if(entry == null) {
                     entry = new HashSet<>();
                     cnByType.put(mt, entry);
                 }
@@ -190,7 +190,7 @@ public class ApplicationState {
         outboundByClusterName_.values().forEach(r -> {
             try {
                 r.release();
-            } catch (final RuntimeException rte) {
+            } catch(final RuntimeException rte) {
                 OutgoingDispatcher.LOGGER.warn("Problem while shutting down an outbound router", rte);
             }
         });
@@ -198,7 +198,7 @@ public class ApplicationState {
         final List<Sender> tmps = new ArrayList<>();
 
         // keep removing
-        while (senders.size() > 0)
+        while(senders.size() > 0)
             senders.keySet().forEach(k -> tmps.add(senders.remove(k)));
 
         tmps.forEach(s -> s.stop());
@@ -206,8 +206,8 @@ public class ApplicationState {
 
     public Sender getSender(final NodeAddress na) {
         final Sender ret = senders.get(na);
-        if (ret == null) {
-            if (na.equals(thisNode))
+        if(ret == null) {
+            if(na.equals(thisNode))
                 return null;
             return senders.computeIfAbsent(na, n -> {
                 final SenderFactory sf = tManager.getAssociatedInstance(na.getClass().getPackage().getName());
@@ -222,17 +222,17 @@ public class ApplicationState {
     // =====================================================================
     public boolean canReach(final String cluterName, final KeyedMessageWithType message) {
         final RoutingStrategy.Router ob = outboundByClusterName_.get(cluterName);
-        if (ob == null)
+        if(ob == null)
             return false;
         final ContainerAddress ca = ob.selectDestinationForMessage(message);
-        if (ca == null)
+        if(ca == null)
             return false;
         return true;
     }
 
     public Collection<ContainerAddress> allReachable(final String cluterName) {
         final RoutingStrategy.Router ob = outboundByClusterName_.get(cluterName);
-        if (ob == null)
+        if(ob == null)
             return new ArrayList<>();
         return ob.allDesintations();
     }

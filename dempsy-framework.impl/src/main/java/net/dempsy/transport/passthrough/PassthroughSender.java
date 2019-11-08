@@ -18,14 +18,14 @@ public class PassthroughSender implements Sender {
 
     @Override
     public void send(final Object message) throws MessageTransportException {
-        if (!isRunning) {
-            if (statsCollector != null)
+        if(!isRunning) {
+            if(statsCollector != null)
                 statsCollector.messageNotSent();
             throw new MessageTransportException("send called on stopped PassthroughSender");
         }
 
         reciever.listener.onMessage(message);
-        if (statsCollector != null)
+        if(statsCollector != null)
             statsCollector.messageSent(message);
     }
 
@@ -33,5 +33,10 @@ public class PassthroughSender implements Sender {
     public void stop() {
         isRunning = false;
         owner.imDone(this);
+    }
+
+    @Override
+    public boolean considerMessageOwnsershipTransfered() {
+        return true;
     }
 }

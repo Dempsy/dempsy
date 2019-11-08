@@ -16,6 +16,8 @@
 
 package net.dempsy.container;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,12 +33,16 @@ import net.dempsy.KeyspaceChangeListener;
 import net.dempsy.Service;
 import net.dempsy.config.ClusterId;
 import net.dempsy.messages.Dispatcher;
+import net.dempsy.messages.DummyMessageResourceManager;
 import net.dempsy.messages.KeyedMessage;
+import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.MessageProcessorLifecycle;
+import net.dempsy.messages.MessageResourceManager;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.output.OutputInvoker;
 import net.dempsy.router.RoutingStrategy.Inbound;
+import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.executor.RunningEventSwitch;
 
 /**
@@ -65,6 +71,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     protected boolean isRunningLazy = false;
 
     protected MessageProcessorLifecycle<Object> prototype;
+    protected MessageResourceManager disposition = null;
+    protected boolean hasDisposition = false;
+
     protected ClusterStatsCollector statCollector;
     protected Set<String> messageTypes;
 
@@ -100,7 +109,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
             throw new IllegalArgumentException("The container for cluster(" + clusterId + ") cannot be supplied a null MessageProcessor");
 
         this.prototype = (MessageProcessorLifecycle<Object>)prototype;
-
+        final MessageResourceManager resourceManager = this.prototype.manager();
+        this.hasDisposition = resourceManager != null;
+        this.disposition = hasDisposition ? resourceManager : new DummyMessageResourceManager();
         return this;
     }
 
@@ -194,7 +205,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // ----------------------------------------------------------------------------
 
     // this is called directly from tests but shouldn't be accessed otherwise.
-    public abstract void dispatch(final KeyedMessage message, final boolean block) throws IllegalArgumentException, ContainerException;
+    //
+    // implementations MUST handle the disposition
+    public abstract void dispatch(final KeyedMessage message, final boolean block, boolean justArrived) throws IllegalArgumentException, ContainerException;
 
     protected abstract void doevict(EvictCheck check);
 
@@ -391,6 +404,37 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         if(statCollector == null)
             throw new IllegalStateException("The container must have a " + ClusterStatsCollector.class.getSimpleName() + " id");
+    }
+
+    protected static class Closer implements QuietCloseable {
+        public final MessageResourceManager disposition;
+        public final boolean hasDisposition;
+
+        public List<Object> toFree = new ArrayList<>();
+
+        public Closer(final MessageResourceManager disposition) {
+            this.disposition = disposition;
+            this.hasDisposition = disposition != null;
+        }
+
+        public KeyedMessage add(final KeyedMessage km) {
+            if(hasDisposition)
+                toFree.add(km.message);
+            return km;
+        }
+
+        public List<KeyedMessageWithType> addAll(final List<KeyedMessageWithType> vs) {
+            if(hasDisposition && vs != null)
+                vs.forEach(v -> add(v));
+            return vs;
+        }
+
+        @Override
+        public void close() {
+            if(hasDisposition)
+                toFree.forEach(v -> disposition.dispose(v));
+        }
+
     }
 
 }

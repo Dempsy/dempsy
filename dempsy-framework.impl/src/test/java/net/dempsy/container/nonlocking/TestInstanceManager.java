@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,6 +40,7 @@ import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.MessageProcessorLifecycle;
+import net.dempsy.messages.MessageResourceManager;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.monitoring.basic.BasicClusterStatsCollector;
@@ -97,14 +98,14 @@ public class TestInstanceManager {
 
         @Override
         public boolean equals(final Object o) {
-            return value.equals(((ReturnString) o).value);
+            return value.equals(((ReturnString)o).value);
         }
 
     }
 
     @Mp
     public static class CombinedMP
-            implements Cloneable {
+        implements Cloneable {
         public long activationCount;
         public long activationTime;
 
@@ -113,8 +114,8 @@ public class TestInstanceManager {
 
         @Override
         public CombinedMP clone()
-                throws CloneNotSupportedException {
-            return (CombinedMP) super.clone();
+            throws CloneNotSupportedException {
+            return (CombinedMP)super.clone();
         }
 
         @Activation
@@ -127,7 +128,7 @@ public class TestInstanceManager {
 
         @MessageHandler
         public ReturnString handle(final MessageOne message) {
-            if (firstMessageTime < 0)
+            if(firstMessageTime < 0)
                 firstMessageTime = System.nanoTime();
             messages.add(message);
             return new ReturnString("MessageOne");
@@ -135,7 +136,7 @@ public class TestInstanceManager {
 
         @MessageHandler
         public ReturnString handle(final MessageTwo message) {
-            if (firstMessageTime < 0)
+            if(firstMessageTime < 0)
                 firstMessageTime = System.nanoTime();
             messages.add(message);
             return new ReturnString("MessageTwo");
@@ -157,7 +158,7 @@ public class TestInstanceManager {
 
         @Override
         public boolean equals(final Object o) {
-            return value == ((ReturnInt) o).value;
+            return value == ((ReturnInt)o).value;
         }
     }
 
@@ -167,7 +168,7 @@ public class TestInstanceManager {
 
         @Override
         public OutputTestMP clone() throws CloneNotSupportedException {
-            return (OutputTestMP) super.clone();
+            return (OutputTestMP)super.clone();
         }
 
         @Output
@@ -181,8 +182,8 @@ public class TestInstanceManager {
     public static class UnsuportedMessageTestMP implements Cloneable {
         @Override
         public UnsuportedMessageTestMP clone()
-                throws CloneNotSupportedException {
-            return (UnsuportedMessageTestMP) super.clone();
+            throws CloneNotSupportedException {
+            return (UnsuportedMessageTestMP)super.clone();
         }
 
         @MessageHandler
@@ -201,11 +202,11 @@ public class TestInstanceManager {
 
     @Mp
     public static class NullKeyTestMP
-            implements Cloneable {
+        implements Cloneable {
         @Override
         public NullKeyTestMP clone()
-                throws CloneNotSupportedException {
-            return (NullKeyTestMP) super.clone();
+            throws CloneNotSupportedException {
+            return (NullKeyTestMP)super.clone();
         }
 
         @MessageHandler
@@ -219,7 +220,7 @@ public class TestInstanceManager {
         public KeyExtractor ke;
 
         @Override
-        public void dispatch(final KeyedMessageWithType message) {
+        public void dispatch(final KeyedMessageWithType message, final MessageResourceManager rm) {
             this.lastDispatched = message;
         }
     }
@@ -264,18 +265,18 @@ public class TestInstanceManager {
     public void testOutputCountsOkay() throws Exception {
         final OutputTestMP prototype = new OutputTestMP();
         try (final Container manager = setupContainer(new MessageProcessor<OutputTestMP>(prototype));) {
-            final DummyDispatcher dispatcher = ((DummyDispatcher) manager.getDispatcher());
+            final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             // we need to dispatch messages to create MP instances
             final KeyedMessageWithType message1 = km(new MessageOne(1));
             final KeyedMessageWithType message2 = km(new MessageOne(2));
-            manager.dispatch(message1, true);
-            manager.dispatch(message2, false);
+            manager.dispatch(message1, true, true);
+            manager.dispatch(message2, false, true);
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             manager.invokeOutput();
             assertEquals("number of processed messages should include outputs.", 4,
-                    ((ClusterMetricGetters) statsCollector).getProcessedMessageCount());
+                ((ClusterMetricGetters)statsCollector).getProcessedMessageCount());
         }
     }
 
@@ -283,19 +284,19 @@ public class TestInstanceManager {
     public void testOutputShortCircuitsIfNoOutputMethod() throws Exception {
         final CombinedMP prototype = new CombinedMP();
         final Container manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));
-        final DummyDispatcher dispatcher = ((DummyDispatcher) manager.getDispatcher());
+        final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
         // we need to dispatch messages to create MP instances
         final KeyedMessageWithType message1 = km(new MessageOne(1));
         final KeyedMessageWithType message2 = km(new MessageOne(2));
-        manager.dispatch(message1, true);
-        manager.dispatch(message2, false);
+        manager.dispatch(message1, true, true);
+        manager.dispatch(message2, false, true);
         assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
         manager.invokeOutput();
         // output messages are NOT considered "processed" if there is no output method on the MP.
         assertEquals("number of processed messages should include outputs.", 2,
-                ((ClusterMetricGetters) statsCollector).getProcessedMessageCount());
+            ((ClusterMetricGetters)statsCollector).getProcessedMessageCount());
     }
 
     @Mp
@@ -315,9 +316,9 @@ public class TestInstanceManager {
     public void testMpThrows() throws Exception {
         try (final Container dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
 
-            dispatcher.dispatch(km(new MessageOne(123)), true);
+            dispatcher.dispatch(km(new MessageOne(123)), true, true);
 
-            assertEquals(1, ((ClusterMetricGetters) statsCollector).getMessageFailedCount());
+            assertEquals(1, ((ClusterMetricGetters)statsCollector).getMessageFailedCount());
         }
     }
 }

@@ -42,18 +42,29 @@ public abstract class Dispatcher {
      * a {@link Mp} somewhere in the Dempsy application that the
      * {@link Adaptor} is part of.
      */
-    public abstract void dispatch(KeyedMessageWithType message) throws DempsyException;
+    public abstract void dispatch(KeyedMessageWithType message, MessageResourceManager dispose) throws DempsyException;
+
+    public void dispatch(final KeyedMessageWithType message) {
+        dispatch(message, null);
+    }
+
+    public void dispatchAnnotated(final Object message, final MessageResourceManager dispose)
+        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+
+        dispatch(extractor.extract(message), dispose);
+    }
 
     public void dispatchAnnotated(final Object message) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
-        if(message == null)
-            throw new NullPointerException("Cannot dispatch a null message.");
+        dispatchAnnotated(message, null);
+    }
 
-        dispatch(extractor.extract(message));
+    public void dispatch(final List<KeyedMessageWithType> messages, final MessageResourceManager dispose) {
+        if(messages == null)
+            throw new NullPointerException("Cannot dispatch a null message list.");
+        messages.forEach(v -> dispatch(v, dispose));
     }
 
     public void dispatch(final List<KeyedMessageWithType> messages) {
-        if(messages != null)
-            messages.forEach(v -> dispatch(v));
+        dispatch(messages, null);
     }
-
 }

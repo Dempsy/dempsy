@@ -57,12 +57,12 @@ public final class NioSender implements Sender {
     @Override
     public void send(final Object message) throws MessageTransportException {
         boolean done = false;
-        while (running && !done) {
-            if (running) {
+        while(running && !done) {
+            if(running) {
                 try {
                     // let's not try forever in case we're locked up and shutting down.
                     done = messages.offer(message, 1, TimeUnit.SECONDS);
-                } catch (final InterruptedException ie) {}
+                } catch(final InterruptedException ie) {}
             }
         }
     }
@@ -78,26 +78,26 @@ public final class NioSender implements Sender {
         // we'll keep trying this until everyone realizes we're stopped.
         boolean stillNotDone = true;
         final long stillNotDoneStartTime = System.currentTimeMillis();
-        while (stillNotDone) {
-            for (boolean doneGettingStopMessageQueued = false; !doneGettingStopMessageQueued;) {
+        while(stillNotDone) {
+            for(boolean doneGettingStopMessageQueued = false; !doneGettingStopMessageQueued;) {
                 messages.drainTo(drainTo);
                 doneGettingStopMessageQueued = messages.offer(new StopMessage());
             }
             final long startTime = System.currentTimeMillis();
-            while (stillNotDone) {
-                if (!channel.isOpen() && channel.socket().isClosed())
+            while(stillNotDone) {
+                if(!channel.isOpen() && channel.socket().isClosed())
                     stillNotDone = false;
-                else if ((System.currentTimeMillis() - startTime) > 500)
+                else if((System.currentTimeMillis() - startTime) > 500)
                     break;
                 else
                     dontInterrupt(() -> Thread.sleep(1));
             }
 
             // if X seconds have passed let's just close it from this side and move on.
-            if ((System.currentTimeMillis() - stillNotDoneStartTime) > 3000) {
+            if((System.currentTimeMillis() - stillNotDoneStartTime) > 3000) {
                 stillNotDone = false;
                 NioUtils.closeQuietly(channel, LOGGER, nodeId + " failed directly closing channel from " + NioSender.class);
-                if (!channel.socket().isClosed())
+                if(!channel.socket().isClosed())
                     NioUtils.closeQuietly(channel.socket(), LOGGER, nodeId + " failed directly closing socket from " + NioSender.class);
             }
         }
@@ -107,13 +107,18 @@ public final class NioSender implements Sender {
         owner.imDone(addr);
     }
 
+    @Override
+    public boolean considerMessageOwnsershipTransfered() {
+        return false;
+    }
+
     static class StopMessage {}
 
     void connect(final boolean force) throws IOException {
-        if (!connected || force) {
+        if(!connected || force) {
             channel.configureBlocking(false);
             channel.connect(new InetSocketAddress(addr.inetAddress, addr.port));
-            while (!channel.finishConnect())
+            while(!channel.finishConnect())
                 Thread.yield();
             sendBufferSize = channel.socket().getSendBufferSize();
             recvBufferSize = addr.recvBufferSize;
@@ -126,7 +131,7 @@ public final class NioSender implements Sender {
         final SocketChannel ret = channel;
         try {
             channel = SocketChannel.open();
-        } catch (final IOException e) {
+        } catch(final IOException e) {
             throw new MessageTransportException(e); // this is probably impossible
         }
         return ret;
@@ -135,14 +140,15 @@ public final class NioSender implements Sender {
     private int cachedBatchSize = -1;
 
     int getMaxBatchSize() {
-        if (cachedBatchSize < 0) {
+        if(cachedBatchSize < 0) {
             int ret;
-            if (recvBufferSize <= 0)
+            if(recvBufferSize <= 0)
                 ret = sendBufferSize;
-            else if (sendBufferSize <= 0)
+            else if(sendBufferSize <= 0)
                 ret = recvBufferSize;
-            else ret = Math.min(recvBufferSize, sendBufferSize);
-            if (ret <= 0) {
+            else
+                ret = Math.min(recvBufferSize, sendBufferSize);
+            if(ret <= 0) {
                 LOGGER.warn(nodeId + " sender to " + addr.toString() + " couldn't determine send and receieve buffer sizes. Setting batch size to ");
                 ret = owner.mtu;
             }

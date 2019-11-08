@@ -47,7 +47,7 @@ import net.dempsy.util.SafeString;
  * This class holds the MP prototype, and supports invocation of MP methods on an instance.
  */
 public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
-    private static final Logger LOGGER = LoggerFactory.getLogger(MessageProcessor.class);
+    static final Logger LOGGER = LoggerFactory.getLogger(MessageProcessor.class);
 
     private final T prototype;
     private final Class<?> mpClass;
@@ -257,6 +257,11 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         checkOrInvokeValidStartMethod(true, clusterId);
     }
 
+    @Override
+    public ResourceManager manager() {
+        return new ResourceManager();
+    }
+
     public T getPrototype() {
         return prototype;
     }
@@ -452,4 +457,5 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
             throw new DempsyException(e, true);
         }
     }
+
 }

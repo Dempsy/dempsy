@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,14 +25,16 @@ public interface Sender {
      * from the underlying system correctly. The user of the <em>Sender</em> should not be
      * required to release the sender and reaquire it or another one. The Sender should do
      * that work.
-     * 
+     *
      * @param message
-     *            The pre-serialized message to send
+     *     The pre-serialized message to send
      * @throws MessageTransportException
-     *             indicates that the message wasn't sent.
+     *     indicates that the message wasn't sent.
      */
     public void send(Object message) throws MessageTransportException;
 
     public void stop(); // this should manage everything related to the SenderFactory
+
+    public boolean considerMessageOwnsershipTransfered();
 
 }

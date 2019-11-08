@@ -54,10 +54,10 @@ public class ManagedRouter implements Router, IntConsumer {
     @Override
     public ContainerAddress selectDestinationForMessage(final KeyedMessageWithType message) {
         final ContainerAddress[] destinations = this.destinations.get();
-        if (destinations == null)
+        if(destinations == null)
             throw new DempsyException("It appears the " + ManagedRouter.class.getSimpleName() + " strategy for the message key " +
-                    SafeString.objectDescription(message != null ? message.key : null)
-                    + " is being used prior to initialization or after a failure.");
+                SafeString.objectDescription(message != null ? message.key : null)
+                + " is being used prior to initialization or after a failure.");
 
         return destinations[utils.determineShard(message.key, mask)];
     }
@@ -65,7 +65,7 @@ public class ManagedRouter implements Router, IntConsumer {
     @Override
     public Collection<ContainerAddress> allDesintations() {
         final ContainerAddress[] cur = destinations.get();
-        if (cur == null)
+        if(cur == null)
             return new ArrayList<>();
         return new ArrayList<>(Arrays.stream(cur).filter(ca -> ca != null).collect(Collectors.toSet()));
     }
@@ -86,21 +86,21 @@ public class ManagedRouter implements Router, IntConsumer {
      */
     boolean isReady() {
         final ContainerAddress[] ds = destinations.get();
-        if (ds == null)
+        if(ds == null)
             return false;
-        for (final ContainerAddress d : ds)
-            if (d == null)
+        for(final ContainerAddress d: ds)
+            if(d == null)
                 return false;
         final boolean ret = ds.length != 0; // this method is only called in tests and this needs to be true there.
 
-        if (ret && LOGGER.isDebugEnabled())
+        if(ret && LOGGER.isDebugEnabled())
             LOGGER.debug("at {} to {} is Ready " + shorthand(ds), thisNodeId, clusterId);
 
         return ret;
     }
 
     private static final Set<ContainerAddress> shorthand(final ContainerAddress[] addr) {
-        if (addr == null)
+        if(addr == null)
             return null;
         return Arrays.stream(addr).collect(Collectors.toSet());
     }
