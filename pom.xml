@@ -10,7 +10,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>dempsy-framework.parent</artifactId>
-  <version>0.11.0</version>
+  <version>0.11.1</version>
   <packaging>pom</packaging>
   <name>Distributed Elastic Message Processing - Master Build</name>
 
@@ -29,7 +29,7 @@
   </scm>
 
   <properties>
-    <dempsy-commons-bom.version>2.3.0</dempsy-commons-bom.version>
+    <dempsy-commons-bom.version>2.3.1</dempsy-commons-bom.version>
     <spring.version>5.1.3.RELEASE</spring.version>
     <metrics.version>3.2.2</metrics.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

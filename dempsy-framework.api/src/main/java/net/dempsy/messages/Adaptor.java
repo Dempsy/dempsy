@@ -27,6 +27,8 @@ public interface Adaptor extends AutoCloseable {
      * This will be called by Dempsy to provide the {@link Dispatcher} to the
      * Adaptor. Any object that is the Dispatched will be sent to message
      * processors.
+     *
+     * DO NOT use the dispatcher prior to start being called.
      */
     public void setDispatcher(Dispatcher dispatcher);
 

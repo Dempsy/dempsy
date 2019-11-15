@@ -278,11 +278,11 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         // setup the output executors by passing the containers
         containers.stream().filter(pc -> pc.outputScheduler != null).forEach(pc -> pc.outputScheduler.setOutputInvoker(pc.container));
 
-        // start containers after setting inbound
-        containers.forEach(pc -> tr.start(pc.container.setInbound(pc.inboundStrategy), this));
-
         // set up adaptors
         adaptors.values().forEach(a -> a.setDispatcher(router));
+
+        // start containers after setting inbound
+        containers.forEach(pc -> tr.start(pc.container.setInbound(pc.inboundStrategy), this));
 
         // start the output schedulers now that the containers have been started.
         containers.stream().map(pc -> pc.outputScheduler).filter(os -> os != null).forEach(os -> tr.start(os, this));
