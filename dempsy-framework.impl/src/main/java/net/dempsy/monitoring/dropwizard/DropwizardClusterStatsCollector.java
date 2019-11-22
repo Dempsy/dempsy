@@ -15,6 +15,7 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     public static final String MESSAGES_PROCESSED = "messages-processed";
     public static final String MESSAGES_FAILED = "messages-failed";
     public static final String MESSAGES_COLLISION = "messages-collision";
+    public static final String MESSAGES_DISCARDED = "messages-discarded";
     public static final String MESSAGES_PROCESSOR_CREATED = "messages-processor-created";
     public static final String MESSAGES_PROCESSOR_DELETED = "messages-processor-deleted";
     public static final String OUTPUT_INVOKE_STARTED_TIMER = "output-invoke-started-timer";
@@ -22,15 +23,16 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     public static final String PRE_INSTANTIATION_STARTED_TIMER = "pre-instantiation-started-timer";
 
     public static final String[] METRIC_NAMES = new String[] {
-            MESSAGES_DISPATCHED,
-            MESSAGES_PROCESSED,
-            MESSAGES_FAILED,
-            MESSAGES_COLLISION,
-            MESSAGES_PROCESSOR_CREATED,
-            MESSAGES_PROCESSOR_DELETED,
-            OUTPUT_INVOKE_STARTED_TIMER,
-            EVICTION_PASS_STARTED_TIMER,
-            PRE_INSTANTIATION_STARTED_TIMER
+        MESSAGES_DISPATCHED,
+        MESSAGES_PROCESSED,
+        MESSAGES_FAILED,
+        MESSAGES_COLLISION,
+        MESSAGES_DISCARDED,
+        MESSAGES_PROCESSOR_CREATED,
+        MESSAGES_PROCESSOR_DELETED,
+        OUTPUT_INVOKE_STARTED_TIMER,
+        EVICTION_PASS_STARTED_TIMER,
+        PRE_INSTANTIATION_STARTED_TIMER
     };
 
     private static class DropwizardTimerContext implements StatsCollector.TimerContext {
@@ -55,6 +57,7 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     private final Meter messageProcessed;
     private final Meter messageFailed;
     private final Meter messageCollision;
+    private final Meter messageDiscarded;
     private final Meter messageProcessorCreated;
     private final Meter messageProcessorDeleted;
 
@@ -68,6 +71,7 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
         messageProcessed = registry.meter(getName(MESSAGES_PROCESSED));
         messageFailed = registry.meter(getName(MESSAGES_FAILED));
         messageCollision = registry.meter(getName(MESSAGES_COLLISION));
+        messageDiscarded = registry.meter(getName(MESSAGES_DISCARDED));
         messageProcessorCreated = registry.meter(getName(MESSAGES_PROCESSOR_CREATED));
         messageProcessorDeleted = registry.meter(getName(MESSAGES_PROCESSOR_DELETED));
     }
@@ -93,6 +97,11 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     }
 
     @Override
+    public void messageDiscarded(final Object message) {
+        messageDiscarded.mark();
+    }
+
+    @Override
     public void messageProcessorCreated(final Object key) {
         messageProcessorCreated.mark();
     }
@@ -105,7 +114,7 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     @Override
     public void stop() {
         // Remove the metrics from the registry
-        for (final String m : METRIC_NAMES) {
+        for(final String m: METRIC_NAMES) {
             registry.remove(getName(m));
         }
     }

@@ -30,11 +30,8 @@ public interface ThreadingModel extends AutoCloseable {
     /**
      * This method queues {@link Callable}s that can expire or have some maximum number allowed.
      * Normal message processing falls into this category since 'shedding' is the standard behavior.
-     *
-     * If counting is {@code true} then the ThreadingModel should queue it without counting it against
-     * the maximum capacity.
      */
-    public <V> Future<V> submitLimited(Rejectable<V> r, boolean justArrived);
+    public <V> Future<V> submitLimited(Rejectable<V> r);
 
     /**
      * Schedule a task to be executed at some time in the future.
@@ -79,5 +76,4 @@ public interface ThreadingModel extends AutoCloseable {
      * This return value may not be valid prior to start().
      */
     public int getNumThreads();
-
 }

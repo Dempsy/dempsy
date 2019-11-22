@@ -20,6 +20,9 @@ public class DummyClusterStatsCollector implements ClusterStatsCollector {
     public void messageCollision(final Object message) {}
 
     @Override
+    public void messageDiscarded(final Object message) {}
+
+    @Override
     public void messageProcessorCreated(final Object key) {}
 
     @Override

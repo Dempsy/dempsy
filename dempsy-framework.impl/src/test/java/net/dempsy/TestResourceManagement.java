@@ -29,12 +29,12 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 import io.netty.util.internal.ConcurrentSet;
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
+import net.dempsy.lifecycle.annotation.AbstractResource;
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.MessageHandler;
 import net.dempsy.lifecycle.annotation.MessageKey;
 import net.dempsy.lifecycle.annotation.MessageType;
 import net.dempsy.lifecycle.annotation.Mp;
-import net.dempsy.lifecycle.annotation.AbstractResource;
 import net.dempsy.lifecycle.annotation.ResourceManager;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
@@ -322,7 +322,7 @@ public class TestResourceManagement extends DempsyBaseTest {
                     assertTrue(poll(o -> adaptor.done.get()));
                     assertTrue(poll(o -> {
                         // System.out.println("" + adaptor.numDispatched + " == " + stats.getProcessedMessageCount());
-                        return adaptor.numDispatched == stats.getProcessedMessageCount();
+                        return adaptor.numDispatched == stats.getProcessedMessageCount() + stats.getMessageDiscardedCount();
                     }));
 
                     // check that all of the Word instances have been freed

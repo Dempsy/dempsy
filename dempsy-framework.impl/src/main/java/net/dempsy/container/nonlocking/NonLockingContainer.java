@@ -56,8 +56,6 @@ import net.dempsy.util.StupidHashMap;
  */
 public class NonLockingContainer extends Container {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonLockingContainer.class);
-    // This is a bad idea but only used to gate trace logging the invocation.
-    private static final boolean traceEnabled = LOGGER.isTraceEnabled();
 
     private final StupidHashMap<Object, WorkingPlaceholder> working = new StupidHashMap<>();
     private final StupidHashMap<Object, Object> instances = new StupidHashMap<>();
@@ -228,148 +226,143 @@ public class NonLockingContainer extends Container {
     }
 
     @Override
-    public void dispatch(final KeyedMessage message, final boolean block, final boolean justArrived) throws IllegalArgumentException, ContainerException {
+    public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(false);
         }
 
-        if(message == null)
+        if(keyedMessage == null)
             return; // No. We didn't process the null message
 
-        if(message.message == null)
+        if(keyedMessage.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
-        if(message.key == null) {
-            disposition.dispose(message.message);
-            throw new ContainerException("Message " + objectDescription(message.message) + " contains no key.");
+        final Object actualMessage = youOwnMessage ? keyedMessage.message : disposition.replicate(keyedMessage.message);
+        final Object messageKey = keyedMessage.key;
+
+        if(messageKey == null) {
+            disposition.dispose(actualMessage);
+            throw new ContainerException("Message " + objectDescription(actualMessage) + " contains no key.");
         }
 
-        if(!inbound.doesMessageKeyBelongToNode(message.key)) {
+        if(!inbound.doesMessageKeyBelongToNode(messageKey)) {
+            disposition.dispose(actualMessage);
             if(LOGGER.isDebugEnabled())
-                LOGGER.debug("Message with key " + SafeString.objectDescription(message.key) + " sent to wrong container. ");
+                LOGGER.debug("Message with key " + SafeString.objectDescription(messageKey) + " sent to wrong container. ");
             statCollector.messageFailed(false);
-            disposition.dispose(message.message);
             return;
         }
 
-        final Object key = message.key;
-
-        boolean keepTrying = true;
-        while(keepTrying) {
+        for(boolean keepTrying = true; keepTrying;) {
 
             final MutRef<WorkingPlaceholder> wph = new MutRef<>();
-            final WorkingPlaceholder alreadyThere = putIfAbsent(working, key, () -> wph.set(new WorkingPlaceholder()));
+            final WorkingPlaceholder alreadyThere = putIfAbsent(working, messageKey, () -> wph.set(new WorkingPlaceholder()));
 
             if(alreadyThere == null) { // we're it!
-                final WorkingPlaceholder wp = wph.ref;
                 keepTrying = false; // we're not going to keep trying.
-                List<KeyedMessageWithType> responseX = null; // these will be dispatched while NOT having the lock
-                try { // if we don't get the WorkingPlaceholder out of the working map then that Mp will forever be lost.
-                    numBeingWorked.incrementAndGet(); // we're working one.
+                final WorkingPlaceholder wp = wph.ref;
+                try (Closer resultsDisposerCloser = new Closer(disposition);) {
+                    List<KeyedMessageWithType> responseX = null; // these will be dispatched while NOT having the lock
+                    try { // if we don't get the WorkingPlaceholder out of the working map then that Mp will forever be lost.
+                        numBeingWorked.incrementAndGet(); // we're working one.
 
-                    Object instance = instances.get(key);
-                    if(instance == null) {
+                        Object instance = instances.get(messageKey);
+                        if(instance == null) {
+                            try {
+                                // this can throw
+                                instance = createAndActivate(messageKey);
+                            } catch(final RuntimeException e) { // container or runtime exception
+                                // This will drain the swamp
+                                LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(messageKey), e);
+                                instance = null;
+                            }
+                        }
+
+                        if(instance == null) { // activation or creation failed.
+                            numBeingWorked.decrementAndGet(); // decrement for this one
+                            disposition.dispose(actualMessage); // dispose of this one.
+                            LOGGER.debug("Can't handle message {} because the creation of the Mp seems to have failed.",
+                                SafeString.objectDescription(messageKey));
+                            // this container has already marked the message as failed
+                            final WorkingQueueHolder mailbox = getQueue(wp);
+                            if(mailbox.queue != null) {
+                                mailbox.queue.forEach(m -> {
+                                    disposition.dispose(m.message);
+                                    LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(m.key));
+                                    statCollector.messageFailed(true);
+                                    numBeingWorked.decrementAndGet(); // decrement for each in the queue
+                                });
+                            }
+                        } else {
+                            KeyedMessage curMessage = new KeyedMessage(messageKey, actualMessage);
+                            do { // curMessage can't be null the first time, hence do/while
+                                final List<KeyedMessageWithType> resp = invokeOperationAndHandleDisposeAndReturn(resultsDisposerCloser, instance,
+                                    Operation.handle, curMessage);
+                                if(resp != null) { // these responses will be dispatched after we release the lock.
+                                    if(responseX == null)
+                                        responseX = new ArrayList<>();
+                                    responseX.addAll(resp);
+                                }
+
+                                numBeingWorked.decrementAndGet(); // decrement the initial increment.
+
+                                // work off the queue.
+                                final WorkingQueueHolder mailbox = getQueue(wp); // spin until I have it.
+                                if(mailbox.queue != null && mailbox.queue.size() > 0) { // if there are messages in the queue
+                                    curMessage = mailbox.queue.removeFirst(); // take a message off the queue
+                                    // curMessage CAN'T be NULL!!!!
+
+                                    // releasing the lock on the mailbox ... we're ready to process 'curMessage' on the next loop
+                                    wp.mailbox.set(mailbox);
+                                } else {
+                                    curMessage = null;
+                                    // (1) NOTE: DON'T put the queue back. This will prevent ALL other threads trying to drop a message
+                                    // in this box. When an alternate thread tries to open the mailbox to put a message in, if it can't,
+                                    // because THIS thread's left it locked, the other thread starts the process from the beginning
+                                    // re-attempting to get exclusive control over the Mp. In other words, the other thread only makes
+                                    // a single attempt and if it fails it goes back to attempting to get the Mp from the beginning.
+                                    //
+                                    // This thread cannot give up the current Mp if there's a potential for any data to end up in the
+                                    // queue. Since we're about to give up the Mp we cannot allow the mailbox to become available
+                                    // therefore we cannot allow any other threads to spin on it.
+                                }
+                            } while(curMessage != null);
+                        }
+                    } finally {
+                        if(working.remove(messageKey) == null)
+                            LOGGER.error("IMPOSSIBLE! Null key removed from working set.", new RuntimeException());
+                    }
+                    if(responseX != null) {
                         try {
-                            // this can throw
-                            instance = createAndActivate(key);
-                        } catch(final RuntimeException e) { // container or runtime exception
-                            // This will drain the swamp
-                            LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(message.key), e);
-                            instance = null;
+                            dispatcher.dispatch(responseX, hasDisposition ? disposition : null);
+                        } catch(final Exception de) {
+                            LOGGER.warn("Failed on subsequent dispatch of " + responseX + ": " + de.getLocalizedMessage());
                         }
                     }
-
-                    if(instance == null) { // activation or creation failed.
-                        numBeingWorked.decrementAndGet(); // decrement for this one
-                        disposition.dispose(message.message); // dispose of this one.
-                        LOGGER.debug("Can't handle message {} because the creation of the Mp seems to have failed.", SafeString.objectDescription(key));
-                        // this container has already marked the message as failed
-                        final WorkingQueueHolder mailbox = getQueue(wp);
-                        if(mailbox.queue != null) {
-                            mailbox.queue.forEach(m -> {
-                                disposition.dispose(m.message);
-                                LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(m.key));
-                                statCollector.messageFailed(true);
-                                numBeingWorked.decrementAndGet(); // decrement for each in the queue
-                            });
-                        }
-                    } else {
-                        KeyedMessage curMessage = message;
-                        do { // curMessage can't be null the first time, hence do/while
-                            final List<KeyedMessageWithType> resp = invokeOperationAndHandleDispose(instance, Operation.handle, curMessage);
-                            if(resp != null) { // these responses will be dispatched after we release the lock.
-                                if(responseX == null)
-                                    responseX = new ArrayList<>();
-                                responseX.addAll(resp);
-                            }
-
-                            numBeingWorked.decrementAndGet(); // decrement the initial increment.
-
-                            // work off the queue.
-                            final WorkingQueueHolder mailbox = getQueue(wp); // spin until I have it.
-                            if(mailbox.queue != null && mailbox.queue.size() > 0) { // if there are messages in the queue
-                                curMessage = mailbox.queue.removeFirst(); // take a message off the queue
-                                // curMessage CAN'T be NULL!!!!
-
-                                // releasing the lock on the mailbox ... we're ready to process 'curMessage' on the next loop
-                                wp.mailbox.set(mailbox);
-                            } else {
-                                curMessage = null;
-                                // (1) NOTE: DON'T put the queue back. This will prevent ALL other threads trying to drop a message
-                                // in this box. When an alternate thread tries to open the mailbox to put a message in, if it can't,
-                                // because THIS thread's left it locked, the other thread starts the process from the beginning
-                                // re-attempting to get exclusive control over the Mp. In other words, the other thread only makes
-                                // a single attempt and if it fails it goes back to attempting to get the Mp from the beginning.
-                                //
-                                // This thread cannot give up the current Mp if there's a potential for any data to end up in the
-                                // queue. Since we're about to give up the Mp we cannot allow the mailbox to become available
-                                // therefore we cannot allow any other threads to spin on it.
-                            }
-                        } while(curMessage != null);
-                    }
-                } finally {
-                    if(working.remove(key) == null)
-                        LOGGER.error("IMPOSSIBLE! Null key removed from working set.", new RuntimeException());
-                }
-                if(responseX != null) {
-                    try {
-                        dispatcher.dispatch(responseX, disposition);
-                    } catch(final Exception de) {
-                        LOGGER.warn("Failed on subsequent dispatch of " + responseX + ": " + de.getLocalizedMessage());
-                    }
-                }
+                } // free resources as needed
             } else { // ... we didn't get the lock
-                if(!block) { // blocking means no collisions allowed.
-                    disposition.dispose(message.message);
-                    if(LOGGER.isTraceEnabled())
-                        LOGGER.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
-                    statCollector.messageCollision(message);
-                    keepTrying = false;
-                } else {
-                    // try and get the queue.
-                    final WorkingQueueHolder mailbox = alreadyThere.mailbox.getAndSet(null);
+                     // try and get the queue.
+                final WorkingQueueHolder mailbox = alreadyThere.mailbox.getAndSet(null);
 
-                    if(mailbox != null) { // we got the queue!
-                        try {
-                            keepTrying = false;
-                            // drop a message in the mailbox queue and mark it as being worked.
-                            numBeingWorked.incrementAndGet();
-                            if(mailbox.queue == null)
-                                mailbox.queue = new LinkedList<>();
-                            mailbox.queue.add(message);
-                        } finally {
-                            // put it back - releasing the lock
-                            alreadyThere.mailbox.set(mailbox);
-                        }
-                    } else { // if we didn't get the queue, we need to start completely over.
-                             // otherwise there's a potential race condition - see the note at (1).
-                        // we failed to get the queue ... maybe we'll have better luck next time.
+                if(mailbox != null) { // we got the queue!
+                    try {
+                        keepTrying = false;
+                        // drop a message in the mailbox queue and mark it as being worked.
+                        numBeingWorked.incrementAndGet();
+                        if(mailbox.queue == null)
+                            mailbox.queue = new LinkedList<>();
+                        mailbox.queue.add(new KeyedMessage(messageKey, actualMessage));
+                    } finally {
+                        // put it back - releasing the lock
+                        alreadyThere.mailbox.set(mailbox);
                     }
-                } // we didn't get the lock and we're blocking and we're now done handling the mailbox
+                } else { // if we didn't get the queue, we need to start completely over.
+                         // otherwise there's a potential race condition - see the note at (1).
+                    // we failed to get the queue ... maybe we'll have better luck next time.
+                }
             } // we didn't get the lock so we tried the mailbox (or ended becasuse we're non-blocking)
         } // keep working
-
     }
 
     @Override
@@ -488,12 +481,9 @@ public class NonLockingContainer extends Container {
 
                             @Override
                             public void run() {
-                                final List<KeyedMessageWithType> response;
                                 try {
                                     if(isRunning.get())
-                                        response = invokeOperationAndHandleDispose(instance, Operation.output, null);
-                                    else
-                                        response = null;
+                                        invokeOperationAndHandleDispose(instance, Operation.output, null);
                                 } finally {
                                     working.remove(key); // releases this back to the world
 
@@ -504,15 +494,6 @@ public class NonLockingContainer extends Container {
                                     }
                                     if(taskSepaphore != null)
                                         taskSepaphore.release();
-                                }
-
-                                if(response != null) {
-                                    try {
-                                        dispatcher.dispatch(response, disposition);
-                                    } catch(final Exception de) {
-                                        if(isRunning.get())
-                                            LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
-                                    }
                                 }
                             }
                         };
@@ -557,7 +538,10 @@ public class NonLockingContainer extends Container {
         synchronized(numExecutingOutputs) {
             while(numExecutingOutputs.get() > 0) {
                 try {
-                    numExecutingOutputs.wait();
+                    numExecutingOutputs.wait(300);
+                    // If the executor gets shut down we wont know, so we need to check once in a while
+                    if(!isRunning.get())
+                        break;
                 } catch(final InterruptedException e) {
                     // if we were interrupted for a shutdown then just stop
                     // waiting for all of the threads to finish
@@ -577,67 +561,4 @@ public class NonLockingContainer extends Container {
             outputPass();
         }
     }
-
-    // ----------------------------------------------------------------------------
-    // Internals
-    // ----------------------------------------------------------------------------
-
-    public enum Operation {
-        handle, output
-    };
-
-    /**
-     * helper method to invoke an operation (handle a message or run output) handling all of the exceptions and forwarding any results.
-     */
-    private List<KeyedMessageWithType> invokeOperationAndHandleDispose(final Object instance, final Operation op, final KeyedMessage message) {
-        try {
-            if(instance != null) { // possibly passivated ...
-                List<KeyedMessageWithType> result;
-                try {
-                    if(traceEnabled)
-                        LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
-                    statCollector.messageDispatched(message);
-                    result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message);
-                    statCollector.messageProcessed(message);
-                } catch(final ContainerException e) {
-                    result = null;
-                    LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
-                        SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
-                    statCollector.messageFailed(false);
-                }
-                // this is an exception thrown as a result of the reflected call having an illegal argument.
-                // This should actually be impossible since the container itself manages the calling.
-                catch(final IllegalArgumentException e) {
-                    result = null;
-                    LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
-                        e);
-                    statCollector.messageFailed(true);
-                }
-                // The app threw an exception.
-                catch(final DempsyException e) {
-                    result = null;
-                    LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " because an exception was thrown by the Message Processeor itself.", e);
-                    statCollector.messageFailed(true);
-                }
-                // RuntimeExceptions bookeeping
-                catch(final RuntimeException e) {
-                    result = null;
-                    LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to an unknown exception.", e);
-                    statCollector.messageFailed(false);
-
-                    if(op == Operation.handle)
-                        throw e;
-                }
-                return result;
-            }
-            return null;
-        } finally {
-            if(message != null)
-                disposition.dispose(message.message);
-        }
-    }
-
 }

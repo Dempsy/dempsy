@@ -139,7 +139,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                         + " contains an adaptor but also has an output executor set. The output executor will never be used.");
             } else {
                 final Container con = makeContainer(node.getContainerTypeId()).setMessageProcessor(c.getMessageProcessor())
-                    .setClusterId(c.getClusterId());
+                    .setClusterId(c.getClusterId()).setMaxPendingMessagesPerContainer(c.getMaxPendingMessagesPerContainer());
 
                 // TODO: This is a hack for now.
                 final Manager<RoutingStrategy.Inbound> inboundManager = new RoutingInboundManager();

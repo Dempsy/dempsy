@@ -270,8 +270,8 @@ public class TestInstanceManager {
             // we need to dispatch messages to create MP instances
             final KeyedMessageWithType message1 = km(new MessageOne(1));
             final KeyedMessageWithType message2 = km(new MessageOne(2));
-            manager.dispatch(message1, true, true);
-            manager.dispatch(message2, false, true);
+            manager.dispatch(message1, true);
+            manager.dispatch(message2, true);
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             manager.invokeOutput();
@@ -289,8 +289,8 @@ public class TestInstanceManager {
         // we need to dispatch messages to create MP instances
         final KeyedMessageWithType message1 = km(new MessageOne(1));
         final KeyedMessageWithType message2 = km(new MessageOne(2));
-        manager.dispatch(message1, true, true);
-        manager.dispatch(message2, false, true);
+        manager.dispatch(message1, true);
+        manager.dispatch(message2, true);
         assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
         manager.invokeOutput();
@@ -316,7 +316,7 @@ public class TestInstanceManager {
     public void testMpThrows() throws Exception {
         try (final Container dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
 
-            dispatcher.dispatch(km(new MessageOne(123)), true, true);
+            dispatcher.dispatch(km(new MessageOne(123)), true);
 
             assertEquals(1, ((ClusterMetricGetters)statsCollector).getMessageFailedCount());
         }

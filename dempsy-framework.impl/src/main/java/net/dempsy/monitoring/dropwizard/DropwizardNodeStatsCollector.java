@@ -20,17 +20,17 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
     public static final String MESSAGES_OUT_PENDING_GAUGE = "messages-out-pending-gauge";
 
     public static final String[] METRIC_NAMES = new String[] {
-            MESSAGE_RECEIVED,
-            MESSAGE_DISCARDED,
-            MESSAGE_SENT,
-            MESSAGE_NOT_SENT,
-            MESSAGES_PENDING_GAUGE,
-            MESSAGES_OUT_PENDING_GAUGE
+        MESSAGE_RECEIVED,
+        MESSAGE_DISCARDED,
+        MESSAGE_SENT,
+        MESSAGE_NOT_SENT,
+        MESSAGES_PENDING_GAUGE,
+        MESSAGES_OUT_PENDING_GAUGE
     };
 
-    private List<DropwizardReporterSpec> reporters = new ArrayList<>();
+    private List<DropwizardReporterRegistrar> reporters = new ArrayList<>();
 
-    private DropwizardStatsReporter reporter;
+    private DropwizardStatsReporter reporter = null;
 
     private String nodeId;
     private final MetricRegistry registry;
@@ -53,17 +53,18 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
         reporter = new DropwizardStatsReporter(this.nodeId, reporters);
     }
 
-    public void setReporters(final List<DropwizardReporterSpec> reporters) {
+    public void setReporterRegisrars(final List<DropwizardReporterRegistrar> reporters) {
         this.reporters = reporters;
     }
 
     @Override
     public void stop() {
         // Stop the reporters
-        reporter.stopReporters();
+        if(reporter != null) // it's possible to have stop called before starting
+            reporter.stopReporters();
 
         // Remove the metrics from the registry
-        for (final String m : METRIC_NAMES) {
+        for(final String m: METRIC_NAMES) {
             registry.remove(getName(m));
         }
     }
@@ -92,7 +93,7 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
     public void setMessagesPendingGauge(final LongSupplier currentMessagesPendingGauge) {
         final String gaugeName = getName(MESSAGES_PENDING_GAUGE);
         // If the registry doesn't already have this gauge, then add it.
-        if (!registry.getGauges().containsKey(gaugeName)) {
+        if(!registry.getGauges().containsKey(gaugeName)) {
             registry.register(gaugeName, new com.codahale.metrics.Gauge<Long>() {
                 @Override
                 public Long getValue() {
@@ -106,7 +107,7 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
     public void setMessagesOutPendingGauge(final LongSupplier currentMessagesOutPendingGauge) {
         final String gaugeName = getName(MESSAGES_OUT_PENDING_GAUGE);
         // If the registry doesn't already have this gauge, then add it.
-        if (!registry.getGauges().containsKey(gaugeName)) {
+        if(!registry.getGauges().containsKey(gaugeName)) {
             registry.register(gaugeName, new com.codahale.metrics.Gauge<Long>() {
                 @Override
                 public Long getValue() {

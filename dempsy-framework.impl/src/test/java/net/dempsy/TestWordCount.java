@@ -25,10 +25,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.io.IOUtils;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -57,11 +57,18 @@ public class TestWordCount extends DempsyBaseTest {
 
     public static final String wordResource = "word-count/AV1611Bible.txt.gz";
 
+    // This is because strict comparisons of message emitted when there is a very small limit
+    // on the container queuing under a fast (in-process) asynchronous (i.e. BlockingQueue)
+    // transport can't guarantee predictable results. This is set to 'false' in this child test
+    // TestWordCountLimitedContainerQueue
+    protected boolean strict = true;
+
     public static String readBible() throws IOException {
-        final InputStream is = new GZIPInputStream(new BufferedInputStream(WordProducer.class.getClassLoader().getResourceAsStream(wordResource)));
-        final StringWriter writer = new StringWriter();
-        IOUtils.copy(is, writer);
-        return writer.toString();
+        try (final InputStream is = new GZIPInputStream(new BufferedInputStream(WordProducer.class.getClassLoader().getResourceAsStream(wordResource)));
+            final StringWriter writer = new StringWriter();) {
+            IOUtils.copy(is, writer);
+            return writer.toString();
+        }
     }
 
     public TestWordCount(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
@@ -69,15 +76,14 @@ public class TestWordCount extends DempsyBaseTest {
         super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
     }
 
+    protected TestWordCount(final Logger logger, final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
+        super(logger, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
+    }
+
     @Before
     public void setup() {
         WordProducer.latch = new CountDownLatch(0);
-    }
-
-    @AfterClass
-    public static void cleanup() {
-        WordProducer.strings = null;
-        LOGGER.debug("cleaned up");
     }
 
     // ========================================================================
@@ -386,7 +392,7 @@ public class TestWordCount extends DempsyBaseTest {
     Set<String> finalResults = new HashSet<String>();
 
     {
-        finalResults.addAll(Arrays.asList("the", "and", "of", "to", "And", "in", "that", "he", "shall", "unto", "I"));
+        finalResults.addAll(Arrays.asList("the", "and", "of", "to", "And", "in", "that", "he", "shall", "unto", "I", "his"));
     }
 
     @Test
@@ -419,7 +425,7 @@ public class TestWordCount extends DempsyBaseTest {
                 assertTrue(poll(o -> adaptor.done.get()));
                 assertTrue(poll(o -> {
                     // System.out.println("" + adaptor.numDispatched + " == " + stats.getProcessedMessageCount());
-                    return adaptor.numDispatched == stats.getProcessedMessageCount();
+                    return adaptor.numDispatched == (stats.getProcessedMessageCount() + stats.getMessageDiscardedCount());
                 }));
             });
         }
@@ -455,12 +461,14 @@ public class TestWordCount extends DempsyBaseTest {
                 stats = (ClusterMetricGetters)manager.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
 
                 assertTrue(poll(o -> adaptor.done.get()));
-                assertTrue(poll(o -> adaptor.numDispatched == stats.getProcessedMessageCount()));
+                final long messagesDiscardedAtFirstStage = stats.getMessageDiscardedCount();
+                assertTrue(poll(o -> adaptor.numDispatched == stats.getProcessedMessageCount() + messagesDiscardedAtFirstStage));
 
                 // wait until all of the counts are also passed to WordRank
                 final ClusterMetricGetters wrStats = (ClusterMetricGetters)manager
                     .getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2"));
-                assertTrue(poll(wrStats, s -> adaptor.numDispatched == s.getProcessedMessageCount()));
+                assertTrue(poll(wrStats,
+                    s -> (adaptor.numDispatched - messagesDiscardedAtFirstStage) == (s.getProcessedMessageCount() + s.getMessageDiscardedCount())));
 
                 stopSystem();
 
@@ -472,7 +480,9 @@ public class TestWordCount extends DempsyBaseTest {
                 Collections.sort(ranks, (o1, o2) -> o2.rank.compareTo(o1.rank));
 
                 final List<Rank> top10 = ranks.subList(0, 10);
-                top10.forEach(r -> assertTrue(finalResults.contains(r.word)));
+                System.out.println(top10);
+                top10.stream()
+                    .forEach(r -> assertTrue(finalResults.contains(r.word)));
             });
         }
     }
@@ -522,7 +532,8 @@ public class TestWordCount extends DempsyBaseTest {
                 assertTrue(waitForAllSent(adaptor));
                 assertTrue(poll(o -> {
                     // System.out.println(stats[0].getProcessedMessageCount() + ", " + stats[1].getProcessedMessageCount());
-                    return adaptor.numDispatched == Arrays.stream(stats).map(c -> c.getProcessedMessageCount())
+                    return adaptor.numDispatched == Arrays.stream(stats)
+                        .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
                         .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
             });
@@ -566,7 +577,8 @@ public class TestWordCount extends DempsyBaseTest {
                 waitForAllSent(adaptor);
                 assertTrue(poll(o -> adaptor.done.get()));
                 assertTrue(poll(o -> {
-                    return adaptor.numDispatched == stats.stream().map(c -> c.getProcessedMessageCount())
+                    return adaptor.numDispatched == stats.stream()
+                        .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
                         .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
             });
@@ -618,7 +630,7 @@ public class TestWordCount extends DempsyBaseTest {
                 // now wait for the sum of all messages received by the ranking to be the number sent
                 assertTrue(poll(o -> {
                     final int totalRanked = rankStats.stream()
-                        .map(sc -> Integer.valueOf((int)sc.getDispatchedMessageCount()))
+                        .map(sc -> Integer.valueOf((int)sc.getDispatchedMessageCount() + (int)sc.getMessageDiscardedCount()))
                         .reduce(Integer.valueOf(0), (i1, i2) -> Integer.valueOf(i1.intValue() + i2.intValue())).intValue();
                     return totalRanked == totalSent;
                 }));
@@ -697,20 +709,22 @@ public class TestWordCount extends DempsyBaseTest {
                 final MessageProcessorLifecycle<?> mp = AccessUtil.getMp(manager, "test-cluster3");
                 @SuppressWarnings("unchecked")
                 final RankCatcher prototype = ((MessageProcessor<RankCatcher>)mp).getPrototype();
-                final HashSet<String> expected = new HashSet<>(Arrays.asList("the", "that", "unto", "in", "and", "And", "of", "shall", "to", "he"));
-                assertTrue(() -> {
-                    return "FAILURE:" + expected.toString() + " != " + prototype.topRef.get();
-                }, poll(prototype.topRef, tr -> {
-                    final List<Rank> cur = tr.get();
-                    final HashSet<String> topSet = new HashSet<>(cur.stream().map(r -> r.word).collect(Collectors.toSet()));
-                    // once more than 1/2 of the list is there then we're done.
-                    final int threshold = (expected.size() / 2) + 1;
-                    int matches = 0;
-                    for(final String exp: expected)
-                        if(topSet.contains(exp))
-                            matches++;
-                    return matches >= threshold;
-                }));
+                if(strict) {
+                    final HashSet<String> expected = new HashSet<>(Arrays.asList("the", "that", "unto", "in", "and", "And", "of", "shall", "to", "he"));
+                    assertTrue(() -> {
+                        return "FAILURE:" + expected.toString() + " != " + prototype.topRef.get();
+                    }, poll(prototype.topRef, tr -> {
+                        final List<Rank> cur = tr.get();
+                        final HashSet<String> topSet = new HashSet<>(cur.stream().map(r -> r.word).collect(Collectors.toSet()));
+                        // once more than 1/2 of the list is there then we're done.
+                        final int threshold = (expected.size() / 2) + 1;
+                        int matches = 0;
+                        for(final String exp: expected)
+                            if(topSet.contains(exp))
+                                matches++;
+                        return matches >= threshold;
+                    }));
+                }
             });
         }
 

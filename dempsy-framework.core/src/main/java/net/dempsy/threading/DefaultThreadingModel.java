@@ -76,11 +76,11 @@ public class DefaultThreadingModel implements ThreadingModel {
      * <p>
      * Prior to calling start you can set the cores factor and additional cores. Ultimately the number of threads in the pool will be given by:
      * </p>
-     * 
+     *
      * <p>
      * num threads = m * num cores + b
      * </p>
-     * 
+     *
      * <p>
      * Where 'm' is set by setCoresFactor and 'b' is set by setAdditionalThreads
      * </p>
@@ -94,11 +94,11 @@ public class DefaultThreadingModel implements ThreadingModel {
      * <p>
      * Prior to calling start you can set the cores factor and additional cores. Ultimately the number of threads in the pool will be given by:
      * </p>
-     * 
+     *
      * <p>
      * num threads = m * num cores + b
      * </p>
-     * 
+     *
      * <p>
      * Where 'm' is set by setCoresFactor and 'b' is set by setAdditionalThreads
      * </p>
@@ -117,7 +117,7 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     /**
-     * Blocking will cause {@link ThreadingModel#submitLimited(net.dempsy.threading.ThreadingModel.Rejectable, boolean)} 
+     * Blocking will cause {@link ThreadingModel#submitLimited(net.dempsy.threading.ThreadingModel.Rejectable, boolean)}
      * to block if the queue is filled.
      */
     public DefaultThreadingModel setBlocking(final boolean blocking) {
@@ -127,26 +127,26 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public DefaultThreadingModel start() {
-        if (threadPoolSize == -1) {
+        if(threadPoolSize == -1) {
             // figure out the number of cores.
             final int cores = Runtime.getRuntime().availableProcessors();
-            final int cpuBasedThreadCount = (int) Math.ceil(cores * m) + additionalThreads; // why? I don't know. If you don't like it
-                                                                                            // then use the other constructor
+            final int cpuBasedThreadCount = (int)Math.ceil(cores * m) + additionalThreads; // why? I don't know. If you don't like it
+                                                                                           // then use the other constructor
             threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
         }
         executor = Executors.newFixedThreadPool(threadPoolSize, r -> new Thread(r, nameSupplier.get()));
         schedule = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, nameSupplier.get() + "-Scheduled"));
 
-        if (blocking) {
-            if (maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
+        if(blocking) {
+            if(maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
                 submitter = new BlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks);
             else {
                 LOGGER.warn("You cannot configure \"" + CONFIG_KEY_BLOCKING + "\" and set \"" + CONFIG_KEY_MAX_PENDING
-                        + "\" to unbounded at the same time. The queue will be unbounded.");
+                    + "\" to unbounded at the same time. The queue will be unbounded.");
                 submitter = new NonBlockingUnlimited(executor);
             }
         } else {
-            if (maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
+            if(maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
                 submitter = new NonBlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks);
             else
                 submitter = new NonBlockingUnlimited(executor);
@@ -170,7 +170,7 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     public int getMaxNumberOfQueuedLimitedTasks() {
-        return (int) maxNumWaitingLimitedTasks;
+        return (int)maxNumWaitingLimitedTasks;
     }
 
     public DefaultThreadingModel setMaxNumberOfQueuedLimitedTasks(final long maxNumWaitingLimitedTasks) {
@@ -185,17 +185,17 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public void close() {
-        if (hardShutdown) {
-            if (executor != null)
+        if(hardShutdown) {
+            if(executor != null)
                 executor.shutdownNow();
 
-            if (schedule != null)
+            if(schedule != null)
                 schedule.shutdownNow();
         } else {
-            if (executor != null)
+            if(executor != null)
                 executor.shutdown();
 
-            if (schedule != null)
+            if(schedule != null)
                 schedule.shutdown();
         }
     }
@@ -207,8 +207,8 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     public boolean isRunning() {
         return (schedule != null && executor != null) &&
-                !(schedule.isShutdown() || schedule.isTerminated()) &&
-                !(executor.isShutdown() || executor.isTerminated());
+            !(schedule.isShutdown() || schedule.isTerminated()) &&
+            !(executor.isShutdown() || executor.isTerminated());
     }
 
     @Override
@@ -217,8 +217,8 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
-        return submitter.submitLimited(r, justArrived);
+    public <V> Future<V> submitLimited(final Rejectable<V> r) {
+        return submitter.submitLimited(r);
     }
 
     @Override
@@ -254,16 +254,13 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
-            if (justArrived)
-                numLimited.incrementAndGet();
+        public <V> Future<V> submitLimited(final Rejectable<V> r) {
+            // if it just arrived then we limit. Otherwise we just submit.
+            numLimited.incrementAndGet();
 
             final Future<V> ret = executor.submit(() -> {
-                if (!justArrived)
-                    return r.call();
-
                 final long num = numLimited.decrementAndGet();
-                if (num <= maxNumWaitingLimitedTasks)
+                if(num <= maxNumWaitingLimitedTasks)
                     return r.call();
                 r.rejected();
                 return null;
@@ -284,31 +281,28 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
-            if (justArrived) {
-                // only goes in if I get a position less than the max.
-                long spinner = 0;
-                for (boolean done = false; !done;) {
-                    final long curValue = numLimited.get();
-                    if (curValue < maxNumWaitingLimitedTasks) {
-                        if (numLimited.compareAndSet(curValue, curValue + 1L))
-                            done = true;
-                    } else {
-                        spinner++;
-                        if (spinner < 1000)
-                            Thread.yield();
-                        else {
-                            try {
-                                Thread.sleep(1);
-                            } catch (final InterruptedException ie) {}
-                        }
+        public <V> Future<V> submitLimited(final Rejectable<V> r) {
+            // only goes in if I get a position less than the max.
+            long spinner = 0;
+            for(boolean done = false; !done;) {
+                final long curValue = numLimited.get();
+                if(curValue < maxNumWaitingLimitedTasks) {
+                    if(numLimited.compareAndSet(curValue, curValue + 1L))
+                        done = true;
+                } else {
+                    spinner++;
+                    if(spinner < 1000)
+                        Thread.yield();
+                    else {
+                        try {
+                            Thread.sleep(1);
+                        } catch(final InterruptedException ie) {}
                     }
                 }
             }
 
             final Future<V> ret = executor.submit(() -> {
-                if (justArrived)
-                    numLimited.decrementAndGet();
+                numLimited.decrementAndGet();
                 return r.call();
             });
             return ret;
@@ -323,14 +317,14 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean justArrived) {
+        public <V> Future<V> submitLimited(final Rejectable<V> r) {
             return executor.submit(() -> r.call());
         }
     }
 
     @FunctionalInterface
     private static interface SubmitLimited {
-        public <V> Future<V> submitLimited(final Rejectable<V> r, final boolean count);
+        public <V> Future<V> submitLimited(final Rejectable<V> r);
     }
 
     private static class ProxyFuture<V> implements Future<V> {
@@ -339,7 +333,7 @@ public class DefaultThreadingModel implements ThreadingModel {
 
         private synchronized void set(final Future<V> f) {
             ret = f;
-            if (schedFuture.isCancelled())
+            if(schedFuture.isCancelled())
                 ret.cancel(true);
             this.notifyAll();
         }
@@ -366,7 +360,7 @@ public class DefaultThreadingModel implements ThreadingModel {
 
         @Override
         public synchronized V get() throws InterruptedException, ExecutionException {
-            while (ret == null)
+            while(ret == null)
                 this.wait();
             return ret.get();
         }
@@ -374,7 +368,7 @@ public class DefaultThreadingModel implements ThreadingModel {
         @Override
         public V get(final long timeout, final TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
             final long cur = System.currentTimeMillis();
-            while (ret == null)
+            while(ret == null)
                 this.wait(unit.toMillis(timeout));
             return ret.get(System.currentTimeMillis() - cur, TimeUnit.MILLISECONDS);
         }

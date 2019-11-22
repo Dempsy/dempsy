@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,12 +24,13 @@ import net.dempsy.monitoring.StatsCollector;
 
 /**
  * A very basic implementation of StatsCollector.
- * Doesn't do all the fancy stuff the default Coda 
+ * Doesn't do all the fancy stuff the default Coda
  * implementation does, but useful for testing.
  *
  */
 public class BasicClusterStatsCollector implements ClusterStatsCollector, ClusterMetricGetters {
     private final AtomicLong messagesCollisions = new AtomicLong();
+    private final AtomicLong messagesDiscarded = new AtomicLong();
     private final AtomicLong messagesDispatched = new AtomicLong();
     private final AtomicLong messagesProcessed = new AtomicLong();
     private final AtomicLong messagesFailed = new AtomicLong();
@@ -62,6 +63,11 @@ public class BasicClusterStatsCollector implements ClusterStatsCollector, Cluste
     }
 
     @Override
+    public long getMessageDiscardedCount() {
+        return messagesDiscarded.longValue();
+    }
+
+    @Override
     public long getDispatchedMessageCount() {
         return messagesDispatched.longValue();
     }
@@ -84,6 +90,11 @@ public class BasicClusterStatsCollector implements ClusterStatsCollector, Cluste
     @Override
     public void messageCollision(final Object message) {
         messagesCollisions.incrementAndGet();
+    }
+
+    @Override
+    public void messageDiscarded(final Object message) {
+        messagesDiscarded.incrementAndGet();
     }
 
     @Override

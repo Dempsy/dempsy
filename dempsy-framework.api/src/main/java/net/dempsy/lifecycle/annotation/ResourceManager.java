@@ -20,13 +20,4 @@ public class ResourceManager implements MessageResourceManager {
             resource.close();
         }
     }
-
-    @Override
-    public Object reify(final Object message) {
-        if(Resource.class.isAssignableFrom(message.getClass())) {
-            final Resource resource = ((Resource)message);
-            resource.init();
-        }
-        return message;
-    }
 }

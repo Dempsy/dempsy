@@ -27,6 +27,7 @@ import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.NodeAddress;
 import net.dempsy.transport.SenderFactory;
 import net.dempsy.transport.tcp.TcpAddress;
+import net.dempsy.transport.tcp.nio.internal.NioUtils;
 
 public class NioSenderFactory implements SenderFactory {
     public final static Logger LOGGER = LoggerFactory.getLogger(NioSenderFactory.class);
@@ -70,7 +71,7 @@ public class NioSenderFactory implements SenderFactory {
     public void close() {
         LOGGER.trace(nodeId + " stopping " + NioSenderFactory.class.getSimpleName());
         final List<NioSender> snapshot;
-        synchronized (this) {
+        synchronized(this) {
             isRunning.set(false);
             snapshot = new ArrayList<>(senders.values());
         }
@@ -78,10 +79,10 @@ public class NioSenderFactory implements SenderFactory {
 
         // we SHOULD be all done.
         final boolean recurse;
-        synchronized (this) {
+        synchronized(this) {
             recurse = senders.size() > 0;
         }
-        if (recurse)
+        if(recurse)
             close();
 
         // all senders closed, we should stop the threads.
@@ -89,16 +90,16 @@ public class NioSenderFactory implements SenderFactory {
         final List<Thread> threads = new ArrayList<>(Arrays.asList(sendingsThreads));
         boolean done = false;
         final long startWaitTime = System.currentTimeMillis();
-        while (threads.size() > 0 && !done) {
+        while(threads.size() > 0 && !done) {
             done = true;
-            for (final Iterator<Thread> iter = threads.iterator(); iter.hasNext();) {
+            for(final Iterator<Thread> iter = threads.iterator(); iter.hasNext();) {
                 final Thread cur = iter.next();
-                if (!cur.isAlive())
+                if(!cur.isAlive())
                     iter.remove();
                 else
                     done = false;
             }
-            if ((System.currentTimeMillis() - startWaitTime) > stopTimeout) {
+            if((System.currentTimeMillis() - startWaitTime) > stopTimeout) {
                 LOGGER.warn("Stopping without having been able to stop all sending threads.");
                 done = true;
             }
@@ -112,16 +113,16 @@ public class NioSenderFactory implements SenderFactory {
 
     @Override
     public NioSender getSender(final NodeAddress destination) throws MessageTransportException {
-        final TcpAddress tcpaddr = (TcpAddress) destination;
+        final TcpAddress tcpaddr = (TcpAddress)destination;
         final NioSender ret;
-        if (isRunning.get()) {
+        if(isRunning.get()) {
             ret = senders.computeIfAbsent(tcpaddr, a -> new NioSender(a, this));
         } else
             throw new MessageTransportException(nodeId + " sender had getSender called while stopped.");
 
         try {
             ret.connect(false);
-        } catch (final IOException e) {
+        } catch(final IOException e) {
             throw new MessageTransportException(nodeId + " sender failed to connect to " + destination, e);
         }
         return ret;
@@ -133,23 +134,23 @@ public class NioSenderFactory implements SenderFactory {
         this.nodeId = infra.getNodeId();
 
         final int numSenderThreads = Integer
-                .parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_THREADS, DEFAULT_SENDER_THREADS));
+            .parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_THREADS, DEFAULT_SENDER_THREADS));
 
         mtu = Integer
-                .parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_TCP_MTU, DEFAULT_SENDER_TCP_MTU));
+            .parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_TCP_MTU, DEFAULT_SENDER_TCP_MTU));
 
         maxNumberOfQueuedOutgoing = Integer.parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_MAX_QUEUED, DEFAULT_SENDER_MAX_QUEUED));
 
         stopTimeout = Integer
-                .parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_STOP_TIMEOUT_MILLIS, DEFAULT_SENDER_STOP_TIMEOUT_MILLIS));
+            .parseInt(infra.getConfigValue(NioSender.class, CONFIG_KEY_SENDER_STOP_TIMEOUT_MILLIS, DEFAULT_SENDER_STOP_TIMEOUT_MILLIS));
 
         sendings = new Sending[numSenderThreads];
         sendingsThreads = new Thread[numSenderThreads];
 
         // now start the sending threads.
-        for (int i = 0; i < sendings.length; i++)
+        for(int i = 0; i < sendings.length; i++)
             chain(sendingsThreads[i] = new Thread(sendings[i] = new Sending(sendingsRunning, nodeId, idleSenders, statsCollector),
-                    "nio-sender-" + i + "-" + nodeId), t -> t.start());
+                "nio-sender-" + i + "-" + nodeId), t -> t.start());
 
     }
 
@@ -165,14 +166,14 @@ public class NioSenderFactory implements SenderFactory {
         final NodeStatsCollector statsCollector;
 
         Sending(final AtomicBoolean isRunning, final String nodeId, final Map<NioSender, NioSender> idleSenders,
-                final NodeStatsCollector statsCollector) throws MessageTransportException {
+            final NodeStatsCollector statsCollector) throws MessageTransportException {
             this.isRunning = isRunning;
             this.nodeId = nodeId;
             this.idleSenders = idleSenders;
             this.statsCollector = statsCollector;
             try {
                 this.selector = Selector.open();
-            } catch (final IOException e) {
+            } catch(final IOException e) {
                 throw new MessageTransportException(e);
             }
         }
@@ -180,88 +181,95 @@ public class NioSenderFactory implements SenderFactory {
         @Override
         public void run() {
             int numNothing = 0;
-            while (isRunning.get()) {
-                try {
-                    // blocking causes attempts to register to block creating a potential deadlock,
-                    // so we do this in a non-blocking manner
-                    final int numSelected = selector.selectNow();
+            try {
+                while(isRunning.get()) {
+                    try {
+                        // blocking causes attempts to register to block creating a potential deadlock,
+                        // so we do this in a non-blocking manner
+                        final int numSelected = selector.selectNow();
 
-                    // are there any sockets ready to write?
-                    if (numSelected == 0) {
-                        // =====================================================================
-                        // nothing ready ... might as well spend some time serializing messages
-                        final Set<SelectionKey> keys = selector.keys();
-                        // keys are removed when there's nothing to write to them. When there's no writing to do
-                        // but there's data queued up to be written we can move to start serializing
-                        if (keys != null && keys.size() > 0) {
-                            numNothing = 0; // reset the yield count since we have something to do
-                            final SenderHolder thisOneCanSerialize = keys.stream()
-                                    .map(k -> (SenderHolder) k.attachment())
+                        // are there any sockets ready to write?
+                        if(numSelected == 0) {
+                            // =====================================================================
+                            // nothing ready ... might as well spend some time serializing messages
+                            final Set<SelectionKey> keys = selector.keys();
+                            // keys are removed when there's nothing to write to them. When there's no writing to do
+                            // but there's data queued up to be written we can move to start serializing
+                            if(keys != null && keys.size() > 0) {
+                                numNothing = 0; // reset the yield count since we have something to do
+                                final SenderHolder thisOneCanSerialize = keys.stream()
+                                    .map(k -> (SenderHolder)k.attachment())
                                     .filter(s -> !s.readyToWrite(true)) // if we're ready to write then we don't need to do more.
                                     .filter(s -> s.readyToSerialize())
                                     .findFirst()
                                     .orElse(null);
-                            if (thisOneCanSerialize != null)
-                                thisOneCanSerialize.trySerialize();
-                            else { // see if we need to stop
-                                final SelectionKey thisOneCanClose = keys.stream()
-                                        .filter(k -> ((SenderHolder) k.attachment()).shouldClose())
+                                if(thisOneCanSerialize != null)
+                                    thisOneCanSerialize.trySerialize();
+                                else { // see if we need to stop
+                                    final SelectionKey thisOneCanClose = keys.stream()
+                                        .filter(k -> ((SenderHolder)k.attachment()).shouldClose())
                                         .findAny().orElse(null);
-                                if (thisOneCanClose != null)
-                                    ((SenderHolder) thisOneCanClose.attachment()).close(thisOneCanClose);
+                                    if(thisOneCanClose != null)
+                                        ((SenderHolder)thisOneCanClose.attachment()).close(thisOneCanClose);
+                                }
                             }
-                        }
-                        // =====================================================================
-                        // otherwise there's no data to be written and (last we knew) no data
-                        // to be serialized which results in (eventually) all keys being removed.
-                        else { // nothing to serialize, do we have any new senders that need handling?
-                            if (!checkForNewSenders()) { // if we didn't do anything then sleep/yield based on how long we've been bored.
-                                numNothing++;
-                                if (numNothing > 1000) {
-                                    dontInterrupt(() -> Thread.sleep(1), ie -> {
-                                        if (isRunning.get())
-                                            LOGGER.error(nodeId + " sender interrupted", ie);
-                                    });
-                                } else
-                                    Thread.yield();
-                            } else // otherwise we DID do something
-                                numNothing = 0;
-                        }
-                        continue;
-                    } else
-                        numNothing = 0; // reset the yield count since we have something to do
-
-                    final Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-                    while (keys.hasNext()) {
-                        final SelectionKey key = keys.next();
-
-                        keys.remove();
-
-                        if (!key.isValid())
+                            // =====================================================================
+                            // otherwise there's no data to be written and (last we knew) no data
+                            // to be serialized which results in (eventually) all keys being removed.
+                            else { // nothing to serialize, do we have any new senders that need handling?
+                                if(!checkForNewSenders()) { // if we didn't do anything then sleep/yield based on how long we've been bored.
+                                    numNothing++;
+                                    if(numNothing > 1000) {
+                                        dontInterrupt(() -> Thread.sleep(1), ie -> {
+                                            if(isRunning.get())
+                                                LOGGER.error(nodeId + " sender interrupted", ie);
+                                        });
+                                    } else
+                                        Thread.yield();
+                                } else // otherwise we DID do something
+                                    numNothing = 0;
+                            }
                             continue;
+                        } else
+                            numNothing = 0; // reset the yield count since we have something to do
 
-                        if (key.isWritable()) {
-                            final SenderHolder sh = (SenderHolder) key.attachment();
-                            // write something and return whether or not we're done.
-                            if (sh.writeSomethingReturnDone(key, statsCollector)) {
-                                // if we're done, does that mean that we should be closing the connection?
-                                if (sh.shouldClose()) {
-                                    if (!sh.close(key)) { // this should close the socket. If that works then this will also cancel the key.
-                                        idleSenders.putIfAbsent(sh.sender, sh.sender); // otherwise, drop it back on idleSenders so we can try the cancel again later.
+                        final Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+                        while(keys.hasNext()) {
+                            final SelectionKey key = keys.next();
+
+                            keys.remove();
+
+                            if(!key.isValid())
+                                continue;
+
+                            if(key.isWritable()) {
+                                final SenderHolder sh = (SenderHolder)key.attachment();
+                                // write something and return whether or not we're done.
+                                if(sh.writeSomethingReturnDone(key, statsCollector)) {
+                                    // if we're done, does that mean that we should be closing the connection?
+                                    if(sh.shouldClose()) {
+                                        if(!sh.close(key)) { // this should close the socket. If that works then this will also cancel the key.
+                                            idleSenders.putIfAbsent(sh.sender, sh.sender); // otherwise, drop it back on idleSenders so we can try the cancel
+                                                                                           // again
+                                            // later.
+                                            key.cancel();
+                                        }
+                                    } else {
+                                        idleSenders.putIfAbsent(sh.sender, sh.sender);
                                         key.cancel();
                                     }
-                                } else {
-                                    idleSenders.putIfAbsent(sh.sender, sh.sender);
-                                    key.cancel();
                                 }
                             }
                         }
+                    } catch(final IOException ioe) {
+                        LOGGER.error(nodeId + " sender failed", ioe);
+                    } finally {
+                        // LOGGER.trace("looping sending thread:" + numNothing);
                     }
-                } catch (final IOException ioe) {
-                    LOGGER.error(nodeId + " sender failed", ioe);
-                } finally {
-                    // LOGGER.trace("looping sending thread:" + numNothing);
                 }
+            } finally {
+                if(selector != null)
+                    NioUtils.closeQuietly(selector, LOGGER, "Failed to close selector on Sender thread.");
             }
         }
 
@@ -274,22 +282,22 @@ public class NioSenderFactory implements SenderFactory {
 
                 // move any NioSenders with data from working and onto newSenders
                 curSenders.stream()
-                        .filter(s -> s.messages.peek() != null)
-                        .forEach(s -> {
-                            final NioSender cur = idleSenders.remove(s);
-                            // removing them means putting them on the newSenders set so we can track them
-                            if (cur != null)
-                                newSenders.add(cur);
-                        });
+                    .filter(s -> s.messages.peek() != null)
+                    .forEach(s -> {
+                        final NioSender cur = idleSenders.remove(s);
+                        // removing them means putting them on the newSenders set so we can track them
+                        if(cur != null)
+                            newSenders.add(cur);
+                    });
 
                 // newSenders are now mine since they've been removed from working.
 
                 // go through each new sender ...
-                for (final Iterator<NioSender> iter = newSenders.iterator(); iter.hasNext();) {
+                for(final Iterator<NioSender> iter = newSenders.iterator(); iter.hasNext();) {
                     final NioSender cur = iter.next();
 
                     // ... if the new sender has messages ...
-                    if (cur.messages.peek() != null) {
+                    if(cur.messages.peek() != null) {
                         // ... register the channel for writing and attach the SenderHolder
                         new SenderHolder(cur, LOGGER).register(selector);
                         iter.remove();

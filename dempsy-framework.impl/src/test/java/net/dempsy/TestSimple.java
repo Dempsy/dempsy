@@ -63,6 +63,9 @@ public class TestSimple {
                     public void start() {
                         while(!done) {
                             disp.dispatch(new KeyedMessageWithType(Integer.valueOf(1), "Hello", "string"));
+                            // This is here for when the Container has a max pending and it gets starved for CPU cycles
+                            // in this particular test.
+                            Thread.yield();
                         }
                     }
 

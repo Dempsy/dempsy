@@ -38,7 +38,7 @@ public final class NioSender implements Sender {
     private int sendBufferSize = -1;
     private int recvBufferSize = -1;
 
-    // read from Sending
+    // read from NioSenderFactory.Sending
     BlockingQueue<Object> messages;
     boolean running = true;
 
@@ -77,6 +77,7 @@ public final class NioSender implements Sender {
         // in case we're being bombarded with sends from another thread,
         // we'll keep trying this until everyone realizes we're stopped.
         boolean stillNotDone = true;
+        // boolean closedIt = false;
         final long stillNotDoneStartTime = System.currentTimeMillis();
         while(stillNotDone) {
             for(boolean doneGettingStopMessageQueued = false; !doneGettingStopMessageQueued;) {
@@ -95,8 +96,10 @@ public final class NioSender implements Sender {
 
             // if X seconds have passed let's just close it from this side and move on.
             if((System.currentTimeMillis() - stillNotDoneStartTime) > 3000) {
+                // closedIt = true;
                 stillNotDone = false;
                 NioUtils.closeQuietly(channel, LOGGER, nodeId + " failed directly closing channel from " + NioSender.class);
+                // NioReceiver.closeResource(channel);
                 if(!channel.socket().isClosed())
                     NioUtils.closeQuietly(channel.socket(), LOGGER, nodeId + " failed directly closing socket from " + NioSender.class);
             }
@@ -105,6 +108,14 @@ public final class NioSender implements Sender {
         drainTo.forEach(o -> statsCollector.messageNotSent());
         owner.idleSenders.remove(this);
         owner.imDone(addr);
+
+        // if(channel.isOpen()) {
+        NioUtils.closeQuietly(channel, LOGGER, nodeId + " failed directly closing channel from " + NioSender.class);
+        // if(!closedIt)
+        // NioReceiver.closeResource(channel);
+        if(!channel.socket().isClosed())
+            NioUtils.closeQuietly(channel.socket(), LOGGER, nodeId + " failed directly closing socket from " + NioSender.class);
+        // }
     }
 
     @Override
@@ -131,6 +142,7 @@ public final class NioSender implements Sender {
         final SocketChannel ret = channel;
         try {
             channel = SocketChannel.open();
+            // NioReceiver.createdResource(channel);
         } catch(final IOException e) {
             throw new MessageTransportException(e); // this is probably impossible
         }

@@ -357,7 +357,7 @@ public class TestContainer {
     public void testWrongTypeMessage() throws Exception {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(new KeyedMessage(kmwt.key, new Object()), true, true);
+        container.dispatch(new KeyedMessage(kmwt.key, new Object()), true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
     }
 
@@ -367,7 +367,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         throwMeInActivation = new RuntimeException("JustThrowMeDAMMIT!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true, true);
+        container.dispatch(kmwt, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
 
@@ -379,7 +379,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new DempsyException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true, true);
+        container.dispatch(kmwt, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
@@ -390,7 +390,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new RuntimeException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true, true);
+        container.dispatch(kmwt, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
@@ -471,7 +471,7 @@ public class TestContainer {
         adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
         adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("bar"));
 
-        assertTrue(poll(container, c -> c.getProcessorCount() > 1));
+        assertTrue(poll(container, c -> (c.getProcessorCount() + ((ClusterMetricGetters)c.statCollector).getMessageDiscardedCount()) > 1));
         Thread.sleep(100);
 
         assertEquals("number of MP instances", 2, container.getProcessorCount());
@@ -519,18 +519,21 @@ public class TestContainer {
 
         final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
         assertNotNull(adaptor.dispatcher);
-        for(int i = 0; i < numInstances; i++)
+        for(int i = 0; i < numInstances; i++) {
             adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo" + i));
+            Thread.yield(); // help the container when it has a limited queue
+        }
 
-        assertTrue(poll(container, c -> c.getProcessorCount() > 19));
+        assertTrue(poll(container, c -> (c.getProcessorCount() + ((ClusterMetricGetters)c.statCollector).getMessageDiscardedCount()) > 19));
         Thread.sleep(100);
-        assertEquals("number of MP instances", 20, container.getProcessorCount());
+        final long messagesDiscarded = ((ClusterMetricGetters)container.statCollector).getMessageDiscardedCount();
+        assertEquals("number of MP instances", 20, container.getProcessorCount() + messagesDiscarded);
 
         try (NodeManager nman = addOutputCatchStage();) {
             container.outputPass();
-            assertTrue(poll(outputMessages, o -> o.size() > 19));
+            assertTrue(poll(outputMessages, o -> (o.size() + messagesDiscarded) > 19));
             Thread.sleep(100);
-            assertEquals(20, outputMessages.size());
+            assertEquals(20, outputMessages.size() + messagesDiscarded);
         }
     }
 

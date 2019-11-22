@@ -57,12 +57,12 @@ public abstract class BaseRouterTestWithSession {
     @Parameters // (name = "{index}: session factory={0}, disruptor={1}")
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { (Supplier<ClusterInfoSessionFactory>) () -> new LocalClusterSessionFactory(), "standard",
-                        (Consumer<ClusterInfoSession>) s -> ((DisruptibleSession) s).disrupt() },
-                { (Supplier<ClusterInfoSessionFactory>) () -> zookeeperFactory, "standard",
-                        (Consumer<ClusterInfoSession>) s -> ((DisruptibleSession) s).disrupt() },
-                { (Supplier<ClusterInfoSessionFactory>) () -> zookeeperFactory, "session-expire",
-                        (Consumer<ClusterInfoSession>) s -> uncheck(() -> zookeeperTestServer.forceSessionExpiration((ZookeeperSession) s)) },
+            {(Supplier<ClusterInfoSessionFactory>)() -> new LocalClusterSessionFactory(),"standard",
+                (Consumer<ClusterInfoSession>)s -> ((DisruptibleSession)s).disrupt()},
+            {(Supplier<ClusterInfoSessionFactory>)() -> zookeeperFactory,"standard",
+                (Consumer<ClusterInfoSession>)s -> ((DisruptibleSession)s).disrupt()},
+            {(Supplier<ClusterInfoSessionFactory>)() -> zookeeperFactory,"session-expire",
+                (Consumer<ClusterInfoSession>)s -> uncheck(() -> zookeeperTestServer.forceSessionExpiration((ZookeeperSession)s))},
         });
     }
 
@@ -80,9 +80,9 @@ public abstract class BaseRouterTestWithSession {
 
             @Override
             public ClusterInfoSession createSession() throws ClusterInfoException {
-                if (zookeeperTestServer == null)
-                    zookeeperTestServer = uncheck(() -> new ZookeeperTestServer());
-                if (proxied == null)
+                if(zookeeperTestServer == null)
+                    zookeeperTestServer = uncheck(() -> new ZookeeperTestServer(2183));
+                if(proxied == null)
                     proxied = new ZookeeperSessionFactory(zookeeperTestServer.connectString(), 5000, new JsonSerializer());
                 return proxied.createSession();
             }
@@ -97,12 +97,12 @@ public abstract class BaseRouterTestWithSession {
 
     @AfterClass
     public static void teardown() {
-        if (zookeeperTestServer != null) {
+        if(zookeeperTestServer != null) {
             zookeeperTestServer.close();
             zookeeperTestServer = null;
         }
 
-        if (zookeeperFactory != null) {
+        if(zookeeperFactory != null) {
             zookeeperFactory = null;
         }
     }
@@ -116,7 +116,7 @@ public abstract class BaseRouterTestWithSession {
 
     @After
     public void after() {
-        if (session != null)
+        if(session != null)
             session.close();
         LocalClusterSessionFactory.completeReset();
     }

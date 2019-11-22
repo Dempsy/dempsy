@@ -17,5 +17,6 @@ xmlns:util="http://www.springframework.org/schema/util"
                 </constructor-arg>
             </bean>
         </property>
+        <property name="maxPendingMessagesPerContainer" value="${max-pending-messages-per-ontainer:-1}" />
     </bean>
 </beans>

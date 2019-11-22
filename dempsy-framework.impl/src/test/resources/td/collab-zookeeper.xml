@@ -7,7 +7,9 @@
 
     <context:property-placeholder system-properties-mode="OVERRIDE" />
 
-    <bean id="zk-test-server" class="net.dempsy.cluster.zookeeper.ZookeeperTestServer" destroy-method="shutdown" />
+    <bean id="zk-test-server" class="net.dempsy.cluster.zookeeper.ZookeeperTestServer" destroy-method="shutdown" >
+      <constructor-arg type="int" value="2182" />
+    </bean>
 
     <bean id="connect-string" class="java.lang.String" factory-bean="zk-test-server" factory-method="connectString" />
     

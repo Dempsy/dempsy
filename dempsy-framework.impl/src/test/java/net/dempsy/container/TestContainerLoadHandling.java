@@ -154,7 +154,6 @@ public class TestContainerLoadHandling {
     public static class SendMessageThread implements Runnable {
         final Container mpc;
         final KeyedMessage[] messages;
-        final boolean block;
         final Random random = new Random();
         final int numMsg;
 
@@ -162,15 +161,14 @@ public class TestContainerLoadHandling {
         static CountDownLatch startLatch = new CountDownLatch(0);
         static AtomicLong processingCount = new AtomicLong(0);
 
-        public SendMessageThread(final Container mpc, final KeyedMessage[] messages, final boolean block, final int numMsg) {
+        public SendMessageThread(final Container mpc, final KeyedMessage[] messages, final int numMsg) {
             this.mpc = mpc;
             this.messages = messages;
-            this.block = block;
             this.numMsg = numMsg;
         }
 
-        public SendMessageThread(final Container mpc, final KeyedMessage[] messages, final boolean block) {
-            this(mpc, messages, block, -1);
+        public SendMessageThread(final Container mpc, final KeyedMessage[] messages) {
+            this(mpc, messages, -1);
         }
 
         @Override
@@ -181,12 +179,12 @@ public class TestContainerLoadHandling {
                 if(numMsg < 0) {
                     while(stillRunning) {
                         final KeyedMessage message = messages[random.nextInt(messages.length)];
-                        mpc.dispatch(message, block, true);
+                        mpc.dispatch(message, true);
                     }
                 } else {
                     for(int i = 0; i < numMsg; i++) {
                         final KeyedMessage message = messages[random.nextInt(messages.length)];
-                        mpc.dispatch(message, block, true);
+                        mpc.dispatch(message, true);
                     }
                 }
             } catch(final Exception e) {
@@ -210,12 +208,12 @@ public class TestContainerLoadHandling {
     /*
      * Utility methods for tests
      */
-    public static Thread startMessagePump(final Container container, final KeyedMessage[] messages, final boolean block) {
-        return chain(new Thread(new SendMessageThread(container, messages, block)), t -> t.start());
+    public static Thread startMessagePump(final Container container, final KeyedMessage[] messages) {
+        return chain(new Thread(new SendMessageThread(container, messages)), t -> t.start());
     }
 
-    public static Thread sendMessages(final Container container, final KeyedMessage[] messages, final boolean block, final int count) {
-        return chain(new Thread(new SendMessageThread(container, messages, block, count)), t -> t.start());
+    public static Thread sendMessages(final Container container, final KeyedMessage[] messages, final int count) {
+        return chain(new Thread(new SendMessageThread(container, messages, count)), t -> t.start());
     }
 
     /*
@@ -273,7 +271,7 @@ public class TestContainerLoadHandling {
      * Actual Unit Tests
      */
 
-    public void runSimpleProcessingWithoutQueuing(final boolean block) throws Exception {
+    public void runSimpleProcessingWithoutQueuing() throws Exception {
         SendMessageThread.startLatch = new CountDownLatch(1); // set up a gate for starting
 
         // produce the initial MPs
@@ -283,7 +281,7 @@ public class TestContainerLoadHandling {
             messages[i] = km(new MockInputMessage("key" + i));
 
         for(int j = 0; j < NUMMPS; j++)
-            in.add(startMessagePump(container, messages, block));
+            in.add(startMessagePump(container, messages));
 
         SendMessageThread.startLatch.countDown(); // let the messages go.
 
@@ -303,7 +301,7 @@ public class TestContainerLoadHandling {
 
             in.clear();
             for(int j = 0; j < NUMTHREADS; j++)
-                in.add(sendMessages(container, messages, block, MSGPERTHREAD));
+                in.add(sendMessages(container, messages, MSGPERTHREAD));
 
             assertTrue(poll(o -> SendMessageThread.processingCount.get() == NUMTHREADS));
             SendMessageThread.startLatch.countDown(); // let the messages go.
@@ -316,8 +314,7 @@ public class TestContainerLoadHandling {
             assertTrue(poll(o -> in.stream().filter(t -> t.isAlive() == true).count() == 0));
 
             final long discarded = clusterStats.getMessageCollisionCount();
-            if(block)
-                assertEquals(0L, discarded);
+            assertEquals(0L, discarded);
 
             final int iter = i;
             assertEquals((NUMTHREADS * MSGPERTHREAD) * (iter + 1), dispatcher.messages.size() + discarded - initialDiscard);
@@ -333,15 +330,7 @@ public class TestContainerLoadHandling {
      */
     @Test
     public void testSimpleProcessingWithoutQueuingBlocking() throws Exception {
-        runSimpleProcessingWithoutQueuing(true);
-    }
-
-    /**
-     * Test the simple case of messages arriving slowly and always having a thread available.
-     */
-    @Test
-    public void testSimpleProcessingWithoutQueuingNonBlocking() throws Exception {
-        runSimpleProcessingWithoutQueuing(false);
+        runSimpleProcessingWithoutQueuing();
     }
 
     /**
@@ -356,7 +345,7 @@ public class TestContainerLoadHandling {
             messages[i] = km(new MockInputMessage("key" + i));
 
         for(int j = 0; j < NUMMPS; j++)
-            in.add(sendMessages(container, new KeyedMessage[] {messages[j]}, true, 1));
+            in.add(sendMessages(container, new KeyedMessage[] {messages[j]}, 1));
 
         SendMessageThread.startLatch.countDown(); // let the messages go.
         assertTrue(poll(o -> in.stream().filter(t -> t.isAlive()).count() == 0));
@@ -379,7 +368,7 @@ public class TestContainerLoadHandling {
 
             in.clear();
             for(int j = 0; j < NUMMPS; j++)
-                in.add(sendMessages(container, new KeyedMessage[] {km(new MockInputMessage("key" + j % NUMMPS))}, true, DUPFACTOR));
+                in.add(sendMessages(container, new KeyedMessage[] {km(new MockInputMessage("key" + j % NUMMPS))}, DUPFACTOR));
 
             assertTrue(poll(o -> SendMessageThread.processingCount.get() == NUMMPS));
             SendMessageThread.startLatch.countDown(); // let the messages go.

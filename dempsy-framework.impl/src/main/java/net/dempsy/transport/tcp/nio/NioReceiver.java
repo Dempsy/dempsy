@@ -34,6 +34,7 @@ import net.dempsy.transport.tcp.AbstractTcpReceiver;
 import net.dempsy.transport.tcp.TcpUtils;
 import net.dempsy.transport.tcp.nio.internal.NioUtils;
 import net.dempsy.transport.tcp.nio.internal.NioUtils.ReturnableBufferOutput;
+import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.io.MessageBufferInput;
 
 public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<T>> implements DisruptableRecevier {
@@ -43,6 +44,107 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     public static final String DEFAULT_RECEIVER_NETWORK_IF_NAME = null;
 
     private final AtomicBoolean isRunning = new AtomicBoolean(true);
+
+    // private static final transient File trackFile = new File("/tmp/track.out");
+    //
+    // static {
+    // trackFile.delete();
+    // }
+    //
+    // public static class Tracker {
+    // final AtomicLong refCount = new AtomicLong(0);
+    // final AutoCloseable ac;
+    // final RuntimeException inited;
+    // RuntimeException closed;
+    //
+    // public Tracker(final AutoCloseable ac) {
+    // this.ac = ac;
+    // refCount.incrementAndGet();
+    // this.inited = new RuntimeException();
+    // }
+    //
+    // public void closing() {
+    // refCount.decrementAndGet();
+    // if(refCount.get() < 0) {
+    // synchronized(trackFile) {
+    // try (OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
+    // PrintStream ps = new PrintStream(os);) {
+    // ps.println("===============================================");
+    // ps.println("Instantiated:");
+    // inited.printStackTrace(ps);
+    // ps.println("Initially closed:");
+    // closed.printStackTrace(ps);
+    // ps.println("Closing too many times here:");
+    // new RuntimeException().printStackTrace(ps);
+    // ps.println("===============================================");
+    // } catch(final IOException ioe) {
+    // LOGGER.error("", ioe);
+    // }
+    // }
+    // } else
+    // closed = new RuntimeException();
+    // }
+    // }
+    //
+    // private static Map<AutoCloseable, Tracker> tracks = new HashMap<>();
+    //
+    // public static void createdResource(final AutoCloseable ac) {
+    // synchronized(trackFile) {
+    // final Tracker tr = tracks.get(ac);
+    // if(tr != null) {
+    // try (OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
+    // PrintStream ps = new PrintStream(os);) {
+    // ps.println("===============================================");
+    // ps.println("DOUBLE CREATE!!!!");
+    // new RuntimeException().printStackTrace(ps);
+    // ps.println("Originally created:");
+    // tr.inited.printStackTrace(ps);
+    // ps.println("===============================================");
+    // } catch(final IOException ioe) {
+    // LOGGER.error("", ioe);
+    // }
+    // } else {
+    // tracks.put(ac, new Tracker(ac));
+    // }
+    // }
+    // }
+    //
+    // public static void closeResource(final AutoCloseable ac) {
+    // synchronized(trackFile) {
+    // final Tracker tr = tracks.get(ac);
+    // if(tr == null) {
+    // try (OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
+    // PrintStream ps = new PrintStream(os);) {
+    // ps.println("===============================================");
+    // ps.println("MISSSED CREATE!!!!");
+    // new RuntimeException().printStackTrace(ps);
+    // ps.println("===============================================");
+    // } catch(final IOException ioe) {
+    // LOGGER.error("", ioe);
+    // }
+    // } else {
+    // tr.closing();
+    // }
+    // }
+    // }
+    //
+    // public static void acStatus() {
+    // synchronized(trackFile) {
+    // tracks.values().stream().forEach(t -> {
+    // if(t.closed == null) {
+    // try (OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
+    // PrintStream ps = new PrintStream(os);) {
+    // ps.println("===============================================");
+    // ps.println("LEFT OPEN!!!! Originally instantiated:");
+    // t.inited.printStackTrace(ps);
+    // ps.println("===============================================");
+    // } catch(final IOException ioe) {
+    // LOGGER.error("", ioe);
+    // }
+    // }
+    // });
+    // }
+    // }
 
     private NioAddress internal = null;
     private NioAddress address = null;
@@ -65,11 +167,10 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         if(acceptor != null)
             acceptor.close();
 
-        for(int i = 0; i < readers.length; i++) {
-            final Reader<T> r = readers[i];
-            if(r != null)
-                r.close();
-        }
+        Arrays.stream(readers).filter(r -> r != null).forEach(r -> r.close());
+
+        if(binding != null)
+            binding.close();
     }
 
     @Override
@@ -136,6 +237,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     @Override
     @SuppressWarnings("unchecked")
     public NioReceiver<T> numHandlers(final int numHandlers) {
+        Arrays.stream(readers).filter(r -> r != null).forEach(r -> r.close());
         readers = new Reader[numHandlers];
         return this;
     }
@@ -165,7 +267,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     // =============================================================================
     // These classes manages accepting external connections.
     // =============================================================================
-    public static class Binding {
+    private static class Binding implements QuietCloseable {
         public final Selector selector;
         public final ServerSocketChannel serverChannel;
         public final InetSocketAddress bound;
@@ -174,15 +276,28 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         public Binding(final InetAddress addr, final int port) throws IOException {
             final int lport = port < 0 ? 0 : port;
             selector = Selector.open();
+            // createdResource(selector);
 
             serverChannel = ServerSocketChannel.open();
+            // createdResource(serverChannel);
             serverChannel.configureBlocking(false);
 
             final InetSocketAddress tobind = new InetSocketAddress(addr, lport);
             final ServerSocket sock = serverChannel.socket();
+            // createdResource(sock);
             sock.bind(tobind);
             bound = (InetSocketAddress)sock.getLocalSocketAddress();
             recvBufferSize = sock.getReceiveBufferSize();
+        }
+
+        @Override
+        public void close() {
+            NioUtils.closeQuietly(serverChannel, LOGGER, "Failed to close serverChannel.");
+            // closeResource(serverChannel);
+            NioUtils.closeQuietly(serverChannel.socket(), LOGGER, "Failed to close serverChannel.");
+            // closeResource(serverChannel.socket());
+            NioUtils.closeQuietly(selector, LOGGER, "Failed to close selector.");
+            // closeResource(selector);
         }
     }
 
@@ -238,11 +353,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                     }
                 }
             } finally {
-                try {
-                    serverChannel.close();
-                } catch(final IOException e) {
-                    LOGGER.error(thisNode + " had an error trying to close the accept socket channel.", e);
-                }
+                NioUtils.closeQuietly(serverChannel, LOGGER, "Failed to close the server Channel from the Acceptor");
                 done.set(true);
             }
         }
@@ -486,6 +597,8 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                     }
                 }
             } finally {
+                if(selector != null)
+                    NioUtils.closeQuietly(selector, LOGGER, "Failed to close selector on reader thread.");
                 done.set(true);
             }
         }

@@ -21,7 +21,6 @@ import static net.dempsy.util.SafeString.objectDescription;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -41,7 +40,6 @@ import net.dempsy.KeyspaceChangeListener;
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
 import net.dempsy.messages.KeyedMessage;
-import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.util.SafeString;
 import net.dempsy.util.StupidHashMap;
@@ -57,7 +55,6 @@ import net.dempsy.util.StupidHashMap;
 public class NonLockingAltContainer extends Container implements KeyspaceChangeListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonLockingAltContainer.class);
     // This is a bad idea but only used to gate trace logging the invocation.
-    private static final boolean traceEnabled = LOGGER.isTraceEnabled();
 
     private static final int SPIN_TRIES = 100;
 
@@ -198,7 +195,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
 
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
-    public void dispatch(final KeyedMessage keyedMessage, final boolean block, final boolean justArrived) throws IllegalArgumentException, ContainerException {
+    public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(false);
@@ -210,7 +207,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         if(keyedMessage.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
-        final Object actualMessage = justArrived ? disposition.reify(keyedMessage.message) : disposition.replicate(keyedMessage.message);
+        final Object actualMessage = youOwnMessage ? keyedMessage.message : disposition.replicate(keyedMessage.message);
         final Object messageKey = keyedMessage.key;
 
         if(messageKey == null) {
@@ -455,7 +452,10 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         synchronized(numExecutingOutputs) {
             while(numExecutingOutputs.get() > 0) {
                 try {
-                    numExecutingOutputs.wait();
+                    numExecutingOutputs.wait(300);
+                    // If the executor gets shut down we wont know, so we need to check once in a while
+                    if(!isRunning.get())
+                        break;
                 } catch(final InterruptedException e) {
                     // if we were interupted for a shutdown then just stop
                     // waiting for all of the threads to finish
@@ -560,70 +560,6 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                 statCollector.messageProcessorCreated(key);
             }
             return wrapper;
-        }
-    }
-
-    public enum Operation {
-        handle, output
-    };
-
-    /**
-     * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and forwarding any results.
-     */
-    private void invokeOperationAndHandleDispose(final Object instance, final Operation op, final KeyedMessage message) {
-        try {
-            if(instance != null) { // possibly passivated ...
-                List<KeyedMessageWithType> result;
-                try (Closer resultsDisposerCloser = new Closer(disposition);) {
-                    if(traceEnabled)
-                        LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
-                    statCollector.messageDispatched(message);
-                    result = resultsDisposerCloser.addAll(op == Operation.output ? prototype.invokeOutput(instance)
-                        : prototype.invoke(instance, message));
-                    statCollector.messageProcessed(message);
-                } catch(final ContainerException e) {
-                    result = null;
-                    LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
-                        SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
-                    statCollector.messageFailed(false);
-                }
-                // this is an exception thrown as a result of the reflected call having an illegal argument.
-                // This should actually be impossible since the container itself manages the calling.
-                catch(final IllegalArgumentException e) {
-                    result = null;
-                    LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
-                        e);
-                    statCollector.messageFailed(true);
-                }
-                // The app threw an exception.
-                catch(final DempsyException e) {
-                    result = null;
-                    LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " because an exception was thrown by the Message Processeor itself", e);
-                    statCollector.messageFailed(true);
-                }
-                // RuntimeExceptions bookeeping
-                catch(final RuntimeException e) {
-                    result = null;
-                    LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to an unknown exception.", e);
-                    statCollector.messageFailed(false);
-
-                    if(op == Operation.handle)
-                        throw e;
-                }
-                if(result != null) {
-                    try {
-                        dispatcher.dispatch(result, hasDisposition ? disposition : null);
-                    } catch(final Exception de) {
-                        LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
-                    }
-                }
-            }
-        } finally {
-            if(message != null)
-                disposition.dispose(message.message);
         }
     }
 

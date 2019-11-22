@@ -9,10 +9,4 @@ public class DummyMessageResourceManager implements MessageResourceManager {
     public Object replicate(final Object toReplicate) {
         return toReplicate;
     }
-
-    @Override
-    public Object reify(final Object message) {
-        return message;
-    }
-
 }

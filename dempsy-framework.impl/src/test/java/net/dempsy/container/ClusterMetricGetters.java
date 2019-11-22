@@ -12,6 +12,8 @@ public interface ClusterMetricGetters {
 
     long getMessageCollisionCount();
 
+    long getMessageDiscardedCount();
+
     int getInFlightMessageCount();
 
     double getPreInstantiationDuration();

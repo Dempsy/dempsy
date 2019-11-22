@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,7 +40,6 @@ import net.dempsy.Infrastructure;
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
 import net.dempsy.messages.KeyedMessage;
-import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.util.SafeString;
 
@@ -56,7 +54,6 @@ import net.dempsy.util.SafeString;
 public class LockingContainer extends Container {
     private static final Logger LOGGER = LoggerFactory.getLogger(LockingContainer.class);
     // This is a bad idea but only used to gate trace logging the invocation.
-    private static final boolean traceEnabled = LOGGER.isTraceEnabled();
 
     // message key -> instance that handles messages with this key
     // changes to this map will be synchronized; read-only may be concurrent
@@ -141,22 +138,17 @@ public class LockingContainer extends Container {
          *     - whether or not to wait for the lock.
          * @return the instance if the lock was acquired. null otherwise.
          */
-        public Object getExclusive(final boolean block) {
-            if(block) {
-                boolean gotLock = false;
-                while(!gotLock) {
-                    try {
-                        lock.acquire();
-                        gotLock = true;
-                    } catch(final InterruptedException e) {
-                        if(!isRunning.get()) {
-                            throw new DempsyException("Stopped");
-                        }
+        public Object getExclusive() {
+            boolean gotLock = false;
+            while(!gotLock) {
+                try {
+                    lock.acquire();
+                    gotLock = true;
+                } catch(final InterruptedException e) {
+                    if(!isRunning.get()) {
+                        throw new DempsyException("Stopped");
                     }
                 }
-            } else {
-                if(!lock.tryAcquire())
-                    return null;
             }
 
             // if we got here we have the lock
@@ -210,35 +202,37 @@ public class LockingContainer extends Container {
 
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
-    public void dispatch(final KeyedMessage message, final boolean block, final boolean justArrived) throws IllegalArgumentException, ContainerException {
+    public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(false);
-            disposition.dispose(message.message);
+            disposition.dispose(keyedMessage.message);
             return;
         }
 
-        if(message == null)
+        if(keyedMessage == null)
             return; // No. We didn't process the null message
 
-        if(message.message == null)
+        if(keyedMessage.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
-        if(!inbound.doesMessageKeyBelongToNode(message.key)) {
+        final Object actualMessage = youOwnMessage ? keyedMessage.message : disposition.replicate(keyedMessage.message);
+        final Object messageKey = keyedMessage.key;
+
+        if(messageKey == null) {
+            disposition.dispose(actualMessage);
+            throw new ContainerException("Message " + objectDescription(actualMessage) + " contains no key.");
+        }
+
+        if(!inbound.doesMessageKeyBelongToNode(messageKey)) {
+            disposition.dispose(actualMessage);
             if(LOGGER.isDebugEnabled())
-                LOGGER.debug("Message with key " + SafeString.objectDescription(message.key) + " sent to wrong container. ");
+                LOGGER.debug("Message with key " + SafeString.objectDescription(messageKey) + " sent to wrong container. ");
             statCollector.messageFailed(false);
-            disposition.dispose(message.message);
             return;
         }
 
         boolean evictedAndBlocking;
-
-        if(message.key == null) {
-            final String desc = objectDescription(message.message);
-            disposition.dispose(message.message);
-            throw new ContainerException("Message " + desc + " contains no key.");
-        }
 
         try {
             numBeingWorked.incrementAndGet();
@@ -246,61 +240,44 @@ public class LockingContainer extends Container {
             do {
                 evictedAndBlocking = false;
 
-                final InstanceWrapper wrapper = getInstanceForKey(message.key);
+                final InstanceWrapper wrapper = getInstanceForKey(messageKey);
 
                 // wrapper will be null if the activate returns 'false'
                 if(wrapper != null) {
-                    final Object instance = wrapper.getExclusive(block);
+                    final Object instance = wrapper.getExclusive();
                     if(instance != null) { // null indicates we didn't get the lock
-                        final List<KeyedMessageWithType> response;
                         try {
                             if(wrapper.isEvicted()) {
-                                response = null;
                                 // if we're not blocking then we need to just return a failure. Otherwise we want to try again
                                 // because eventually the current Mp will be passivated and removed from the container and
                                 // a subsequent call to getInstanceForDispatch will create a new one.
-                                if(block) {
-                                    Thread.yield();
-                                    evictedAndBlocking = true; // we're going to try again.
-                                } else { // otherwise it's just like we couldn't get the lock. The Mp is busy being killed off.
-                                    if(LOGGER.isTraceEnabled())
-                                        LOGGER.trace("the container for " + clusterId + " failed handle message due to evicted Mp "
-                                            + SafeString.valueOf(prototype));
-
-                                    statCollector.messageCollision(message);
-                                    disposition.dispose(message.message);
-                                }
+                                Thread.yield();
+                                evictedAndBlocking = true; // we're going to try again.
                             } else {
-                                response = invokeOperationAndHandleDispose(wrapper.getInstance(), Operation.handle, message);
+                                invokeOperationAndHandleDispose(wrapper.getInstance(), Operation.handle, new KeyedMessage(messageKey, actualMessage));
                             }
                         } finally {
                             wrapper.releaseLock();
                         }
-                        if(response != null) {
-                            try {
-                                dispatcher.dispatch(response, disposition);
-                            } catch(final Exception de) {
-                                if(isRunning.get())
-                                    LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
-                            }
-                        }
                     } else { // ... we didn't get the lock
                         if(LOGGER.isTraceEnabled())
                             LOGGER.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
-                        statCollector.messageCollision(message);
-                        disposition.dispose(message.message);
+                        statCollector.messageCollision(actualMessage);
+                        disposition.dispose(actualMessage);
                     }
                 } else {
                     // if we got here then the activate on the Mp explicitly returned 'false'
                     if(LOGGER.isDebugEnabled())
                         LOGGER.debug("the container for " + clusterId + " failed to activate the Mp for " + SafeString.valueOf(prototype));
-                    disposition.dispose(message.message);
+                    disposition.dispose(actualMessage);
                     // we consider this "processed"
                     break; // leave the do/while loop
                 }
             } while(evictedAndBlocking);
 
-        } finally {
+        } finally
+
+        {
             numBeingWorked.decrementAndGet();
         }
     }
@@ -428,12 +405,9 @@ public class LockingContainer extends Container {
                     final Runnable task = new Runnable() {
                         @Override
                         public void run() {
-                            final List<KeyedMessageWithType> response;
                             try {
                                 if(isRunning.get() && !wrapper.isEvicted())
-                                    response = invokeOperationAndHandleDispose(instance, Operation.output, null);
-                                else
-                                    response = null;
+                                    invokeOperationAndHandleDispose(instance, Operation.output, null);
                             } finally {
                                 wrapper.releaseLock();
 
@@ -444,14 +418,6 @@ public class LockingContainer extends Container {
                                 }
                                 if(taskSepaphore != null)
                                     taskSepaphore.release();
-                            }
-                            if(response != null) {
-                                try {
-                                    dispatcher.dispatch(response, disposition);
-                                } catch(final Exception de) {
-                                    if(isRunning.get())
-                                        LOGGER.warn("Failed on subsequent dispatch of " + response + ": " + de.getLocalizedMessage());
-                                }
                             }
                         }
                     };
@@ -491,7 +457,10 @@ public class LockingContainer extends Container {
         synchronized(numExecutingOutputs) {
             while(numExecutingOutputs.get() > 0) {
                 try {
-                    numExecutingOutputs.wait();
+                    numExecutingOutputs.wait(300);
+                    // If the executor gets shut down we wont know, so we need to check once in a while
+                    if(!isRunning.get())
+                        break;
                 } catch(final InterruptedException e) {
                     // if we were interupted for a shutdown then just stop
                     // waiting for all of the threads to finish
@@ -590,64 +559,6 @@ public class LockingContainer extends Container {
                 statCollector.messageProcessorCreated(key);
             }
             return wrapper;
-        }
-    }
-
-    public enum Operation {
-        handle, output
-    };
-
-    /**
-     * helper method to invoke an operation (handle a message or run output) handling all of the exceptions and forwarding any results.
-     */
-    private List<KeyedMessageWithType> invokeOperationAndHandleDispose(final Object instance, final Operation op, final KeyedMessage message) {
-        try {
-            if(instance != null) { // possibly passivated ...
-                List<KeyedMessageWithType> result;
-                try {
-                    if(traceEnabled)
-                        LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
-                    statCollector.messageDispatched(message);
-                    result = op == Operation.output ? prototype.invokeOutput(instance) : prototype.invoke(instance, message);
-                    statCollector.messageProcessed(message);
-                } catch(final ContainerException e) {
-                    result = null;
-                    LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
-                        SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
-                    statCollector.messageFailed(false);
-                }
-                // this is an exception thrown as a result of the reflected call having an illegal argument.
-                // This should actually be impossible since the container itself manages the calling.
-                catch(final IllegalArgumentException e) {
-                    result = null;
-                    LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
-                        e);
-                    statCollector.messageFailed(true);
-                }
-                // The app threw an exception.
-                catch(final DempsyException e) {
-                    result = null;
-                    LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " because an exception was thrown by the Message Processeor itself.", e);
-                    statCollector.messageFailed(true);
-                }
-                // RuntimeExceptions bookeeping
-                catch(final RuntimeException e) {
-                    result = null;
-                    LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                        " due to an unknown exception.", e);
-                    statCollector.messageFailed(false);
-
-                    if(op == Operation.handle)
-                        throw e;
-                }
-                return result;
-            }
-            return null;
-        } finally {
-            if(message != null)
-                disposition.dispose(message.message);
         }
     }
 

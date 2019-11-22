@@ -159,7 +159,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
                     // if the message is a resource then the disposer will be used to dispose of the message
                     // but it needs an additional replicate. See feedbackLoop javadoc.
-                    nodeReciever.feedbackLoop(
+                    nodeReciever.propogateMessageToNode(
                         new RoutedMessage(curAddr.clusters, messageKey,
                             disposer == null ? message.message : disposer.replicate(message.message)),
                         false,                     // this shouldn't count since Router is an OUTGOING class

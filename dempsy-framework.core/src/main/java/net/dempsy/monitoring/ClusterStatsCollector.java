@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -39,9 +39,10 @@ public interface ClusterStatsCollector extends StatsCollector {
 
         @Override
         public void close() {
-            if (failed)
+            if(failed)
                 ths.messageFailed(mpFailure);
-            else ths.messageProcessed(message);
+            else
+                ths.messageProcessed(message);
         }
     }
 
@@ -52,7 +53,7 @@ public interface ClusterStatsCollector extends StatsCollector {
     /**
      * {@link Container} calls this method before invoking an MP's <code>MessageHandler</code>
      * or Output method.
-     * 
+     *
      * A message processing "transaction" opens with a messageDispatched. It
      * the closes with one of the following:
      * <ul>
@@ -73,9 +74,15 @@ public interface ClusterStatsCollector extends StatsCollector {
     void messageFailed(boolean mpFailure);
 
     /**
-     * The dispatcher calls this method in its <code>onMessage</code> handler when it discards a message due to a collision at the Mp. This number will ALSO be reflected in the messageDiscarded results.
+     * The dispatcher calls this method in its <code>onMessage</code> handler when it discards a message due to a collision at the Mp. This number will ALSO be
+     * reflected in the messageDiscarded results.
      */
     void messageCollision(Object message);
+
+    /**
+     * This is for when a message is discarded at the container level as opposed to the node level.
+     */
+    void messageDiscarded(Object message);
 
     /**
      * The MP manager calls this method when it creates a message processor instance.

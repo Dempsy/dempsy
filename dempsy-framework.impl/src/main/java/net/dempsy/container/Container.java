@@ -16,6 +16,8 @@
 
 package net.dempsy.container;
 
+import static net.dempsy.util.SafeString.objectDescription;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -24,13 +26,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 
+import net.dempsy.DempsyException;
 import net.dempsy.Infrastructure;
 import net.dempsy.KeyspaceChangeListener;
 import net.dempsy.Service;
+import net.dempsy.config.Cluster;
 import net.dempsy.config.ClusterId;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.DummyMessageResourceManager;
@@ -42,7 +47,9 @@ import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.output.OutputInvoker;
 import net.dempsy.router.RoutingStrategy.Inbound;
+import net.dempsy.transport.RoutedMessage;
 import net.dempsy.util.QuietCloseable;
+import net.dempsy.util.SafeString;
 import net.dempsy.util.executor.RunningEventSwitch;
 
 /**
@@ -55,6 +62,8 @@ import net.dempsy.util.executor.RunningEventSwitch;
  */
 public abstract class Container implements Service, KeyspaceChangeListener, OutputInvoker {
     protected final Logger LOGGER;
+
+    protected final boolean traceEnabled;
 
     private static final AtomicLong containerNumSequence = new AtomicLong(0L);
     protected long containerNum = containerNumSequence.getAndIncrement();
@@ -81,9 +90,17 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     protected int outputConcurrency = -1;
     private final AtomicLong outputThreadNum = new AtomicLong();
 
+    protected AtomicInteger numPending = new AtomicInteger(0);
+    protected int maxPendingMessagesPerContainer = Cluster.DEFAULT_MAX_PENDING_MESSAGES_PER_CONTAINER;
+
     protected Container(final Logger LOGGER) {
         this.LOGGER = LOGGER;
+        traceEnabled = LOGGER.isTraceEnabled();
     }
+
+    public enum Operation {
+        handle, output
+    };
 
     // ----------------------------------------------------------------------------
     // Configuration
@@ -96,6 +113,15 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     public Dispatcher getDispatcher() {
         return dispatcher;
+    }
+
+    public Container setMaxPendingMessagesPerContainer(final int maxPendingMessagesPerContainer) {
+        this.maxPendingMessagesPerContainer = maxPendingMessagesPerContainer;
+        return this;
+    }
+
+    public int getMaxPendingMessagesPerContainer() {
+        return maxPendingMessagesPerContainer;
     }
 
     public Container setInbound(final Inbound inbound) {
@@ -204,10 +230,52 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // Internals
     // ----------------------------------------------------------------------------
 
+    // The Container message processing happens in 2 phases.
+    // Phase 1) Generate the payload from a newly arrived (or fed-backed) message. This will then be queued with the ThreadManager.
+    //
+    // Phase 2) When the payload is delivered in the working thread it can be dispatched to the container.
+    //
+    // The details of the ContainerPayload will be specific to the container implementation but will likely
+    // do things like throw away messages when the number pending to that container is too large.
+    public static interface ContainerSpecific {
+        void messageBeingDiscarded();
+    }
+
+    private class ContainerSpecificInternal implements ContainerSpecific {
+
+        @Override
+        public void messageBeingDiscarded() {
+            numPending.decrementAndGet();
+        }
+
+    }
+
+    public ContainerSpecific prepareMessage(final RoutedMessage km, final boolean justArrived) {
+        if(maxPendingMessagesPerContainer < 0)
+            return null;
+        if(justArrived)
+            return null; // there's no bookeeping if the message just arrived.
+
+        numPending.incrementAndGet();
+        return new ContainerSpecificInternal();
+    }
+
+    public void dispatch(final KeyedMessage message, final ContainerSpecific cs, final boolean justArrived)
+        throws IllegalArgumentException, ContainerException {
+        if(cs != null) {
+            final int num = numPending.decrementAndGet(); // dec first.
+            if(num > maxPendingMessagesPerContainer) { // we just vent the message.
+                statCollector.messageDiscarded(message);
+                return;
+            }
+        }
+        dispatch(message, justArrived);
+    }
+
     // this is called directly from tests but shouldn't be accessed otherwise.
     //
     // implementations MUST handle the disposition
-    public abstract void dispatch(final KeyedMessage message, final boolean block, boolean justArrived) throws IllegalArgumentException, ContainerException;
+    public abstract void dispatch(final KeyedMessage message, boolean youOwnMessage) throws IllegalArgumentException, ContainerException;
 
     protected abstract void doevict(EvictCheck check);
 
@@ -410,16 +478,16 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         public final MessageResourceManager disposition;
         public final boolean hasDisposition;
 
-        public List<Object> toFree = new ArrayList<>();
+        private final List<KeyedMessageWithType> toFree = new ArrayList<>();
 
         public Closer(final MessageResourceManager disposition) {
             this.disposition = disposition;
             this.hasDisposition = disposition != null;
         }
 
-        public KeyedMessage add(final KeyedMessage km) {
+        private KeyedMessage add(final KeyedMessageWithType km) {
             if(hasDisposition)
-                toFree.add(km.message);
+                toFree.add(km);
             return km;
         }
 
@@ -432,9 +500,89 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         @Override
         public void close() {
             if(hasDisposition)
-                toFree.forEach(v -> disposition.dispose(v));
+                toFree.forEach(v -> disposition.dispose(v.message));
+        }
+
+        public void clear() {
+            toFree.clear();
         }
 
     }
 
+    /**
+     * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and forwarding any results.
+     */
+    protected void invokeOperationAndHandleDispose(final Object instance, final Operation op, final KeyedMessage message) {
+        try {
+            if(instance != null) { // possibly passivated ...
+                try (Closer resultsDisposerCloser = new Closer(disposition);) {
+                    final List<KeyedMessageWithType> result = invokeGuts(resultsDisposerCloser, instance, op, message);
+                    if(result != null) {
+                        try {
+                            dispatcher.dispatch(result, hasDisposition ? disposition : null);
+                        } catch(final Exception de) {
+                            LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
+                        }
+                    }
+                }
+            }
+        } finally {
+            if(message != null)
+                disposition.dispose(message.message);
+        }
+    }
+
+    protected List<KeyedMessageWithType> invokeOperationAndHandleDisposeAndReturn(final Closer resultsDisposerCloser, final Object instance, final Operation op,
+        final KeyedMessage message) {
+        try {
+            return (instance != null) ? invokeGuts(resultsDisposerCloser, instance, op, message) : null;
+        } finally {
+            if(message != null)
+                disposition.dispose(message.message);
+        }
+    }
+
+    private List<KeyedMessageWithType> invokeGuts(final Closer resultsDisposerCloser, final Object instance, final Operation op, final KeyedMessage message) {
+        List<KeyedMessageWithType> result;
+        try {
+            if(traceEnabled)
+                LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
+            statCollector.messageDispatched(message);
+            result = resultsDisposerCloser.addAll(op == Operation.output ? prototype.invokeOutput(instance)
+                : prototype.invoke(instance, message));
+            statCollector.messageProcessed(message);
+        } catch(final ContainerException e) {
+            result = null;
+            LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
+                SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
+            statCollector.messageFailed(false);
+        }
+        // this is an exception thrown as a result of the reflected call having an illegal argument.
+        // This should actually be impossible since the container itself manages the calling.
+        catch(final IllegalArgumentException e) {
+            result = null;
+            LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
+                " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
+                e);
+            statCollector.messageFailed(true);
+        }
+        // The app threw an exception.
+        catch(final DempsyException e) {
+            result = null;
+            LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
+                " because an exception was thrown by the Message Processeor itself", e);
+            statCollector.messageFailed(true);
+        }
+        // RuntimeExceptions bookeeping
+        catch(final RuntimeException e) {
+            result = null;
+            LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
+                " due to an unknown exception.", e);
+            statCollector.messageFailed(false);
+
+            if(op == Operation.handle)
+                throw e;
+        }
+        return result;
+    }
 }

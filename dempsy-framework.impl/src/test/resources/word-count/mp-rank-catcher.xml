@@ -16,6 +16,7 @@ xmlns:util="http://www.springframework.org/schema/util"
             </bean>
         </property>
         <property name="routingStrategyId" value="net.dempsy.router.simple" />
+        <property name="maxPendingMessagesPerContainer" value="${max-pending-messages-per-ontainer:-1}" />
     </bean>
     
     <bean id="u-rank!" class="net.dempsy.TestWordCount$RankCatcher" />

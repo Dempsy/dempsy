@@ -15,6 +15,7 @@ xmlns:util="http://www.springframework.org/schema/util"
                 <constructor-arg ref="u-rank!" />
             </bean>
         </property>
+        <property name="maxPendingMessagesPerContainer" value="${max-pending-messages-per-ontainer:-1}" />
     </bean>
     
     <bean id="u-rank!" class="net.dempsy.TestWordCount$WordRank" />

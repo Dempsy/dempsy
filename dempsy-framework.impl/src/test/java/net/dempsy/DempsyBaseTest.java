@@ -163,7 +163,7 @@ public abstract class DempsyBaseTest {
             new String[] {"managed","group"},
             new String[] {"altnonlocking"},
             new String[] {"zookeeper"},
-            new String[] {"nio"},
+            new String[] {"nio","bq","passthrough"},
             new String[] {"kryo"},
             new Object[][] {
                 {"blocking",(Function<String, ThreadingModel>)(testName) -> new DefaultThreadingModel(testName)
@@ -349,6 +349,9 @@ public abstract class DempsyBaseTest {
             LocalClusterSessionFactory.completeReset();
             BlockingQueueAddress.completeReset();
             ClassTracker.dumpResults();
+
+            // ignore(() -> Thread.sleep(10000));
+            // NioReceiver.acStatus();
         }
     }
 

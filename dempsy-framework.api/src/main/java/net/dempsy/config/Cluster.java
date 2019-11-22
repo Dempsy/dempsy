@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,15 +33,18 @@ import net.dempsy.messages.MessageProcessorLifecycle;
  * For example, in the Word Count example from the User Guide, all of the instances of WordCount that represent the step in
  * the chain of processing after the {@link Adaptor} are in the same {@link Cluster}.
  * </p>
- * 
+ *
  * @see ClusterId
  */
 public class Cluster {
+    public static final int DEFAULT_MAX_PENDING_MESSAGES_PER_CONTAINER = -1; // infinite (well, limited by the main queue)
+
     private ClusterId clusterId;
     private MessageProcessorLifecycle<?> mp = null;
     private Adaptor adaptor = null;
     private String routingStrategyId;
     private ClusterId[] destinations = {};
+    private int maxPendingMessagesPerContainer = DEFAULT_MAX_PENDING_MESSAGES_PER_CONTAINER;
 
     private KeySource<?> keySource = null;
     // default to negative cycle time means no eviction cycle runs
@@ -60,7 +63,8 @@ public class Cluster {
     }
 
     /**
-     * Create a ClusterDefinition from a cluster name. A {@link Cluster} is to be embedded in an {@link ApplicationDefinition} so it only needs to cluster name and not the entire {@link ClusterId}.
+     * Create a ClusterDefinition from a cluster name. A {@link Cluster} is to be embedded in an {@link ApplicationDefinition} so it only needs to cluster name
+     * and not the entire {@link ClusterId}.
      */
     Cluster(final String applicationName, final String clusterName) {
         this.clusterId = new ClusterId(applicationName, clusterName);
@@ -90,19 +94,24 @@ public class Cluster {
     }
 
     public Cluster mp(final MessageProcessorLifecycle<?> messageProcessor) throws IllegalStateException {
-        if (this.mp != null)
+        if(this.mp != null)
             throw new IllegalStateException("MessageProcessorLifecycle already set on cluster " + clusterId);
-        if (this.adaptor != null)
+        if(this.adaptor != null)
             throw new IllegalStateException("Adaptor already set on cluster " + clusterId + ". Cannot also set a MessageProcessorLifecycle");
 
         this.mp = messageProcessor;
         return this;
     }
 
+    public Cluster maxPendingMessagesPerContainer(final int maxPendingMessagesPerContainer) {
+        this.maxPendingMessagesPerContainer = maxPendingMessagesPerContainer;
+        return this;
+    }
+
     public Cluster adaptor(final Adaptor adaptor) throws IllegalStateException {
-        if (this.adaptor != null)
+        if(this.adaptor != null)
             throw new IllegalStateException("Adaptor already set on cluster " + clusterId);
-        if (this.mp != null)
+        if(this.mp != null)
             throw new IllegalStateException("MessageProcessorLifecycle already set on cluster " + clusterId + ". Cannot also set an Adaptor");
         this.adaptor = adaptor;
         return this;
@@ -148,6 +157,14 @@ public class Cluster {
     public Cluster setEvictionFrequency(final EvictionFrequency evictionFrequency) {
         this.evictionFrequency = evictionFrequency;
         return this;
+    }
+
+    public int getMaxPendingMessagesPerContainer() {
+        return maxPendingMessagesPerContainer;
+    }
+
+    public Cluster setMaxPendingMessagesPerContainer(final int maxPendingMessagesPerContainer) {
+        return maxPendingMessagesPerContainer(maxPendingMessagesPerContainer);
     }
 
     public Object getOutputScheduler() {
@@ -206,7 +223,7 @@ public class Cluster {
 
     /**
      * Returns true if there are any explicitly defined destinations.
-     * 
+     *
      * @see #setDestinations
      */
     public boolean hasExplicitDestinations() {
@@ -214,32 +231,32 @@ public class Cluster {
     }
 
     public boolean isAdaptor() {
-        return (adaptor != null);
+        return(adaptor != null);
     }
 
     // This is called from Node
     void setAppName(final String appName) {
-        if (clusterId.applicationName != null && !clusterId.applicationName.equals(appName))
+        if(clusterId.applicationName != null && !clusterId.applicationName.equals(appName))
             throw new IllegalStateException("Restting the application name on a cluster is not allowed.");
         clusterId = new ClusterId(appName, clusterId.clusterName);
     }
 
     public void validate() throws IllegalStateException {
-        if (mp == null && adaptor == null)
+        if(mp == null && adaptor == null)
             throw new IllegalStateException("A dempsy cluster must contain either an 'adaptor' or a message processor prototype. " +
-                    clusterId + " doesn't appear to be configure with either.");
-        if (mp != null && adaptor != null)
+                clusterId + " doesn't appear to be configure with either.");
+        if(mp != null && adaptor != null)
             throw new IllegalStateException("A dempsy cluster must contain either an 'adaptor' or a message processor prototype but not both. " +
-                    clusterId + " appears to be configured with both.");
+                clusterId + " appears to be configured with both.");
 
-        if (mp != null)
+        if(mp != null)
             mp.validate();
 
-        if (adaptor != null && keySource != null)
+        if(adaptor != null && keySource != null)
             throw new IllegalStateException("A dempsy cluster can not pre-instantation an adaptor.");
 
-        if (routingStrategyId == null && adaptor == null) // null routingStrategyId is fine if we're an adaptor
+        if(routingStrategyId == null && adaptor == null) // null routingStrategyId is fine if we're an adaptor
             throw new IllegalStateException("No routing strategy set for " + clusterId + ". This should be set on the "
-                    + Cluster.class.getSimpleName() + " or on the " + Node.class.getSimpleName());
+                + Cluster.class.getSimpleName() + " or on the " + Node.class.getSimpleName());
     }
 }
