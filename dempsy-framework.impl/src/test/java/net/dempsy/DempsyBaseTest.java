@@ -163,7 +163,7 @@ public abstract class DempsyBaseTest {
             new String[] {"managed","group"},
             new String[] {"altnonlocking"},
             new String[] {"zookeeper"},
-            new String[] {"nio","bq","passthrough"},
+            new String[] {"nio","bq"},
             new String[] {"kryo"},
             new Object[][] {
                 {"blocking",(Function<String, ThreadingModel>)(testName) -> new DefaultThreadingModel(testName)
