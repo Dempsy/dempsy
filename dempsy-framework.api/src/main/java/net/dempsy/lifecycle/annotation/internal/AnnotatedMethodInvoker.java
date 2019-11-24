@@ -26,6 +26,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.dempsy.lifecycle.annotation.BulkMessageHandler;
+import net.dempsy.lifecycle.annotation.MessageHandler;
+
 /**
  * This class will identify and invoke annotated methods, maintaining a thread-safe cache of those methods.
  * It currently supports the following three scenarios (which have disjoint constructors):
@@ -45,115 +48,97 @@ import java.util.concurrent.ConcurrentHashMap;
  * Separate instances must be constructed for these each scenario, as they're based on different data.
  */
 public class AnnotatedMethodInvoker {
-    private final Class<? extends Annotation> annotationType;
-    private final Map<Class<?>, Method> methods = new ConcurrentHashMap<Class<?>, Method>();
+    private final Map<Class<?>, Method> methods = new ConcurrentHashMap<>();
+    public final Method bulkMethod;
+
+    private static final Class<MessageHandler> mhClass = MessageHandler.class;
+    private static final Class<BulkMessageHandler> bmhClass = BulkMessageHandler.class;
 
     /**
      * Constructs an instance to be used with annotated setter methods.
      *
      * @param objectKlass
-     *     The class to be introspected for annotated methods.
+     *            The class to be introspected for annotated methods.
      * @param annotationType
-     *     Annotation that identifies setter or generic one argument methods.
+     *            Annotation that identifies setter or generic one argument methods.
      *
      * @throws IllegalArgumentException
-     *     if the class does not have any single-argument methods with the specified annotation
+     *             if the class does not have any single-argument methods with the specified annotation
      */
-    public AnnotatedMethodInvoker(final Class<?> objectKlass, final Class<? extends Annotation> annotationType)
-        throws IllegalArgumentException {
-        this.annotationType = annotationType; // not relevant, but maybe useful for debugging
+    public AnnotatedMethodInvoker(final Class<?> objectKlass) throws IllegalArgumentException {
 
-        for(final Method method: introspectAnnotationMultiple(objectKlass, annotationType, true)) {
+        for(final Method method: introspectAnnotationMultiple(objectKlass, mhClass, true)) {
             final Class<?>[] argTypes = method.getParameterTypes();
             if(argTypes.length == 1)
                 methods.put(argTypes[0], method);
             else
                 throw new IllegalArgumentException(
-                    "The class " + objectKlass.getName() + " has the method " + method.getName() + " and is annotated with "
-                        + annotationType.getSimpleName() + " but takes " + argTypes.length + " parameters when it must take exactly 1");
+                        "The class " + objectKlass.getName() + " has the method " + method.getName() + " and is annotated with "
+                                + mhClass.getSimpleName() + " but takes " + argTypes.length + " parameters when it must take exactly 1");
         }
 
         if(methods.size() == 0)
             throw new IllegalArgumentException(
-                "class " + objectKlass.getName() + " does not have any 1-argument methods annotated with " +
-                    annotationType.getSimpleName());
+                    "class " + objectKlass.getName() + " does not have any 1-argument methods annotated with " +
+                            mhClass.getSimpleName());
+
+        final List<Method> bulkMethods = introspectAnnotationMultiple(objectKlass, bmhClass, true);
+        if(bulkMethods.size() > 0) {
+            if(bulkMethods.size() > 1)
+                throw new IllegalStateException("There appears to be more than one method marked with @" + BulkMessageHandler.class.getSimpleName()
+                        + " on " + objectKlass.getSimpleName() + ". Dempsy has no way to discriminate between these methods.");
+
+            bulkMethod = bulkMethods.get(0);
+            final Class<?>[] argTypes = bulkMethod.getParameterTypes();
+            if(argTypes.length == 0)
+                throw new IllegalStateException(
+                        "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
+                                + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " take no parameters.");
+            if(argTypes.length > 1)
+                throw new IllegalStateException(
+                        "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
+                                + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " take too many parameters.");
+            if(!argTypes[0].isAssignableFrom(List.class))
+                throw new IllegalStateException(
+                        "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
+                                + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " takes a " + argTypes[0].getSimpleName()
+                                + " which is not assignable to a List<.>.");
+        } else
+            bulkMethod = null;
+    }
+
+    public Object invokeBulkMethod(final Object instance, final List<?> value)
+            throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+        return bulkMethod.invoke(instance, value);
     }
 
     /**
-     * Invokes the annotated getter method on the passed object (which may not be <code>null</code>), returning its result.
+     * Invokes the annotated single argument method appropriate to the passed value (must not be <code>null</code>) and
+     * returns its result.
      *
      * @throws IllegalArgumentException
-     *     if passed an object does not have any no-argument methods with the specified annotation
+     *             if there is no annotated method appropriate to the value
      * @throws IllegalAccessException
-     *     if unable to invoke the annotated method
+     *             if unable to invoke the annotated method
      * @throws InvocationTargetException
-     *     if the invoked method threw an exception
-     */
-    public Object invokeGetter(final Object instance) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
-        final Class<?> klass = instance.getClass();
-        Method method = methods.get(klass);
-        if(method == null) {
-            method = introspectAnnotationSingle(klass, annotationType);
-            if((method == null) || (method.getParameterTypes().length != 0)) {
-                throw new IllegalArgumentException(
-                    "class " + klass.getName()
-                        + " does not have any no-argument method annotated as @"
-                        + annotationType.getName());
-            }
-            methods.put(klass, method);
-        }
-
-        return method.invoke(instance);
-    }
-
-    /**
-     * Invokes the annotated setter appropriate to the passed value (must not be <code>null</code>).
-     *
-     * @throws IllegalArgumentException
-     *     if there is no annotated method appropriate to the value
-     * @throws IllegalAccessException
-     *     if unable to invoke the annotated method
-     * @throws InvocationTargetException
-     *     if the invoked method threw an exception
-     */
-    public Object invokeSetter(final Object instance, final Object value)
-        throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
-        final Class<?> valueClass = value.getClass();
-        final Method method = getInvokableMethodForClass(valueClass);
-        if(method == null) {
-            throw new IllegalArgumentException(
-                "class " + instance.getClass().getName()
-                    + " does not have an annotated setter for values of type " + valueClass.getName());
-        }
-
-        return method.invoke(instance, value);
-    }
-
-    /**
-     * Invokes the annotated single argument method appropriate to the passed value (must not be <code>null</code>) and returns its result.
-     *
-     * @throws IllegalArgumentException
-     *     if there is no annotated method appropriate to the value
-     * @throws IllegalAccessException
-     *     if unable to invoke the annotated method
-     * @throws InvocationTargetException
-     *     if the invoked method threw an exception
+     *             if the invoked method threw an exception
      */
     public Object invokeMethod(final Object instance, final Object value)
-        throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
+            throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
         final Class<?> valueClass = value.getClass();
         final Method method = getInvokableMethodForClass(valueClass);
         if(method == null) {
             throw new IllegalArgumentException(
-                "class " + instance.getClass().getName()
-                    + " does not have an annotated setter for values of type " + valueClass.getName());
+                    "class " + instance.getClass().getName()
+                            + " does not have an annotated setter for values of type " + valueClass.getName());
         }
 
         return method.invoke(instance, value);
     }
 
     /**
-     * Identifies whether there is an annotated setter appropriate to the passed value. This may be used as a pre-test for {@link #invokeSetter}, to avoid
+     * Identifies whether there is an annotated setter appropriate to the passed value. This may be used as a pre-test
+     * for {@link #invokeSetter}, to avoid
      * catching <code>IllegalArgumentException</code>.
      */
     public boolean isValueSupported(final Object value) {
@@ -161,7 +146,8 @@ public class AnnotatedMethodInvoker {
     }
 
     /**
-     * Examines the passed class and extracts a single method that is annotated with the specified annotation type, <code>null</code> if not methods are so
+     * Examines the passed class and extracts a single method that is annotated with the specified annotation type,
+     * <code>null</code> if not methods are so
      * annotated. Behavior is undefined if multiple methods
      * have the specified annotation.
      */
@@ -171,10 +157,11 @@ public class AnnotatedMethodInvoker {
     }
 
     /**
-     * Examines the passed class and extracts all methods that are annotated with the specified annotation type (may be none).
+     * Examines the passed class and extracts all methods that are
+     * annotated with the specified annotation type (may be none).
      */
     public static <T extends Annotation> List<Method> introspectAnnotationMultiple(final Class<?> klass, final Class<T> annotationType, final boolean recurse) {
-        final List<Method> result = new ArrayList<Method>();
+        final List<Method> result = new ArrayList<>();
         for(final Method method: klass.getDeclaredMethods()) {
             if(method.getAnnotation(annotationType) != null)
                 result.add(method);
@@ -198,7 +185,7 @@ public class AnnotatedMethodInvoker {
     // Internals
     // ----------------------------------------------------------------------------
 
-    public Method getInvokableMethodForClass(final Class<?> valueClass) {
+    private Method getInvokableMethodForClass(final Class<?> valueClass) {
         if(valueClass == null)
             return null;
 
@@ -255,7 +242,7 @@ public class AnnotatedMethodInvoker {
         final List<AnnotatedClass<A>> ret = new ArrayList<>();
         final A curClassAnnotation = clazz.getAnnotation(annotation);
         if(curClassAnnotation != null)
-            ret.add(new AnnotatedClass<A>(clazz, curClassAnnotation));
+            ret.add(new AnnotatedClass<>(clazz, curClassAnnotation));
 
         if(!recurse)
             return ret;

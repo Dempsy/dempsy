@@ -2,8 +2,6 @@ package net.dempsy;
 
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.util.Functional.uncheck;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -12,6 +10,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import net.dempsy.cluster.local.LocalClusterSessionFactory;
 import net.dempsy.config.Node;
@@ -84,9 +85,6 @@ public class TestAlmostSimple {
 
         @MessageHandler("even")
         public void handle(final Message message) {
-            if("yes".equals(key))
-                if((message.message & 0x01) == 0x01)
-                    System.out.println("HERE!");
             received.add(message);
         }
 
@@ -107,7 +105,7 @@ public class TestAlmostSimple {
             key = evenp;
         }
 
-        @MessageHandler("even")
+        @MessageHandler("odd")
         public void handle(final Message message) {
             received.add(message);
         }
@@ -126,50 +124,50 @@ public class TestAlmostSimple {
         final AtomicLong count = new AtomicLong(0);
 
         try (final DefaultThreadingModel tm = new DefaultThreadingModel("TB", -1, 1);
-            final NodeManager nm = new NodeManager();) {
+                final NodeManager nm = new NodeManager();) {
             final Node n = new Node.Builder("test-app")
-                .defaultRoutingStrategyId("net.dempsy.router.simple")
-                .receiver(new Dummy())
-                .cluster("start")
-                .adaptor(new Adaptor() {
-                    private Dispatcher disp;
-                    boolean done = false;
-                    int cur = 0;
-                    AtomicBoolean exitedLoop = new AtomicBoolean(false);
+                    .defaultRoutingStrategyId("net.dempsy.router.simple")
+                    .receiver(new Dummy())
+                    .cluster("start")
+                    .adaptor(new Adaptor() {
+                        private Dispatcher disp;
+                        boolean done = false;
+                        int cur = 0;
+                        AtomicBoolean exitedLoop = new AtomicBoolean(false);
 
-                    @Override
-                    public void stop() {
-                        done = true;
-                        while(!exitedLoop.get())
-                            Thread.yield();
-                    }
-
-                    @Override
-                    public void start() {
-                        try {
-                            while(!done) {
-                                uncheck(() -> disp.dispatchAnnotated(new Message(cur++)));
-                                count.incrementAndGet();
-                            }
-                        } finally {
-                            exitedLoop.set(true);
+                        @Override
+                        public void stop() {
+                            done = true;
+                            while(!exitedLoop.get())
+                                Thread.yield();
                         }
-                    }
 
-                    @Override
-                    public void setDispatcher(final Dispatcher dispatcher) {
-                        this.disp = dispatcher;
-                    }
-                })
-                .cluster("mpEven")
-                .mp(new MessageProcessor<MpEven>(mpEven))
-                .cluster("mpOdd")
-                .mp(new MessageProcessor<MpOdd>(mpOdd))
-                .build();
+                        @Override
+                        public void start() {
+                            try {
+                                while(!done) {
+                                    uncheck(() -> disp.dispatchAnnotated(new Message(cur++)));
+                                    count.incrementAndGet();
+                                }
+                            } finally {
+                                exitedLoop.set(true);
+                            }
+                        }
+
+                        @Override
+                        public void setDispatcher(final Dispatcher dispatcher) {
+                            this.disp = dispatcher;
+                        }
+                    })
+                    .cluster("mpEven")
+                    .mp(new MessageProcessor<>(mpEven))
+                    .cluster("mpOdd")
+                    .mp(new MessageProcessor<>(mpOdd))
+                    .build();
 
             nm.node(n)
-                .collaborator(new LocalClusterSessionFactory().createSession())
-                .threadingModel(tm.start());
+                    .collaborator(new LocalClusterSessionFactory().createSession())
+                    .threadingModel(tm.start());
 
             nm.start();
 
@@ -185,8 +183,22 @@ public class TestAlmostSimple {
         final MpEven mpEvenYes = mpEven.allMps.stream().filter(m -> "yes".equals(m.key)).findAny().get();
         // all messages here should be even numbers
         assertTrue(mpEvenYes.received.stream()
-            // .peek(m -> System.out.println("" + m.message + "," + m.even()))
-            .allMatch(m -> (m.message & 0x01) == 0));
+                .allMatch(m -> (m.message & 0x01) == 0));
+
+        final MpEven mpEvenNo = mpEven.allMps.stream().filter(m -> "no".equals(m.key)).findAny().get();
+        // all messages here should be odd numbers
+        assertTrue(mpEvenNo.received.stream()
+                .allMatch(m -> (m.message & 0x01) == 1));
+
+        final MpOdd mpOddYes = mpOdd.allMps.stream().filter(m -> "yes".equals(m.key)).findAny().get();
+        // all messages here should be odd numbers
+        assertTrue(mpOddYes.received.stream()
+                .allMatch(m -> (m.message & 0x01) == 1));
+
+        final MpOdd mpOddNo = mpOdd.allMps.stream().filter(m -> "no".equals(m.key)).findAny().get();
+        // all messages here should be even numbers
+        assertTrue(mpOddNo.received.stream()
+                .allMatch(m -> (m.message & 0x01) == 0));
     }
 
 }

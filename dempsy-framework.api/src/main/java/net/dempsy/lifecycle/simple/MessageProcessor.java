@@ -11,8 +11,8 @@ import java.util.function.Supplier;
 import net.dempsy.DempsyException;
 import net.dempsy.config.ClusterId;
 import net.dempsy.config.Node;
-import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.KeyedMessage;
+import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.MessageProcessorLifecycle;
 import net.dempsy.messages.MessageResourceManager;
 
@@ -126,6 +126,15 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
     public List<KeyedMessageWithType> invoke(final Mp instance, final KeyedMessage message) throws DempsyException {
         try {
             return Arrays.asList(Optional.ofNullable(instance.handle(message)).orElse(EMPTY_KEYED_MESSAGE_WITH_TYPE));
+        } catch(final RuntimeException rte) {
+            throw new DempsyException(rte, true);
+        }
+    }
+
+    @Override
+    public List<KeyedMessageWithType> invokeBulk(final Mp instance, final List<KeyedMessage> messages) throws DempsyException {
+        try {
+            return Arrays.asList(Optional.ofNullable(instance.handleBulk(messages)).orElse(EMPTY_KEYED_MESSAGE_WITH_TYPE));
         } catch(final RuntimeException rte) {
             throw new DempsyException(rte, true);
         }

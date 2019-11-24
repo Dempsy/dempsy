@@ -40,13 +40,23 @@ public interface MessageProcessorLifecycle<T> {
     public List<KeyedMessageWithType> invoke(T instance, KeyedMessage message) throws DempsyException;
 
     /**
+     * Some Container implementations can queue messages to an individual Mp and deliver them in bulk.
+     * By default the method delivers each message to invoke and returns the accumulated responses. It's
+     * possible to have the Mp itself handle the bulk delivery. If you want bulk delivery make sure you select
+     * a Container that supports it. Not all of them do. If you choose one that doesn't then
+     * this method will never be called.
+     */
+    public List<KeyedMessageWithType> invokeBulk(final T instance, final List<KeyedMessage> message) throws DempsyException;
+
+    /**
      * This method is invoked by the framework when output is enabled (see {@link #isOutputSupported()})
      * and it's time to invoke the output phase of the particular message processor 'instance.'
      */
     public List<KeyedMessageWithType> invokeOutput(T instance) throws DempsyException;
 
     /**
-     * This method is invoked by Dempsy to determine whether or not the Mps managed by this {@link MessageProcessorLifecycle}
+     * This method is invoked by Dempsy to determine whether or not the Mps managed by this
+     * {@link MessageProcessorLifecycle}
      * support an output cycle.
      */
     public boolean isOutputSupported();
@@ -57,7 +67,8 @@ public interface MessageProcessorLifecycle<T> {
     public boolean invokeEvictable(T instance) throws DempsyException;
 
     /**
-     * This method is invoked by Dempsy to determine whether or not the Mps managed by this {@link MessageProcessorLifecycle}
+     * This method is invoked by Dempsy to determine whether or not the Mps managed by this
+     * {@link MessageProcessorLifecycle}
      * support being notified of evictions.
      */
     public boolean isEvictionSupported();

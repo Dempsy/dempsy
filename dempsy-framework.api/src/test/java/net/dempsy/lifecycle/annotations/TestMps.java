@@ -1,8 +1,10 @@
 package net.dempsy.lifecycle.annotations;
 
 import java.util.Date;
+import java.util.List;
 
 import net.dempsy.lifecycle.annotation.Activation;
+import net.dempsy.lifecycle.annotation.BulkMessageHandler;
 import net.dempsy.lifecycle.annotation.MessageHandler;
 import net.dempsy.lifecycle.annotation.MessageKey;
 import net.dempsy.lifecycle.annotation.MessageType;
@@ -280,6 +282,20 @@ public class TestMps {
         @MessageHandler
         public Message handleMsg(final Message val) {
             return new Message("Yo");
+        }
+
+        @Override
+        public Object clone() throws CloneNotSupportedException {
+            return super.clone();
+        }
+    }
+
+    @Mp
+    public static class TestMpWithOnlyBulk implements Cloneable {
+
+        @BulkMessageHandler
+        public void handleMsgs(final List<Message> val) {
+
         }
 
         @Override

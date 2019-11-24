@@ -2,9 +2,6 @@ package net.dempsy;
 
 import static net.dempsy.utils.test.ConditionPoll.assertTrue;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -34,6 +31,10 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
@@ -65,19 +66,19 @@ public class TestWordCount extends DempsyBaseTest {
 
     public static String readBible() throws IOException {
         try (final InputStream is = new GZIPInputStream(new BufferedInputStream(WordProducer.class.getClassLoader().getResourceAsStream(wordResource)));
-            final StringWriter writer = new StringWriter();) {
+                final StringWriter writer = new StringWriter();) {
             IOUtils.copy(is, writer);
             return writer.toString();
         }
     }
 
     public TestWordCount(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
-        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
+            final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
         super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
     }
 
     protected TestWordCount(final Logger logger, final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
-        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
+            final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
         super(logger, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
     }
 
@@ -298,7 +299,7 @@ public class TestWordCount extends DempsyBaseTest {
     @Mp
     public static class WordRank implements Cloneable {
         // This map is shared among clones.
-        final public Map<String, Long> countMap = new ConcurrentHashMap<String, Long>();
+        final public Map<String, Long> countMap = new ConcurrentHashMap<>();
 
         @MessageHandler
         public void handle(final WordCount wordCount) {
@@ -389,7 +390,7 @@ public class TestWordCount extends DempsyBaseTest {
 
     // ========================================================================
 
-    Set<String> finalResults = new HashSet<String>();
+    Set<String> finalResults = new HashSet<>();
 
     {
         finalResults.addAll(Arrays.asList("the", "and", "of", "to", "And", "in", "that", "he", "shall", "unto", "I", "his"));
@@ -466,9 +467,9 @@ public class TestWordCount extends DempsyBaseTest {
 
                 // wait until all of the counts are also passed to WordRank
                 final ClusterMetricGetters wrStats = (ClusterMetricGetters)manager
-                    .getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2"));
+                        .getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2"));
                 assertTrue(poll(wrStats,
-                    s -> (adaptor.numDispatched - messagesDiscardedAtFirstStage) == (s.getProcessedMessageCount() + s.getMessageDiscardedCount())));
+                        s -> (adaptor.numDispatched - messagesDiscardedAtFirstStage) == (s.getProcessedMessageCount() + s.getMessageDiscardedCount())));
 
                 stopSystem();
 
@@ -480,9 +481,9 @@ public class TestWordCount extends DempsyBaseTest {
                 Collections.sort(ranks, (o1, o2) -> o2.rank.compareTo(o1.rank));
 
                 final List<Rank> top10 = ranks.subList(0, 10);
-                System.out.println(top10);
+                final String errStr = "expected the top 10 results: " + top10 + " to all be in:" + finalResults;
                 top10.stream()
-                    .forEach(r -> assertTrue(finalResults.contains(r.word)));
+                        .forEach(r -> assertTrue(errStr, finalResults.contains(r.word)));
             });
         }
     }
@@ -515,7 +516,7 @@ public class TestWordCount extends DempsyBaseTest {
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager[] manager = Arrays.asList(nodes.get(0).manager, nodes.get(1).manager).toArray(new NodeManager[2]);
                 final ClassPathXmlApplicationContext[] ctx = Arrays.asList(nodes.get(0).ctx, nodes.get(1).ctx)
-                    .toArray(new ClassPathXmlApplicationContext[2]);
+                        .toArray(new ClassPathXmlApplicationContext[2]);
 
                 // wait until I can reach the cluster from the adaptor.
                 assertTrue(poll(o -> manager[0].getRouter().allReachable("test-cluster1").size() == 2));
@@ -525,16 +526,18 @@ public class TestWordCount extends DempsyBaseTest {
 
                 final WordProducer adaptor = ctx[0].getBean(WordProducer.class);
                 final ClusterMetricGetters[] stats = Arrays.asList(
-                    (ClusterMetricGetters)manager[0].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")),
-                    (ClusterMetricGetters)manager[1].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
-                    .toArray(new ClusterMetricGetters[2]);
+                        (ClusterMetricGetters)manager[0].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")),
+                        (ClusterMetricGetters)manager[1].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
+                        .toArray(new ClusterMetricGetters[2]);
 
                 assertTrue(waitForAllSent(adaptor));
                 assertTrue(poll(o -> {
-                    // System.out.println(stats[0].getProcessedMessageCount() + ", " + stats[1].getProcessedMessageCount());
+                    // System.out.println("" + adaptor.numDispatched + " ==? " + stats[0].getProcessedMessageCount() +
+                    // ", " + stats[1].getProcessedMessageCount()
+                    // + " == " + (stats[0].getProcessedMessageCount() + stats[1].getProcessedMessageCount()));
                     return adaptor.numDispatched == Arrays.stream(stats)
-                        .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
-                        .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
+                            .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
+                            .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
             });
         }
@@ -568,18 +571,18 @@ public class TestWordCount extends DempsyBaseTest {
 
                 final WordProducer adaptor = nodes.get(0).ctx.getBean(WordProducer.class);
                 final List<ClusterMetricGetters> stats = Arrays.asList(managers)
-                    .subList(1, managers.length)
-                    .stream()
-                    .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
-                    .map(sc -> (ClusterMetricGetters)sc)
-                    .collect(Collectors.toList());
+                        .subList(1, managers.length)
+                        .stream()
+                        .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
+                        .map(sc -> (ClusterMetricGetters)sc)
+                        .collect(Collectors.toList());
 
                 waitForAllSent(adaptor);
                 assertTrue(poll(o -> adaptor.done.get()));
                 assertTrue(poll(o -> {
                     return adaptor.numDispatched == stats.stream()
-                        .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
-                        .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
+                            .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
+                            .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
             });
         }
@@ -599,11 +602,11 @@ public class TestWordCount extends DempsyBaseTest {
 
         try (@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager()
-            .set("min_nodes", Integer.toString(NUM_WC))
-            .set("routing-group", ":group")
-            .set("send_threads", "1")
-            .set("receive_threads", "1")
-            .set("blocking-queue-size", "500000")) {
+                .set("min_nodes", Integer.toString(NUM_WC))
+                .set("routing-group", ":group")
+                .set("send_threads", "1")
+                .set("receive_threads", "1")
+                .set("blocking-queue-size", "500000")) {
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountHomogeneousProcessing", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), ctxs, n -> {
@@ -620,29 +623,29 @@ public class TestWordCount extends DempsyBaseTest {
 
                 // get all of the stats collectors for the ranks.
                 final List<ClusterMetricGetters> rankStats = Arrays.asList(managers)
-                    .subList(1, managers.length)
-                    .stream()
-                    .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2")))
-                    .map(sc -> (ClusterMetricGetters)sc)
-                    .collect(Collectors.toList());
+                        .subList(1, managers.length)
+                        .stream()
+                        .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2")))
+                        .map(sc -> (ClusterMetricGetters)sc)
+                        .collect(Collectors.toList());
 
                 final int totalSent = adaptor.numDispatched;
                 // now wait for the sum of all messages received by the ranking to be the number sent
                 assertTrue(poll(o -> {
                     final int totalRanked = rankStats.stream()
-                        .map(sc -> Integer.valueOf((int)sc.getDispatchedMessageCount() + (int)sc.getMessageDiscardedCount()))
-                        .reduce(Integer.valueOf(0), (i1, i2) -> Integer.valueOf(i1.intValue() + i2.intValue())).intValue();
+                            .map(sc -> Integer.valueOf((int)sc.getDispatchedMessageCount() + (int)sc.getMessageDiscardedCount()))
+                            .reduce(Integer.valueOf(0), (i1, i2) -> Integer.valueOf(i1.intValue() + i2.intValue())).intValue();
                     return totalRanked == totalSent;
                 }));
 
                 // no nodes (except the adaptor node) should have sent any messages.
                 // IOW, messages got to the Rank processor never leaving the node the Count was executed.
                 final List<NodeMetricGetters> nodeStats = Arrays.asList(managers)
-                    .subList(1, managers.length)
-                    .stream()
-                    .map(nm -> nm.getNodeStatsCollector())
-                    .map(s -> (NodeMetricGetters)s)
-                    .collect(Collectors.toList());
+                        .subList(1, managers.length)
+                        .stream()
+                        .map(nm -> nm.getNodeStatsCollector())
+                        .map(s -> (NodeMetricGetters)s)
+                        .collect(Collectors.toList());
 
                 // if the routing id isn't a group id then there should be cross talk.
                 assertEquals(NUM_WC, nodeStats.size());
@@ -680,11 +683,11 @@ public class TestWordCount extends DempsyBaseTest {
 
         try (@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager()
-            .set("min_nodes", Integer.toString(NUM_WC))
-            .set("routing-group", ":group")
-            .set("send_threads", "1")
-            .set("receive_threads", "1")
-            .set("blocking-queue-size", "500000")) {
+                .set("min_nodes", Integer.toString(NUM_WC))
+                .set("routing-group", ":group")
+                .set("send_threads", "1")
+                .set("receive_threads", "1")
+                .set("blocking-queue-size", "500000")) {
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos(testName, (r, c, s, t, ser) -> isElasticRoutingStrategy(r), ctxs, n -> {

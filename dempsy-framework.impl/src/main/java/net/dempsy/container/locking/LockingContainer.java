@@ -57,7 +57,7 @@ public class LockingContainer extends Container {
 
     // message key -> instance that handles messages with this key
     // changes to this map will be synchronized; read-only may be concurrent
-    private final ConcurrentHashMap<Object, InstanceWrapper> instances = new ConcurrentHashMap<Object, InstanceWrapper>();
+    private final ConcurrentHashMap<Object, InstanceWrapper> instances = new ConcurrentHashMap<>();
 
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     private final AtomicInteger numBeingWorked = new AtomicInteger(0);
@@ -135,7 +135,7 @@ public class LockingContainer extends Container {
          * MAKE SURE YOU USE A FINALLY CLAUSE TO RELEASE THE LOCK.
          *
          * @param block
-         *     - whether or not to wait for the lock.
+         *            - whether or not to wait for the lock.
          * @return the instance if the lock was acquired. null otherwise.
          */
         public Object getExclusive() {
@@ -186,7 +186,8 @@ public class LockingContainer extends Container {
         }
 
         /**
-         * Flag to indicate this instance has been evicted and no further operations should be enacted. THIS SHOULDN'T BE CALLED WITHOUT HOLDING THE LOCK.
+         * Flag to indicate this instance has been evicted and no further operations should be enacted. THIS SHOULDN'T
+         * BE CALLED WITHOUT HOLDING THE LOCK.
          */
         public boolean isEvicted() {
             return evicted;
@@ -205,7 +206,7 @@ public class LockingContainer extends Container {
     public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
-            statCollector.messageFailed(false);
+            statCollector.messageFailed(1);
             disposition.dispose(keyedMessage.message);
             return;
         }
@@ -228,7 +229,7 @@ public class LockingContainer extends Container {
             disposition.dispose(actualMessage);
             if(LOGGER.isDebugEnabled())
                 LOGGER.debug("Message with key " + SafeString.objectDescription(messageKey) + " sent to wrong container. ");
-            statCollector.messageFailed(false);
+            statCollector.messageFailed(1);
             return;
         }
 
@@ -248,8 +249,10 @@ public class LockingContainer extends Container {
                     if(instance != null) { // null indicates we didn't get the lock
                         try {
                             if(wrapper.isEvicted()) {
-                                // if we're not blocking then we need to just return a failure. Otherwise we want to try again
-                                // because eventually the current Mp will be passivated and removed from the container and
+                                // if we're not blocking then we need to just return a failure. Otherwise we want to try
+                                // again
+                                // because eventually the current Mp will be passivated and removed from the container
+                                // and
                                 // a subsequent call to getInstanceForDispatch will create a new one.
                                 Thread.yield();
                                 evictedAndBlocking = true; // we're going to try again.
@@ -291,13 +294,13 @@ public class LockingContainer extends Container {
 
             // we need to make a copy of the instances in order to make sure
             // the eviction check is done at once.
-            final Map<Object, InstanceWrapper> instancesToEvict = new HashMap<Object, InstanceWrapper>(instances.size() + 10);
+            final Map<Object, InstanceWrapper> instancesToEvict = new HashMap<>(instances.size() + 10);
             instancesToEvict.putAll(instances);
 
             while(instancesToEvict.size() > 0 && instances.size() > 0 && isRunning.get() && !check.shouldStopEvicting()) {
                 // store off anything that passes for later removal. This is to avoid a
                 // ConcurrentModificationException.
-                final Set<Object> keysProcessed = new HashSet<Object>();
+                final Set<Object> keysProcessed = new HashSet<>();
 
                 for(final Map.Entry<Object, InstanceWrapper> entry: instancesToEvict.entrySet()) {
                     if(check.shouldStopEvicting())
@@ -330,8 +333,8 @@ public class LockingContainer extends Container {
                                     instance = wrapper.getInstance();
                                 } catch(final Throwable th) {} // not sure why this would ever happen
                                 LOGGER.warn("Checking the eviction status/passivating of the Mp "
-                                    + SafeString.objectDescription(instance == null ? wrapper : instance) +
-                                    " resulted in an exception.", e);
+                                        + SafeString.objectDescription(instance == null ? wrapper : instance) +
+                                        " resulted in an exception.", e);
                             }
 
                             // even if passivate throws an exception, if the eviction check returned 'true' then
@@ -365,7 +368,7 @@ public class LockingContainer extends Container {
             return;
 
         // take a snapshot of the current container state.
-        final LinkedList<InstanceWrapper> toOutput = new LinkedList<InstanceWrapper>(instances.values());
+        final LinkedList<InstanceWrapper> toOutput = new LinkedList<>(instances.values());
 
         Executor executorService = null;
         Semaphore taskLock = null;
@@ -477,7 +480,7 @@ public class LockingContainer extends Container {
     // Internals
     // ----------------------------------------------------------------------------
 
-    ConcurrentHashMap<Object, Boolean> keysBeingWorked = new ConcurrentHashMap<Object, Boolean>();
+    ConcurrentHashMap<Object, Boolean> keysBeingWorked = new ConcurrentHashMap<>();
 
     /**
      * This is required to return non null or throw a ContainerException
@@ -506,17 +509,17 @@ public class LockingContainer extends Container {
             } catch(final DempsyException e) {
                 if(e.userCaused()) {
                     LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
-                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
-                    statCollector.messageFailed(true);
+                            + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                    statCollector.messageFailed(1);
                     instance = null;
                 } else
                     throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        " because the clone method threw an exception.", e);
+                            SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                            " because the clone method threw an exception.", e);
             } catch(final RuntimeException e) {
                 throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                    " because the clone invocation resulted in an unknown exception.", e);
+                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                        " because the clone invocation resulted in an unknown exception.", e);
             }
 
             // activate
@@ -525,7 +528,7 @@ public class LockingContainer extends Container {
                 if(instance != null) {
                     if(LOGGER.isTraceEnabled())
                         LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                            + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
+                                + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
                     prototype.activate(instance, key);
                     activateSuccessful = true;
                 }
@@ -535,17 +538,17 @@ public class LockingContainer extends Container {
                         LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.", e.userCause);
                     else
                         LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
-                    statCollector.messageFailed(true);
+                    statCollector.messageFailed(1);
                 } else
                     throw new ContainerException(
-                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
-                            + ". Is the active method accessible - the class is public and the method is public?",
-                        e);
+                            "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
+                                    + ". Is the active method accessible - the class is public and the method is public?",
+                            e);
             } catch(final RuntimeException e) {
                 throw new ContainerException(
-                    "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                        " because of an unknown exception.",
-                    e);
+                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
+                                " because of an unknown exception.",
+                        e);
             }
 
             if(activateSuccessful) {

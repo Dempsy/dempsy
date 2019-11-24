@@ -30,7 +30,8 @@ public class TestDropwizardClusterStatsCollector {
 
     @Test
     public void verifyGetNameHasNecessaryPieces() {
-        // We don't really care if something minor changes (like the ordering of output fields or package name), but we do want to make sure
+        // We don't really care if something minor changes (like the ordering of output fields or package name), but we
+        // do want to make sure
         // this still contains all the important bits.
         final String name = collector.getName("metric-name-goes-here");
         Assert.assertTrue(name.contains("appName"));
@@ -41,9 +42,9 @@ public class TestDropwizardClusterStatsCollector {
     @Test
     public void verifyMetersAreCreated() {
         // Dispatch some messages. The parameters don't matter for the metrics we're collecting.
-        collector.messageDispatched(null);
-        collector.messageProcessed(null);
-        collector.messageFailed(true);
+        collector.messageDispatched(1);
+        collector.messageProcessed(1);
+        collector.messageFailed(1);
         collector.messageCollision(null);
         collector.messageProcessorCreated(null);
         collector.messageProcessorDeleted(null);
@@ -57,17 +58,17 @@ public class TestDropwizardClusterStatsCollector {
         verifyMeter(DropwizardClusterStatsCollector.MESSAGES_PROCESSOR_DELETED, 1);
 
         // Lets call this one a couple more times to make sure the meter increments correctly.
-        collector.messageDispatched(null);
-        collector.messageDispatched(null);
+        collector.messageDispatched(1);
+        collector.messageDispatched(1);
         verifyMeter(DropwizardClusterStatsCollector.MESSAGES_DISPATCHED, 3);
     }
 
     @Test
     public void verifyMetricsGetCleanedUp() {
         // Dispatch some messages. The parameters don't matter for the metrics we're collecting.
-        collector.messageDispatched(null);
-        collector.messageProcessed(null);
-        collector.messageFailed(true);
+        collector.messageDispatched(1);
+        collector.messageProcessed(1);
+        collector.messageFailed(1);
         collector.messageCollision(null);
         collector.messageProcessorCreated(null);
         collector.messageProcessorDeleted(null);
@@ -78,7 +79,7 @@ public class TestDropwizardClusterStatsCollector {
 
         // Make sure metrics exist in default registry
         SortedSet<String> metricsInRegistry = SharedMetricRegistries.getDefault().getNames();
-        for (final String metricName : DropwizardClusterStatsCollector.METRIC_NAMES) {
+        for(final String metricName: DropwizardClusterStatsCollector.METRIC_NAMES) {
             Assert.assertTrue(metricsInRegistry.contains(collector.getName(metricName)));
         }
 
@@ -87,7 +88,7 @@ public class TestDropwizardClusterStatsCollector {
 
         // Make sure metrics no longer exist in the default registry
         metricsInRegistry = SharedMetricRegistries.getDefault().getNames();
-        for (final String metricName : DropwizardClusterStatsCollector.METRIC_NAMES) {
+        for(final String metricName: DropwizardClusterStatsCollector.METRIC_NAMES) {
             Assert.assertTrue(!metricsInRegistry.contains(collector.getName(metricName)));
         }
     }

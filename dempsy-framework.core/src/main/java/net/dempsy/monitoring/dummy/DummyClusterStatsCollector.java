@@ -8,13 +8,13 @@ import net.dempsy.monitoring.ClusterStatsCollector;
 public class DummyClusterStatsCollector implements ClusterStatsCollector {
 
     @Override
-    public void messageDispatched(final Object message) {}
+    public void messageDispatched(final int num) {}
 
     @Override
-    public void messageProcessed(final Object message) {}
+    public void messageProcessed(final int num) {}
 
     @Override
-    public void messageFailed(final boolean mpFailure) {}
+    public void messageFailed(final int num) {}
 
     @Override
     public void messageCollision(final Object message) {}

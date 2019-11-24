@@ -22,32 +22,28 @@ public interface ClusterStatsCollector extends StatsCollector {
 
     public class Transaction implements AutoCloseable {
         private boolean failed = false;
-        private boolean mpFailure = false;
-        private final Object message;
         private final ClusterStatsCollector ths;
 
-        private Transaction(final ClusterStatsCollector ths, final Object message) {
-            this.message = message;
+        private Transaction(final ClusterStatsCollector ths) {
             this.ths = ths;
-            ths.messageDispatched(message);
+            ths.messageDispatched(1);
         }
 
         public void failed(final boolean mpFailure) {
             failed = true;
-            this.mpFailure = mpFailure;
         }
 
         @Override
         public void close() {
             if(failed)
-                ths.messageFailed(mpFailure);
+                ths.messageFailed(1);
             else
-                ths.messageProcessed(message);
+                ths.messageProcessed(1);
         }
     }
 
     public default Transaction messageProcessTransaction(final Object message) {
-        return new Transaction(this, message);
+        return new Transaction(this);
     }
 
     /**
@@ -61,20 +57,23 @@ public interface ClusterStatsCollector extends StatsCollector {
      * <li>messageFailed - there was an error</li>
      * </ul>
      */
-    void messageDispatched(Object message);
+    void messageDispatched(int num);
 
     /**
-     * {@link Container} calls this method when successfully invoking an MP's <code>MessageHandler</code> or Output method.
+     * {@link Container} calls this method when successfully invoking an MP's <code>MessageHandler</code> or Output
+     * method.
      */
-    void messageProcessed(Object message);
+    void messageProcessed(int num);
 
     /**
-     * {@link Container} calls this method when invoking an MP's <code>MessageHandler</code> or Output method results in an error.
+     * {@link Container} calls this method when invoking an MP's <code>MessageHandler</code> or Output method results in
+     * an error.
      */
-    void messageFailed(boolean mpFailure);
+    void messageFailed(int num);
 
     /**
-     * The dispatcher calls this method in its <code>onMessage</code> handler when it discards a message due to a collision at the Mp. This number will ALSO be
+     * The dispatcher calls this method in its <code>onMessage</code> handler when it discards a message due to a
+     * collision at the Mp. This number will ALSO be
      * reflected in the messageDiscarded results.
      */
     void messageCollision(Object message);

@@ -1,7 +1,10 @@
 package net.dempsy.lifecycle.simple;
 
-import net.dempsy.messages.KeyedMessageWithType;
+import java.util.Arrays;
+import java.util.List;
+
 import net.dempsy.messages.KeyedMessage;
+import net.dempsy.messages.KeyedMessageWithType;
 
 /**
  * When using the 'simple' message processor lifecycle, this interface will be implemented by the framework user
@@ -9,6 +12,16 @@ import net.dempsy.messages.KeyedMessage;
  */
 public interface Mp {
     public KeyedMessageWithType[] handle(KeyedMessage message);
+
+    public default KeyedMessageWithType[] handleBulk(final List<KeyedMessage> messages) {
+        final KeyedMessageWithType[] ret = messages.stream()
+                .map(m -> handle(m))
+                .filter(ms -> ms != null)
+                .flatMap(ms -> Arrays.stream(ms))
+                .toArray(KeyedMessageWithType[]::new);
+
+        return (ret.length > 0) ? ret : null;
+    }
 
     public default boolean shouldBeEvicted() {
         return false;

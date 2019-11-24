@@ -98,21 +98,21 @@ public class BasicClusterStatsCollector implements ClusterStatsCollector, Cluste
     }
 
     @Override
-    public void messageDispatched(final Object message) {
-        messagesDispatched.incrementAndGet();
-        inProcessMessages.incrementAndGet();
+    public void messageDispatched(final int num) {
+        messagesDispatched.getAndAdd(num);
+        inProcessMessages.getAndAdd(num);
     }
 
     @Override
-    public void messageFailed(final boolean mpFailure) {
-        messagesFailed.incrementAndGet();
-        inProcessMessages.decrementAndGet();
+    public void messageFailed(final int num) {
+        messagesFailed.getAndAdd(num);
+        inProcessMessages.getAndAdd(-num);
     }
 
     @Override
-    public void messageProcessed(final Object message) {
-        messagesProcessed.incrementAndGet();
-        inProcessMessages.decrementAndGet();
+    public void messageProcessed(final int num) {
+        messagesProcessed.getAndAdd(num);
+        inProcessMessages.getAndAdd(-num);
     }
 
     @Override

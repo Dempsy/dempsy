@@ -99,8 +99,8 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     public enum Operation {
-        handle, output
-    };
+        handle, output, bulk
+    }
 
     // ----------------------------------------------------------------------------
     // Configuration
@@ -212,7 +212,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         if(outputConcurrency > 1)
             outputExecutorService = Executors.newFixedThreadPool(outputConcurrency,
-                r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
+                    r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
     }
 
     @Override
@@ -231,7 +231,8 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // ----------------------------------------------------------------------------
 
     // The Container message processing happens in 2 phases.
-    // Phase 1) Generate the payload from a newly arrived (or fed-backed) message. This will then be queued with the ThreadManager.
+    // Phase 1) Generate the payload from a newly arrived (or fed-backed) message. This will then be queued with the
+    // ThreadManager.
     //
     // Phase 2) When the payload is delivered in the working thread it can be dispatched to the container.
     //
@@ -261,7 +262,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     public void dispatch(final KeyedMessage message, final ContainerSpecific cs, final boolean justArrived)
-        throws IllegalArgumentException, ContainerException {
+            throws IllegalArgumentException, ContainerException {
         if(cs != null) {
             final int num = numPending.decrementAndGet(); // dec first.
             if(num > maxPendingMessagesPerContainer) { // we just vent the message.
@@ -353,7 +354,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         if(prototype != null && prototype.isEvictionSupported()) {
             evictionScheduler = Executors.newSingleThreadScheduledExecutor(
-                r -> new Thread(r, this.getClass().getSimpleName() + "-Eviction-" + evictionThreadNumber.getAndIncrement()));
+                    r -> new Thread(r, this.getClass().getSimpleName() + "-Eviction-" + evictionThreadNumber.getAndIncrement()));
 
             evictionScheduler.scheduleWithFixedDelay(new Runnable() {
                 @Override
@@ -432,7 +433,8 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         if(less) {
             // we need to run a special eviction pass.
             synchronized(changer) { // we only want to do this one at a time.
-                keyspaceChangeSwitch.preemptWorkerAndWait(); // if it's already running the stop it so we can restart it.
+                keyspaceChangeSwitch.preemptWorkerAndWait(); // if it's already running the stop it so we can restart
+                                                             // it.
 
                 changer.inbound = inbound;
 
@@ -474,13 +476,13 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
             throw new IllegalStateException("The container must have a " + ClusterStatsCollector.class.getSimpleName() + " id");
     }
 
-    protected static class Closer implements QuietCloseable {
+    protected static class InvocationResultsCloser implements QuietCloseable {
         public final MessageResourceManager disposition;
         public final boolean hasDisposition;
 
         private final List<KeyedMessageWithType> toFree = new ArrayList<>();
 
-        public Closer(final MessageResourceManager disposition) {
+        public InvocationResultsCloser(final MessageResourceManager disposition) {
             this.disposition = disposition;
             this.hasDisposition = disposition != null;
         }
@@ -510,13 +512,14 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     /**
-     * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and forwarding any results.
+     * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and
+     * forwarding any results.
      */
     protected void invokeOperationAndHandleDispose(final Object instance, final Operation op, final KeyedMessage message) {
         try {
             if(instance != null) { // possibly passivated ...
-                try (Closer resultsDisposerCloser = new Closer(disposition);) {
-                    final List<KeyedMessageWithType> result = invokeGuts(resultsDisposerCloser, instance, op, message);
+                try (InvocationResultsCloser resultsDisposerCloser = new InvocationResultsCloser(disposition);) {
+                    final List<KeyedMessageWithType> result = invokeGuts(resultsDisposerCloser, instance, op, message, null, 1);
                     if(result != null) {
                         try {
                             dispatcher.dispatch(result, hasDisposition ? disposition : null);
@@ -532,55 +535,76 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         }
     }
 
-    protected List<KeyedMessageWithType> invokeOperationAndHandleDisposeAndReturn(final Closer resultsDisposerCloser, final Object instance, final Operation op,
-        final KeyedMessage message) {
+    protected void invokeBulkHandleAndHandleDispose(final Object instance, final List<KeyedMessage> messages) {
         try {
-            return (instance != null) ? invokeGuts(resultsDisposerCloser, instance, op, message) : null;
+            if(instance != null) { // possibly passivated ...
+                try (InvocationResultsCloser resultsCloser = new InvocationResultsCloser(disposition);) {
+                    final List<KeyedMessageWithType> result = invokeGuts(resultsCloser, instance, Operation.bulk, null, messages, messages.size());
+                    if(result != null) {
+                        try {
+                            dispatcher.dispatch(result, hasDisposition ? disposition : null);
+                        } catch(final Exception de) {
+                            LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
+                        }
+                    }
+                }
+            }
+        } finally {
+            if(messages != null)
+                messages.forEach(m -> disposition.dispose(m.message));
+        }
+    }
+
+    protected List<KeyedMessageWithType> invokeOperationAndHandleDisposeAndReturn(final InvocationResultsCloser resultsCloser, final Object instance,
+            final Operation op, final KeyedMessage message) {
+        try {
+            return (instance != null) ? invokeGuts(resultsCloser, instance, op, message, null, 1) : null;
         } finally {
             if(message != null)
                 disposition.dispose(message.message);
         }
     }
 
-    private List<KeyedMessageWithType> invokeGuts(final Closer resultsDisposerCloser, final Object instance, final Operation op, final KeyedMessage message) {
+    private List<KeyedMessageWithType> invokeGuts(final InvocationResultsCloser resultsCloser, final Object instance, final Operation op,
+            final KeyedMessage message, final List<KeyedMessage> bulk, final int numMessages) {
         List<KeyedMessageWithType> result;
         try {
             if(traceEnabled)
                 LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
-            statCollector.messageDispatched(message);
-            result = resultsDisposerCloser.addAll(op == Operation.output ? prototype.invokeOutput(instance)
-                : prototype.invoke(instance, message));
-            statCollector.messageProcessed(message);
+            statCollector.messageDispatched(numMessages);
+            result = resultsCloser.addAll(op == Operation.handle ? prototype.invoke(instance, message)
+                    : (op == Operation.bulk ? prototype.invokeBulk(instance, bulk) : prototype.invokeOutput(instance)));
+            statCollector.messageProcessed(numMessages);
         } catch(final ContainerException e) {
             result = null;
             LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
-                SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
-            statCollector.messageFailed(false);
+                    SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
+            statCollector.messageFailed(numMessages);
         }
         // this is an exception thrown as a result of the reflected call having an illegal argument.
         // This should actually be impossible since the container itself manages the calling.
         catch(final IllegalArgumentException e) {
             result = null;
             LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
-                e);
-            statCollector.messageFailed(true);
+                    " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
+                    e);
+            statCollector.messageFailed(numMessages);
         }
         // The app threw an exception.
         catch(final DempsyException e) {
             result = null;
             LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                " because an exception was thrown by the Message Processeor itself", e);
-            statCollector.messageFailed(true);
+                    " because an exception was thrown by the Message Processeor itself", e);
+            statCollector.messageFailed(numMessages);
         }
-        // RuntimeExceptions bookeeping
+        // RuntimeExceptions book-keeping
         catch(final RuntimeException e) {
             result = null;
             LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                " due to an unknown exception.", e);
-            statCollector.messageFailed(false);
+                    " due to an unknown exception.", e);
+            statCollector.messageFailed(numMessages);
 
-            if(op == Operation.handle)
+            if(op == Operation.handle || op == Operation.bulk)
                 throw e;
         }
         return result;

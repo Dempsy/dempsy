@@ -77,18 +77,18 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     }
 
     @Override
-    public void messageDispatched(final Object message) {
-        messageDispatched.mark();
+    public void messageDispatched(final int num) {
+        messageDispatched.mark(num);
     }
 
     @Override
-    public void messageProcessed(final Object message) {
-        messageProcessed.mark();
+    public void messageProcessed(final int num) {
+        messageProcessed.mark(num);
     }
 
     @Override
-    public void messageFailed(final boolean mpFailure) {
-        messageFailed.mark();
+    public void messageFailed(final int num) {
+        messageFailed.mark(num);
     }
 
     @Override
