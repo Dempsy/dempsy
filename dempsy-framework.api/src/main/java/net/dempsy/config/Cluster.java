@@ -45,6 +45,7 @@ public class Cluster {
     private String routingStrategyId;
     private ClusterId[] destinations = {};
     private int maxPendingMessagesPerContainer = DEFAULT_MAX_PENDING_MESSAGES_PER_CONTAINER;
+    private String containerTypeId = null;
 
     private KeySource<?> keySource = null;
     // default to negative cycle time means no eviction cycle runs
@@ -165,6 +166,19 @@ public class Cluster {
 
     public Cluster setMaxPendingMessagesPerContainer(final int maxPendingMessagesPerContainer) {
         return maxPendingMessagesPerContainer(maxPendingMessagesPerContainer);
+    }
+
+    private Cluster containerTypeId(final String containerTypeId) {
+        this.containerTypeId = containerTypeId;
+        return this;
+    }
+
+    public Cluster setContainerTypeId(final String containerTypeId) {
+        return containerTypeId(containerTypeId);
+    }
+
+    public String getContainerTypeId() {
+        return containerTypeId;
     }
 
     public Object getOutputScheduler() {

@@ -51,8 +51,8 @@ public class AnnotatedMethodInvoker {
     private final Map<Class<?>, Method> methods = new ConcurrentHashMap<>();
     public final Method bulkMethod;
 
-    private static final Class<MessageHandler> mhClass = MessageHandler.class;
-    private static final Class<BulkMessageHandler> bmhClass = BulkMessageHandler.class;
+    private static final Class<MessageHandler> MHCLASS = MessageHandler.class;
+    private static final Class<BulkMessageHandler> BMHCLASS = BulkMessageHandler.class;
 
     /**
      * Constructs an instance to be used with annotated setter methods.
@@ -67,22 +67,22 @@ public class AnnotatedMethodInvoker {
      */
     public AnnotatedMethodInvoker(final Class<?> objectKlass) throws IllegalArgumentException {
 
-        for(final Method method: introspectAnnotationMultiple(objectKlass, mhClass, true)) {
+        for(final Method method: introspectAnnotationMultiple(objectKlass, MHCLASS, true)) {
             final Class<?>[] argTypes = method.getParameterTypes();
             if(argTypes.length == 1)
                 methods.put(argTypes[0], method);
             else
                 throw new IllegalArgumentException(
                         "The class " + objectKlass.getName() + " has the method " + method.getName() + " and is annotated with "
-                                + mhClass.getSimpleName() + " but takes " + argTypes.length + " parameters when it must take exactly 1");
+                                + MHCLASS.getSimpleName() + " but takes " + argTypes.length + " parameters when it must take exactly 1");
         }
 
         if(methods.size() == 0)
             throw new IllegalArgumentException(
                     "class " + objectKlass.getName() + " does not have any 1-argument methods annotated with " +
-                            mhClass.getSimpleName());
+                            MHCLASS.getSimpleName());
 
-        final List<Method> bulkMethods = introspectAnnotationMultiple(objectKlass, bmhClass, true);
+        final List<Method> bulkMethods = introspectAnnotationMultiple(objectKlass, BMHCLASS, true);
         if(bulkMethods.size() > 0) {
             if(bulkMethods.size() > 1)
                 throw new IllegalStateException("There appears to be more than one method marked with @" + BulkMessageHandler.class.getSimpleName()

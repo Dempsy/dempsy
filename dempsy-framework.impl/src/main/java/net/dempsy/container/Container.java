@@ -194,6 +194,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     @Override
     public void start(final Infrastructure infra) {
+        if(traceEnabled)
+            LOGGER.trace("Container {} maxPendingMessagesPerContainer:", clusterId, maxPendingMessagesPerContainer);
+
         isRunningLazy = true;
         isRunning.set(true);
 
@@ -212,7 +215,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         if(outputConcurrency > 1)
             outputExecutorService = Executors.newFixedThreadPool(outputConcurrency,
-                    r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
+                r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
     }
 
     @Override
@@ -257,19 +260,24 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         if(justArrived)
             return null; // there's no bookeeping if the message just arrived.
 
-        numPending.incrementAndGet();
+        if(traceEnabled)
+            LOGGER.trace("prepareMessages: Pending messages on {} container is: ", clusterId, numPending.incrementAndGet());
+
         return new ContainerSpecificInternal();
     }
 
     public void dispatch(final KeyedMessage message, final ContainerSpecific cs, final boolean justArrived)
-            throws IllegalArgumentException, ContainerException {
+        throws IllegalArgumentException, ContainerException {
         if(cs != null) {
             final int num = numPending.decrementAndGet(); // dec first.
+
             if(num > maxPendingMessagesPerContainer) { // we just vent the message.
                 statCollector.messageDiscarded(message);
                 return;
             }
         }
+        if(traceEnabled)
+            LOGGER.trace("dispatch: Pending messages on {} container is: ", clusterId, numPending);
         dispatch(message, justArrived);
     }
 
@@ -354,7 +362,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         if(prototype != null && prototype.isEvictionSupported()) {
             evictionScheduler = Executors.newSingleThreadScheduledExecutor(
-                    r -> new Thread(r, this.getClass().getSimpleName() + "-Eviction-" + evictionThreadNumber.getAndIncrement()));
+                r -> new Thread(r, this.getClass().getSimpleName() + "-Eviction-" + evictionThreadNumber.getAndIncrement()));
 
             evictionScheduler.scheduleWithFixedDelay(new Runnable() {
                 @Override
@@ -556,7 +564,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     protected List<KeyedMessageWithType> invokeOperationAndHandleDisposeAndReturn(final InvocationResultsCloser resultsCloser, final Object instance,
-            final Operation op, final KeyedMessage message) {
+        final Operation op, final KeyedMessage message) {
         try {
             return (instance != null) ? invokeGuts(resultsCloser, instance, op, message, null, 1) : null;
         } finally {
@@ -566,19 +574,19 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     private List<KeyedMessageWithType> invokeGuts(final InvocationResultsCloser resultsCloser, final Object instance, final Operation op,
-            final KeyedMessage message, final List<KeyedMessage> bulk, final int numMessages) {
+        final KeyedMessage message, final List<KeyedMessage> bulk, final int numMessages) {
         List<KeyedMessageWithType> result;
         try {
             if(traceEnabled)
                 LOGGER.trace("invoking \"{}\" for {}", SafeString.valueOf(instance), message);
             statCollector.messageDispatched(numMessages);
             result = resultsCloser.addAll(op == Operation.handle ? prototype.invoke(instance, message)
-                    : (op == Operation.bulk ? prototype.invokeBulk(instance, bulk) : prototype.invokeOutput(instance)));
+                : (op == Operation.bulk ? prototype.invokeBulk(instance, bulk) : prototype.invokeOutput(instance)));
             statCollector.messageProcessed(numMessages);
         } catch(final ContainerException e) {
             result = null;
             LOGGER.warn("the container for " + clusterId + " failed to invoke " + op + " on the message processor " +
-                    SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
+                SafeString.valueOf(prototype) + (op == Operation.handle ? (" with " + objectDescription(message)) : ""), e);
             statCollector.messageFailed(numMessages);
         }
         // this is an exception thrown as a result of the reflected call having an illegal argument.
@@ -586,22 +594,22 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         catch(final IllegalArgumentException e) {
             result = null;
             LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                    " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
-                    e);
+                " due to a declaration problem. Are you sure the method takes the type being routed to it? If this is an output operation are you sure the output method doesn't take any arguments?",
+                e);
             statCollector.messageFailed(numMessages);
         }
         // The app threw an exception.
         catch(final DempsyException e) {
             result = null;
             LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                    " because an exception was thrown by the Message Processeor itself", e);
+                " because an exception was thrown by the Message Processeor itself", e);
             statCollector.messageFailed(numMessages);
         }
         // RuntimeExceptions book-keeping
         catch(final RuntimeException e) {
             result = null;
             LOGGER.error("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                    " due to an unknown exception.", e);
+                " due to an unknown exception.", e);
             statCollector.messageFailed(numMessages);
 
             if(op == Operation.handle || op == Operation.bulk)

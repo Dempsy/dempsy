@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,13 +29,13 @@ import net.dempsy.transport.SenderFactory;
 public class BlockingQueueSenderFactory implements SenderFactory {
     private final Map<NodeAddress, BlockingQueueSender> senders = new HashMap<NodeAddress, BlockingQueueSender>();
     private NodeStatsCollector statsCollector;
-    private boolean blocking = true;
+    private boolean blocking = false;
 
     @Override
     public synchronized Sender getSender(final NodeAddress destination) throws MessageTransportException {
         BlockingQueueSender blockingQueueSender = senders.get(destination);
-        if (blockingQueueSender == null) {
-            blockingQueueSender = new BlockingQueueSender(this, ((BlockingQueueAddress) destination).getQueue(), blocking, statsCollector);
+        if(blockingQueueSender == null) {
+            blockingQueueSender = new BlockingQueueSender(this, ((BlockingQueueAddress)destination).getQueue(), blocking, statsCollector);
             senders.put(destination, blockingQueueSender);
         }
 
@@ -44,7 +44,7 @@ public class BlockingQueueSenderFactory implements SenderFactory {
 
     @Override
     public synchronized void close() {
-        for (final BlockingQueueSender sender : senders.values())
+        for(final BlockingQueueSender sender: senders.values())
             sender.stop();
     }
 
@@ -66,16 +66,16 @@ public class BlockingQueueSenderFactory implements SenderFactory {
 
     synchronized void imDone(final BlockingQueueSender sender) {
         NodeAddress toRemove = null;
-        for (final Map.Entry<NodeAddress, BlockingQueueSender> e : senders.entrySet()) {
-            if (e.getValue() == sender) { // found it
+        for(final Map.Entry<NodeAddress, BlockingQueueSender> e: senders.entrySet()) {
+            if(e.getValue() == sender) { // found it
                 toRemove = e.getKey();
                 break;
             }
         }
 
-        if (toRemove == null)
+        if(toRemove == null)
             throw new IllegalArgumentException(
-                    "There was an attempt to stop a " + BlockingQueueSender.class.getSimpleName() + " that was already stopped");
+                "There was an attempt to stop a " + BlockingQueueSender.class.getSimpleName() + " that was already stopped");
 
     }
 }

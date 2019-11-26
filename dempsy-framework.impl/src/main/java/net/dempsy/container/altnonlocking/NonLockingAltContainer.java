@@ -279,7 +279,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                     } else {
                         // we didn't get exclusive access so let's see if we can add the message to the mailbox
                         // make one try at putting the message in the mailbox.
-                        final LinkedList<KeyedMessage> q = mailbox.queue.getAndSet(null);
+                        final LinkedList<KeyedMessage> q = mailbox.queue.getAndSet(null); // doesn't use getQueue because getQueue waits for the queue.
 
                         if(q != null) { // I got it!
                             q.add(new KeyedMessage(messageKey, actualMessage));

@@ -138,7 +138,10 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                     LOGGER.warn("The cluster " + c.getClusterId()
                         + " contains an adaptor but also has an output executor set. The output executor will never be used.");
             } else {
-                final Container con = makeContainer(node.getContainerTypeId()).setMessageProcessor(c.getMessageProcessor())
+                String containerTypeId = c.getContainerTypeId();
+                if(containerTypeId == null)
+                    containerTypeId = node.getContainerTypeId(); // can't be null
+                final Container con = makeContainer(containerTypeId).setMessageProcessor(c.getMessageProcessor())
                     .setClusterId(c.getClusterId()).setMaxPendingMessagesPerContainer(c.getMaxPendingMessagesPerContainer());
 
                 // TODO: This is a hack for now.

@@ -80,6 +80,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
     @Override
     public void dispatch(final KeyedMessageWithType messageParam, final MessageResourceManager disposer) {
+        final boolean traceEnabled = LOGGER.isTraceEnabled();
         if(messageParam == null)
             throw new NullPointerException("Attempt to dispatch a null message.");
 
@@ -116,17 +117,19 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
             final Map<NodeAddress, ContainerAddress> containerByNodeAddress = new HashMap<>();
             for(final String mt: message.messageTypes) {
                 final RoutingStrategy.Router[] routers = outboundsByMessageType.get(mt);
-                if(routers == null)
-                    LOGGER.trace("[{}] No cluster that handles messages of type {}", thisNodeId, mt);
-                else {
+                if(routers == null) {
+                    if(traceEnabled)
+                        LOGGER.trace("[{}] No cluster that handles messages of type {}", thisNodeId, mt);
+                } else {
                     // For this message type we now have all of the Routers. For each Router determine
                     // the set of ContainerAddresses that this message will be sent to.
                     for(int i = 0; i < routers.length; i++) {
                         final ContainerAddress ca = routers[i].selectDestinationForMessage(message);
                         // it's possible 'ca' is null when we don't know where to send the message.
-                        if(ca == null)
-                            LOGGER.debug("[{}] No way to send the message {} to specific cluster for the time being", thisNodeId, message.message);
-                        else {
+                        if(ca == null) {
+                            if(traceEnabled)
+                                LOGGER.debug("[{}] No way to send the message {} to specific cluster for the time being", thisNodeId, message.message);
+                        } else {
                             // When the message will be sent to 2 different clusters, but both clusters
                             // are hosted in the same node, then we send 1 message to 1 ContainerAddress
                             // where the 'clusters' field contains both container ids.
@@ -145,7 +148,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
             // =================================================================================
 
             if(containerByNodeAddress.size() == 0) {
-                if(LOGGER.isTraceEnabled())
+                if(traceEnabled)
                     LOGGER.trace("[{}] There appears to be no valid destination addresses for the message {}", thisNodeId,
                         SafeString.objectDescription(message.message));
             }
@@ -155,7 +158,8 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                 final ContainerAddress curAddr = e.getValue();
 
                 if(curNode.equals(thisNode)) {
-                    LOGGER.trace("Sending local {}", message);
+                    if(traceEnabled)
+                        LOGGER.trace("Sending local {}", message);
 
                     // if the message is a resource then the disposer will be used to dispose of the message
                     // but it needs an additional replicate. See feedbackLoop javadoc.
@@ -166,7 +170,8 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                         disposer);
                     messageSentSomewhere = true;
                 } else {
-                    LOGGER.trace("Sending {} to {}", message, curNode);
+                    if(traceEnabled)
+                        LOGGER.trace("Sending {} to {}", message, curNode);
 
                     final Sender sender = cur.getSender(curNode);
                     if(sender == null) {
@@ -183,8 +188,11 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                 }
             }
         } finally {
-            if(!messageSentSomewhere)
+            if(!messageSentSomewhere) {
+                if(traceEnabled)
+                    LOGGER.trace("Message not sent.");
                 statsCollector.messageNotSent();
+            }
         }
     }
 
