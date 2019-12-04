@@ -200,7 +200,13 @@ public class NodeManager implements Infrastructure, AutoCloseable {
                 + " contains no message processors but has a defaultRoutingStrategyId set. The routingStrategyId will never be used.");
 
         if(threading == null)
-            threading = tr.track(new DefaultThreadingModel("NodeThreadPool-" + nodeId + "-")).configure(node.getConfiguration()).start();
+            threading = tr.track(
+
+                new DefaultThreadingModel(nodeId)
+
+            ).configure(node.getConfiguration()).start();
+        else if(!threading.isStarted())
+            threading.start();
 
         nodeStatsCollector.setMessagesPendingGauge(() -> threading.getNumberLimitedPending());
 

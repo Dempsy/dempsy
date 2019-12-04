@@ -254,14 +254,20 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     }
 
+    // Called before being submitted to the ThreadingModel. It allows independent management
+    // of the portion of the ThreadingModel queue that's dedicated to queuing messages internally
+    // to a container. Messages that are coming in from the outside of the node will have 'justArrived'
+    // and therefore don't count against the maxPendingMessagesPerContainer. They count against
+    // the nodes' queue.
     public ContainerSpecific prepareMessage(final RoutedMessage km, final boolean justArrived) {
         if(maxPendingMessagesPerContainer < 0)
             return null;
         if(justArrived)
             return null; // there's no bookeeping if the message just arrived.
 
+        numPending.incrementAndGet();
         if(traceEnabled)
-            LOGGER.trace("prepareMessages: Pending messages on {} container is: ", clusterId, numPending.incrementAndGet());
+            LOGGER.trace("prepareMessages: Pending messages on {} container is: ", clusterId, numPending);
 
         return new ContainerSpecificInternal();
     }

@@ -50,8 +50,17 @@ import net.dempsy.util.StupidHashMap;
  * in.
  * </p>
  *
- * The container is simple in that it does no thread management. When it's called it assumes that the transport
- * has provided the thread that's needed
+ * <p>
+ * Behavior:
+ * </p>
+ * <ul>
+ * <li>Can't set maxPendingMessagesPerContainer</li>
+ * <li>Internally queues messages (unlimited queue!)</li>
+ * <li>DOESN'T handle bulk processing</li>
+ * <li>Guarantee's order in submission of outgoing responses</li>
+ * <li>Highest performing option.</li>
+ * <li>Least deterministic behavior</li>
+ * </ul>
  */
 public class NonLockingAltContainer extends Container implements KeyspaceChangeListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonLockingAltContainer.class);
@@ -88,7 +97,13 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
 
     @Override
     public void start(final Infrastructure infra) {
+        if(maxPendingMessagesPerContainer >= 0)
+            throw new IllegalStateException("Cannot use a " + NonLockingAltContainer.class.getPackage()
+                + " container with the maxPendingMessagesPerContainer set for " + clusterId
+                + " This container type does internal queuing. Please use the locking container.");
+
         super.start(infra);
+
         isReady.set(true);
     }
 
@@ -341,7 +356,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                                 evictMe = check.shouldEvict(key, instance);
                             } catch(final RuntimeException e) {
                                 LOGGER.warn("Checking the eviction status/passivating of the Mp " + SafeString.objectDescription(instance) +
-                                        " resulted in an exception.", e.getCause());
+                                    " resulted in an exception.", e.getCause());
                                 evictMe = false;
                             }
 
@@ -350,7 +365,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                                     prototype.passivate(instance);
                                 } catch(final Throwable e) {
                                     LOGGER.warn("Checking the eviction status/passivating of the Mp "
-                                            + SafeString.objectDescription(instance) + " resulted in an exception.", e);
+                                        + SafeString.objectDescription(instance) + " resulted in an exception.", e);
                                 }
 
                                 // even if passivate throws an exception, if the eviction check returned 'true' then
@@ -516,23 +531,23 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
             } catch(final DempsyException e) {
                 if(e.userCaused()) {
                     LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
-                            + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
                     statCollector.messageFailed(1);
                     instance = null;
                 } else
                     throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                            SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                            " because the clone method threw an exception.", e);
+                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                        " because the clone method threw an exception.", e);
             } catch(final RuntimeException e) {
                 throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        " because the clone invocation resulted in an unknown exception.", e);
+                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                    " because the clone invocation resulted in an unknown exception.", e);
             }
 
             if(instance == null)
                 throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        ". The value returned from the clone call appears to be null.");
+                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                    ". The value returned from the clone call appears to be null.");
 
             // activate
             boolean activateSuccessful = false;
@@ -540,7 +555,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                 if(instance != null) {
                     if(LOGGER.isTraceEnabled())
                         LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                                + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
+                            + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
                     prototype.activate(instance, key);
                     activateSuccessful = true;
                 }
@@ -554,14 +569,14 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                     instance = null;
                 } else
                     throw new ContainerException(
-                            "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
-                                    + ". Is the active method accessible - the class is public and the method is public?",
-                            e);
+                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
+                            + ". Is the active method accessible - the class is public and the method is public?",
+                        e);
             } catch(final RuntimeException e) {
                 throw new ContainerException(
-                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                                " because of an unknown exception.",
-                        e);
+                    "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
+                        " because of an unknown exception.",
+                    e);
             }
 
             if(activateSuccessful) {

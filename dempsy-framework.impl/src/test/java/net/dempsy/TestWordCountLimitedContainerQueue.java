@@ -28,8 +28,7 @@ public class TestWordCountLimitedContainerQueue extends TestWordCount {
 
     public TestWordCountLimitedContainerQueue(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
         final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
-        super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
+        super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource, true);
         strict = false;
     }
-
 }

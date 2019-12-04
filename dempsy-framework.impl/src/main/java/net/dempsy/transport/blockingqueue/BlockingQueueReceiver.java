@@ -60,8 +60,12 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
     private final static AtomicLong guidGenerator = new AtomicLong(0);
 
     public BlockingQueueReceiver(final BlockingQueue<Object> queue) {
+        this("BlockingQueue_", queue);
+    }
+
+    public BlockingQueueReceiver(final String baseName, final BlockingQueue<Object> queue) {
         this.queue = queue;
-        this.address = new BlockingQueueAddress(queue, "BlockingQueue_" + guidGenerator.getAndIncrement());
+        this.address = new BlockingQueueAddress(queue, baseName + guidGenerator.getAndIncrement());
     }
 
     @Override

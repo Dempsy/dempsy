@@ -1,8 +1,8 @@
 package net.dempsy.threading;
 
 import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+
+import net.dempsy.container.ContainerJob;
 
 /**
  * <p>
@@ -15,28 +15,16 @@ import java.util.concurrent.TimeUnit;
 public interface ThreadingModel extends AutoCloseable {
 
     /**
-     * This is an interface that represents a Callable that can be rejected if the ThreadingModel deems it's to be rejected.
-     */
-    public static interface Rejectable<V> extends Callable<V> {
-        public void rejected();
-    }
-
-    /**
      * Submit a Callable that is guaranteed to execute. Unlike {@link #submitLimited(Rejectable, boolean)} this method acts
      * like the {@link Callable} was added to an unbounded queue and so should eventually execute.
      */
-    public <V> Future<V> submit(Callable<V> r);
+    public void submit(ContainerJob r);
 
     /**
      * This method queues {@link Callable}s that can expire or have some maximum number allowed.
      * Normal message processing falls into this category since 'shedding' is the standard behavior.
      */
-    public <V> Future<V> submitLimited(Rejectable<V> r);
-
-    /**
-     * Schedule a task to be executed at some time in the future.
-     */
-    public <V> Future<V> schedule(Callable<V> r, long delay, TimeUnit timeUnit);
+    public void submitLimited(ContainerJob r);
 
     /**
      * start a daemon process using this ThreadingModel. This defaults to using the
@@ -72,8 +60,5 @@ public interface ThreadingModel extends AutoCloseable {
     @Override
     public void close();
 
-    /**
-     * This return value may not be valid prior to start().
-     */
-    public int getNumThreads();
+    public boolean isStarted();
 }

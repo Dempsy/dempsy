@@ -1,25 +1,21 @@
 package net.dempsy.threading;
 
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.dempsy.container.ContainerJob;
+
 public class DefaultThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(DefaultThreadingModel.class);
 
-    private static final int minNumThreads = 4;
+    private static final int minNumThreads = 1;
 
     public static final String CONFIG_KEY_MAX_PENDING = "max_pending";
     public static final String DEFAULT_MAX_PENDING = "100000";
@@ -36,7 +32,6 @@ public class DefaultThreadingModel implements ThreadingModel {
     public static final String CONFIG_KEY_BLOCKING = "blocking";
     public static final String DEFAULT_BLOCKING = "false";
 
-    private ScheduledExecutorService schedule = null;
     private ExecutorService executor = null;
     private final AtomicLong numLimited = new AtomicLong(0);
     private long maxNumWaitingLimitedTasks;
@@ -46,30 +41,33 @@ public class DefaultThreadingModel implements ThreadingModel {
     private int additionalThreads = Integer.parseInt(DEFAULT_ADDITIONAL_THREADS);
 
     private final Supplier<String> nameSupplier;
-    private boolean hardShutdown = Boolean.parseBoolean(DEFAULT_ADDITIONAL_THREADS);
+    private boolean hardShutdown = Boolean.parseBoolean(DEFAULT_HARD_SHUTDOWN);
 
     private boolean blocking = Boolean.parseBoolean(DEFAULT_BLOCKING);
-    SubmitLimited submitter = null;
+    private SubmitLimited submitter = null;
 
-    public DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
+    private final static AtomicLong threadNum = new AtomicLong();
+    private boolean started = false;
+
+    private DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
         this.nameSupplier = nameSupplier;
         this.threadPoolSize = threadPoolSize;
         this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
     }
 
-    public DefaultThreadingModel(final Supplier<String> nameSupplier) {
+    private DefaultThreadingModel(final Supplier<String> nameSupplier) {
         this(nameSupplier, -1, Integer.parseInt(DEFAULT_MAX_PENDING));
     }
 
     public DefaultThreadingModel(final String threadNameBase) {
-        this(new NameSupplier(threadNameBase));
+        this(() -> threadNameBase + "-" + threadNum.getAndIncrement());
     }
 
     /**
      * Create a DefaultDempsyExecutor with a fixed number of threads while setting the maximum number of limited tasks.
      */
     public DefaultThreadingModel(final String threadNameBase, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
-        this(new NameSupplier(threadNameBase), threadPoolSize, maxNumWaitingLimitedTasks);
+        this(() -> threadNameBase + "-" + threadNum.getAndIncrement(), threadPoolSize, maxNumWaitingLimitedTasks);
     }
 
     /**
@@ -125,8 +123,12 @@ public class DefaultThreadingModel implements ThreadingModel {
         return this;
     }
 
+    public static String configKey(final String suffix) {
+        return DefaultThreadingModel.class.getPackageName() + "." + suffix;
+    }
+
     @Override
-    public DefaultThreadingModel start() {
+    public synchronized DefaultThreadingModel start() {
         if(threadPoolSize == -1) {
             // figure out the number of cores.
             final int cores = Runtime.getRuntime().availableProcessors();
@@ -135,7 +137,6 @@ public class DefaultThreadingModel implements ThreadingModel {
             threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
         }
         executor = Executors.newFixedThreadPool(threadPoolSize, r -> new Thread(r, nameSupplier.get()));
-        schedule = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, nameSupplier.get() + "-Scheduled"));
 
         if(blocking) {
             if(maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
@@ -152,7 +153,13 @@ public class DefaultThreadingModel implements ThreadingModel {
                 submitter = new NonBlockingUnlimited(executor);
         }
 
+        started = true;
         return this;
+    }
+
+    @Override
+    public synchronized boolean isStarted() {
+        return started;
     }
 
     private static String getConfigValue(final Map<String, String> conf, final String key, final String defaultValue) {
@@ -179,24 +186,13 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public int getNumThreads() {
-        return threadPoolSize;
-    }
-
-    @Override
     public void close() {
         if(hardShutdown) {
             if(executor != null)
                 executor.shutdownNow();
-
-            if(schedule != null)
-                schedule.shutdownNow();
         } else {
             if(executor != null)
                 executor.shutdown();
-
-            if(schedule != null)
-                schedule.shutdown();
         }
     }
 
@@ -206,40 +202,24 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     public boolean isRunning() {
-        return (schedule != null && executor != null) &&
-            !(schedule.isShutdown() || schedule.isTerminated()) &&
+        return (executor != null) &&
             !(executor.isShutdown() || executor.isTerminated());
     }
 
     @Override
-    public <V> Future<V> submit(final Callable<V> r) {
-        return executor.submit(r);
+    public void submit(final ContainerJob r) {
+        executor.submit(r);
     }
 
     @Override
-    public <V> Future<V> submitLimited(final Rejectable<V> r) {
-        return submitter.submitLimited(r);
+    public void submitLimited(final ContainerJob r) {
+        submitter.submitLimited(r);
     }
 
-    @Override
-    public <V> Future<V> schedule(final Callable<V> r, final long delay, final TimeUnit unit) {
-        final ProxyFuture<V> ret = new ProxyFuture<V>();
-
-        // here we are going to wrap the Callable and the Future to change the
-        // submission to one of the other queues.
-        ret.schedFuture = schedule.schedule(new Runnable() {
-            Callable<V> callable = r;
-            ProxyFuture<V> rret = ret;
-
-            @Override
-            public void run() {
-                // now resubmit the callable we're proxying
-                rret.set(submit(callable));
-            }
-        }, delay, unit);
-
-        // proxy the return future.
-        return ret;
+    private static Object doCall(final ContainerJob r) throws Exception {
+        if(!r.containersCalculated())
+            r.calculateContainers();
+        return r.call();
     }
 
     private static class NonBlockingLimited implements SubmitLimited {
@@ -254,14 +234,15 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r) {
+        public Future<Object> submitLimited(final ContainerJob r) {
             // if it just arrived then we limit. Otherwise we just submit.
             numLimited.incrementAndGet();
 
-            final Future<V> ret = executor.submit(() -> {
+            final Future<Object> ret = executor.submit(() -> {
                 final long num = numLimited.decrementAndGet();
-                if(num <= maxNumWaitingLimitedTasks)
-                    return r.call();
+                if(num <= maxNumWaitingLimitedTasks) {
+                    return doCall(r);
+                }
                 r.rejected();
                 return null;
             });
@@ -281,7 +262,7 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r) {
+        public Future<Object> submitLimited(final ContainerJob r) {
             // only goes in if I get a position less than the max.
             long spinner = 0;
             for(boolean done = false; !done;) {
@@ -301,9 +282,9 @@ public class DefaultThreadingModel implements ThreadingModel {
                 }
             }
 
-            final Future<V> ret = executor.submit(() -> {
+            final Future<Object> ret = executor.submit(() -> {
                 numLimited.decrementAndGet();
-                return r.call();
+                return doCall(r);
             });
             return ret;
         }
@@ -317,74 +298,13 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public <V> Future<V> submitLimited(final Rejectable<V> r) {
-            return executor.submit(() -> r.call());
+        public Future<Object> submitLimited(final ContainerJob r) {
+            return executor.submit(() -> doCall(r));
         }
     }
 
     @FunctionalInterface
     private static interface SubmitLimited {
-        public <V> Future<V> submitLimited(final Rejectable<V> r);
-    }
-
-    private static class ProxyFuture<V> implements Future<V> {
-        private volatile Future<V> ret;
-        private volatile ScheduledFuture<?> schedFuture;
-
-        private synchronized void set(final Future<V> f) {
-            ret = f;
-            if(schedFuture.isCancelled())
-                ret.cancel(true);
-            this.notifyAll();
-        }
-
-        // called only from synchronized methods
-        private Future<?> getCurrent() {
-            return ret == null ? schedFuture : ret;
-        }
-
-        @Override
-        public synchronized boolean cancel(final boolean mayInterruptIfRunning) {
-            return getCurrent().cancel(mayInterruptIfRunning);
-        }
-
-        @Override
-        public synchronized boolean isCancelled() {
-            return getCurrent().isCancelled();
-        }
-
-        @Override
-        public synchronized boolean isDone() {
-            return ret == null ? false : ret.isDone();
-        }
-
-        @Override
-        public synchronized V get() throws InterruptedException, ExecutionException {
-            while(ret == null)
-                this.wait();
-            return ret.get();
-        }
-
-        @Override
-        public V get(final long timeout, final TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-            final long cur = System.currentTimeMillis();
-            while(ret == null)
-                this.wait(unit.toMillis(timeout));
-            return ret.get(System.currentTimeMillis() - cur, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    public static class NameSupplier implements Supplier<String> {
-        private final static AtomicLong threadNum = new AtomicLong();
-        private final String threadNameBase;
-
-        public NameSupplier(final String threadBaseName) {
-            this.threadNameBase = threadBaseName;
-        }
-
-        @Override
-        public String get() {
-            return threadNameBase + threadNum.getAndIncrement();
-        }
+        public Future<Object> submitLimited(final ContainerJob r);
     }
 }

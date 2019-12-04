@@ -91,7 +91,6 @@ public class BlockingQueueSender implements Sender {
             if(!queue.offer(message)) {
                 if(statsCollector != null)
                     statsCollector.messageNotSent();
-                throw new MessageTransportException("Failed to queue message due to capacity.");
             } else if(statsCollector != null)
                 statsCollector.messageSent(message);
         }

@@ -157,6 +157,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                 final NodeAddress curNode = e.getKey();
                 final ContainerAddress curAddr = e.getValue();
 
+                // If we're local then just send this message directly back to our own node.
                 if(curNode.equals(thisNode)) {
                     if(traceEnabled)
                         LOGGER.trace("Sending local {}", message);

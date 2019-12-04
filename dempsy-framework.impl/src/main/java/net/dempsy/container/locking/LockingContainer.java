@@ -47,9 +47,18 @@ import net.dempsy.util.SafeString;
  * <p>
  * The {@link LockingContainer} manages the lifecycle of message processors for the node that it's instantiated in.
  * </p>
+ * <p>
+ * Behavior:
+ * </p>
+ * <ul>
+ * <li>Can set maxPendingMessagesPerContainer</li>
+ * <li>Doesn't internally queue messages</li>
+ * <li>Doesn't handle bulk processing</li>
+ * <li>Guarantee's order in submission of outgoing responses</li>
+ * <li>Lower performing than other options.</li>
+ * <li>Most deterministic behavior</li>
+ * </ul>
  *
- * The container is simple in that it does no thread management. When it's called it assumes that the transport
- * has provided the thread that's needed
  */
 public class LockingContainer extends Container {
     private static final Logger LOGGER = LoggerFactory.getLogger(LockingContainer.class);
@@ -135,7 +144,7 @@ public class LockingContainer extends Container {
          * MAKE SURE YOU USE A FINALLY CLAUSE TO RELEASE THE LOCK.
          *
          * @param block
-         *            - whether or not to wait for the lock.
+         *     - whether or not to wait for the lock.
          * @return the instance if the lock was acquired. null otherwise.
          */
         public Object getExclusive() {
@@ -250,10 +259,8 @@ public class LockingContainer extends Container {
                         try {
                             if(wrapper.isEvicted()) {
                                 // if we're not blocking then we need to just return a failure. Otherwise we want to try
-                                // again
-                                // because eventually the current Mp will be passivated and removed from the container
-                                // and
-                                // a subsequent call to getInstanceForDispatch will create a new one.
+                                // again because eventually the current Mp will be passivated and removed from the container
+                                // and a subsequent call to getInstanceForDispatch will create a new one.
                                 Thread.yield();
                                 evictedAndBlocking = true; // we're going to try again.
                             } else {
@@ -278,9 +285,7 @@ public class LockingContainer extends Container {
                 }
             } while(evictedAndBlocking);
 
-        } finally
-
-        {
+        } finally {
             numBeingWorked.decrementAndGet();
         }
     }
@@ -333,8 +338,8 @@ public class LockingContainer extends Container {
                                     instance = wrapper.getInstance();
                                 } catch(final Throwable th) {} // not sure why this would ever happen
                                 LOGGER.warn("Checking the eviction status/passivating of the Mp "
-                                        + SafeString.objectDescription(instance == null ? wrapper : instance) +
-                                        " resulted in an exception.", e);
+                                    + SafeString.objectDescription(instance == null ? wrapper : instance) +
+                                    " resulted in an exception.", e);
                             }
 
                             // even if passivate throws an exception, if the eviction check returned 'true' then
@@ -509,17 +514,17 @@ public class LockingContainer extends Container {
             } catch(final DempsyException e) {
                 if(e.userCaused()) {
                     LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
-                            + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
                     statCollector.messageFailed(1);
                     instance = null;
                 } else
                     throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                            SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                            " because the clone method threw an exception.", e);
+                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                        " because the clone method threw an exception.", e);
             } catch(final RuntimeException e) {
                 throw new ContainerException("the container for " + clusterId + " failed to create a new instance of " +
-                        SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
-                        " because the clone invocation resulted in an unknown exception.", e);
+                    SafeString.valueOf(prototype) + " for the key " + SafeString.objectDescription(key) +
+                    " because the clone invocation resulted in an unknown exception.", e);
             }
 
             // activate
@@ -528,7 +533,7 @@ public class LockingContainer extends Container {
                 if(instance != null) {
                     if(LOGGER.isTraceEnabled())
                         LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
-                                + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
+                            + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
                     prototype.activate(instance, key);
                     activateSuccessful = true;
                 }
@@ -541,14 +546,14 @@ public class LockingContainer extends Container {
                     statCollector.messageFailed(1);
                 } else
                     throw new ContainerException(
-                            "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
-                                    + ". Is the active method accessible - the class is public and the method is public?",
-                            e);
+                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype)
+                            + ". Is the active method accessible - the class is public and the method is public?",
+                        e);
             } catch(final RuntimeException e) {
                 throw new ContainerException(
-                        "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
-                                " because of an unknown exception.",
-                        e);
+                    "the container for " + clusterId + " failed to invoke the activate method of " + SafeString.valueOf(prototype) +
+                        " because of an unknown exception.",
+                    e);
             }
 
             if(activateSuccessful) {

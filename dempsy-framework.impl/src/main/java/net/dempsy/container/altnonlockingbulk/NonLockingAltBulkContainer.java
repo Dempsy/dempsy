@@ -36,8 +36,17 @@ import net.dempsy.util.SafeString;
  * instantiated in.
  * </p>
  *
- * The container is simple in that it does no thread management. When it's called it assumes that the transport
- * has provided the thread that's needed
+ * <p>
+ * Behavior:
+ * </p>
+ * <ul>
+ * <li>Can't set maxPendingMessagesPerContainer</li>
+ * <li>Internally queues messages (unlimited queue!)</li>
+ * <li>handles bulk processing (therefore, can defer shedding to Mp)</li>
+ * <li>Guarantee's order in submission of outgoing responses</li>
+ * <li>Highest performing option.</li>
+ * <li>Semi-deterministic behavior (because of Bulk processing)</li>
+ * </ul>
  */
 public class NonLockingAltBulkContainer extends NonLockingAltContainer {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonLockingAltBulkContainer.class);

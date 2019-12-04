@@ -3,7 +3,6 @@ package net.dempsy.lifecycle.annotation;
 import net.dempsy.messages.MessageResourceManager;
 
 public class ResourceManager implements MessageResourceManager {
-    public static Object first = null;
 
     @Override
     public Object replicate(final Object toReplicate) {

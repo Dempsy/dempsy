@@ -182,8 +182,6 @@ public class TestResourceManagement extends DempsyBaseTest {
                     // obtain data from an external source
                     final String wordString = getNextWordFromSoucre();
                     try (Word word = new Word(wordString);) {
-                        if(ResourceManager.first == null)
-                            ResourceManager.first = word;
                         dispatcher.dispatchAnnotated(word, resourceManager);
                         numDispatched++;
                         if(numDispatched % 10000 == 0)

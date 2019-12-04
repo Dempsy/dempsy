@@ -27,9 +27,12 @@ import net.dempsy.transport.Sender;
 import net.dempsy.transport.SenderFactory;
 
 public class BlockingQueueSenderFactory implements SenderFactory {
+    public static final String BLOCKING_KEY = "blocking";
+    public static final boolean BLOCKING_DEFAULT = true;
+
     private final Map<NodeAddress, BlockingQueueSender> senders = new HashMap<NodeAddress, BlockingQueueSender>();
     private NodeStatsCollector statsCollector;
-    private boolean blocking = false;
+    private boolean blocking = BLOCKING_DEFAULT;
 
     @Override
     public synchronized Sender getSender(final NodeAddress destination) throws MessageTransportException {
@@ -50,6 +53,10 @@ public class BlockingQueueSenderFactory implements SenderFactory {
 
     @Override
     public void start(final Infrastructure infra) {
+        // System property overrides the settings in the Infra.configuration.
+        final String sysPropBlocking = System.getProperty(BlockingQueueSender.class.getPackageName() + "." + BLOCKING_KEY);
+        setBlocking(Boolean
+            .parseBoolean((sysPropBlocking == null) ? infra.getConfigValue(BlockingQueueSender.class, BLOCKING_KEY, "" + BLOCKING_DEFAULT) : sysPropBlocking));
         this.statsCollector = infra.getNodeStatsCollector();
     }
 
