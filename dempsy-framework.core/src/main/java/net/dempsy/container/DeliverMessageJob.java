@@ -6,12 +6,13 @@ import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.transport.RoutedMessage;
 
-public abstract class DeliverMessageJob implements ContainerJob {
+public abstract class DeliverMessageJob implements MessageDeliveryJob {
     protected final boolean justArrived;
     protected final NodeStatsCollector statsCollector;
     protected final RoutedMessage message;
 
     protected final ContainerJobMetadata[] deliveries;
+    protected boolean executeCalled = false;
 
     protected DeliverMessageJob(final Container[] allContainers, final NodeStatsCollector statsCollector, final RoutedMessage message,
         final boolean justArrived) {
@@ -37,17 +38,30 @@ public abstract class DeliverMessageJob implements ContainerJob {
         return deliveries;
     }
 
+    /**
+     * This does nothing by default.
+     */
+    @Override
+    public void individuatedJobsComplete() {}
+
     protected void executeMessageOnContainers(final RoutedMessage message, final boolean justArrived) {
         final KeyedMessage km = new KeyedMessage(message.key, message.message);
 
         Arrays.stream(deliveries)
-            .forEach(d -> d.c.dispatch(km, d.p, justArrived));
+            .forEach(d -> d.container.dispatch(km, d.containerSpecificData, justArrived));
     }
 
-    protected void handleDiscardContainer() {
+    protected void handleDiscardAllContainer() {
         Arrays.stream(deliveries)
-            .map(d -> d.p)
+            .map(d -> d.containerSpecificData)
             .filter(p -> p != null)
             .forEach(p -> p.messageBeingDiscarded());
+    }
+
+    protected ContainerJobMetadata lookupContainerSpecific(final Container c) {
+        return Arrays.stream(deliveries)
+            .filter(d -> d.container == c)
+            .findAny()
+            .orElse(null);
     }
 }

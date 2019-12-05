@@ -26,16 +26,23 @@ public abstract class AbstractResource implements Resource {
     // }
     //
     // private static enum Dir {
-    // DECREMENT, INCREMENT, INIT
+    // DECREMENT, INCREMENT, INIT, FINALIZED
     // }
     //
     // private class RefTracking {
     // public final RuntimeException rte = new RuntimeException();
     // public final long curCount = refCount.get();
     // public final Dir dir;
+    // public final String thread;
     //
     // private RefTracking(final Dir dir) {
     // this.dir = dir;
+    // thread = Thread.currentThread().getName();
+    // }
+    //
+    // private void out(final PrintStream ps) {
+    // ps.println("" + dir + " in " + thread + " with count of " + curCount + " at ");
+    // rte.printStackTrace(ps);
     // }
     // }
 
@@ -44,18 +51,19 @@ public abstract class AbstractResource implements Resource {
         return refCount.get();
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void finalize() throws Throwable {
         if(refCount.get() != 0) {
             LOGGER.warn("Resource {} was cleaned up by the VM but doesn't have a 0 refcount ({})", this, refCount);
-            // synchronized(AbstractResource.class) {
-            // try (OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
-            // PrintStream ps = new PrintStream(os);) {
-            // ps.println("===============================================");
-            // for(final RefTracking cur: tracking) {
-            // ps.println("" + cur.dir + " with count of " + cur.curCount + " at ");
-            // cur.rte.printStackTrace(ps);
+            // synchronized(this) {
+            // tracking.add(new RefTracking(Dir.FINALIZED));
             // }
+            // synchronized(AbstractResource.class) {
+            // try (final OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
+            // final PrintStream ps = new PrintStream(os);) {
+            // ps.println("===============================================");
+            // tracking.forEach(cur -> cur.out(ps));
             // ps.println("===============================================");
             // } catch(final IOException ioe) {
             // LOGGER.error("", ioe);
@@ -68,18 +76,18 @@ public abstract class AbstractResource implements Resource {
 
     @Override
     public final void close() {
-        final long count = refCount.decrementAndGet();
+        final long count;
+        // synchronized(this) {
+        count = refCount.decrementAndGet();
 
         // tracking.add(new RefTracking(Dir.DECREMENT));
+        // }
         // if(count < 0) {
         // synchronized(AbstractResource.class) {
         // try (OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
         // PrintStream ps = new PrintStream(os);) {
         // ps.println("===============================================");
-        // for(final RefTracking cur: tracking) {
-        // ps.println("" + cur.dir + " with count of " + cur.curCount + " at ");
-        // cur.rte.printStackTrace(ps);
-        // }
+        // tracking.forEach(cur -> cur.out(ps));
         // ps.println("===============================================");
         // } catch(final IOException ioe) {
         // LOGGER.error("", ioe);
@@ -97,8 +105,10 @@ public abstract class AbstractResource implements Resource {
     // called from ResourceManager
     @Override
     public void reference() {
+        // synchronized(this) {
         refCount.incrementAndGet();
         // tracking.add(new RefTracking(Dir.INCREMENT));
+        // }
     }
 
     public abstract void freeResources();

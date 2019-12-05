@@ -3,11 +3,11 @@ package net.dempsy.container;
 import net.dempsy.container.Container.ContainerSpecific;
 
 public final class ContainerJobMetadata {
-    public final Container c;
-    public final ContainerSpecific p;
+    public final Container container;
+    public final ContainerSpecific containerSpecificData;
 
     public ContainerJobMetadata(final Container c, final ContainerSpecific p) {
-        this.c = c;
-        this.p = p;
+        this.container = c;
+        this.containerSpecificData = p;
     }
 }

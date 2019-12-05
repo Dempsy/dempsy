@@ -61,6 +61,8 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(1);
+            if(youOwnMessage)
+                disposition.dispose(keyedMessage.message);
         }
 
         if(keyedMessage == null)

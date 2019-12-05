@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerJob;
 import net.dempsy.container.ContainerJobMetadata;
+import net.dempsy.container.MessageDeliveryJob;
 import net.dempsy.util.SafeString;
 
 public class OrderedPerContainerThreadingModel implements ThreadingModel {
@@ -45,8 +46,8 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     private ExecutorService calcContainersWork = null;
 
-    private final BlockingQueue<ContainerJobHolder> inqueue = new LinkedBlockingQueue<>();
-    private final BlockingQueue<ContainerJobHolder> deserQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<MessageDeliveryJobHolder> inqueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<MessageDeliveryJobHolder> deserQueue = new LinkedBlockingQueue<>();
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
     private Thread shuttleThread = null;
 
@@ -60,24 +61,29 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     private final static AtomicLong threadNum = new AtomicLong();
     private boolean started = false;
 
-    public OrderedPerContainerThreadingModel(final Supplier<String> nameSupplier, final int maxNumWaitingLimitedTasks) {
+    private OrderedPerContainerThreadingModel(final Supplier<String> nameSupplier, final int maxNumWaitingLimitedTasks) {
         this.nameSupplier = nameSupplier;
         this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
     }
 
-    public OrderedPerContainerThreadingModel(final Supplier<String> nameSupplier) {
+    private OrderedPerContainerThreadingModel(final Supplier<String> nameSupplier) {
         this(nameSupplier, Integer.parseInt(DEFAULT_MAX_PENDING));
     }
 
+    private static Supplier<String> bakedDefaultName(final String threadNameBase) {
+        final long curTmNum = threadNum.getAndIncrement();
+        return () -> threadNameBase + "-" + curTmNum;
+    }
+
     public OrderedPerContainerThreadingModel(final String threadNameBase) {
-        this(() -> threadNameBase + "-" + threadNum.getAndIncrement());
+        this(bakedDefaultName(threadNameBase));
     }
 
     /**
      * Create a DefaultDempsyExecutor with a fixed number of threads while setting the maximum number of limited tasks.
      */
     public OrderedPerContainerThreadingModel(final String threadNameBase, final int maxNumWaitingLimitedTasks) {
-        this(() -> threadNameBase + "-" + threadNum.getAndIncrement(), maxNumWaitingLimitedTasks);
+        this(bakedDefaultName(threadNameBase), maxNumWaitingLimitedTasks);
     }
 
     public OrderedPerContainerThreadingModel setDeserializationThreadCount(final int deserializationThreadCount) {
@@ -95,53 +101,92 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     }
 
     private static class ContainerJobHolder {
-        private final ContainerJob jobX;
-        private final boolean limited;
-        private final AtomicLong numLimited;
-        private final long maxNumWaitingLimitedTasks;
+        private final ContainerJob job;
+        private final MessageDeliveryJobHolder wholeJob;
 
-        public ContainerJobHolder(final ContainerJob job, final boolean limited, final AtomicLong numLimited, final long maxNumWaitingLimitedTasks) {
-            this.jobX = job;
-            this.limited = limited;
-            this.numLimited = numLimited;
-            this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
-            if(limited)
-                numLimited.incrementAndGet();
+        public ContainerJobHolder(final ContainerJob job, final MessageDeliveryJobHolder jobHolder) {
+            this.job = job;
+            this.wholeJob = jobHolder;
+            wholeJob.preEnqueuedTrackContainerJob();
         }
 
-        public final void process() throws Exception {
-            // System.out.println("Processing message to " + Arrays.stream(jobX.containerData()).map(d -> d.c.getClusterId()).collect(Collectors.toList()));
-            if(limited) {
-                final long num = numLimited.decrementAndGet();
-                if(num <= maxNumWaitingLimitedTasks)
-                    jobX.call();
-                else
-                    jobX.rejected();
-            } else
-                jobX.call();
+        public void process(final ContainerJobMetadata jobData) {
+            wholeJob.preWorkTrackContainerJob();
+            try {
+                job.execute(jobData);
+            } finally {
+                wholeJob.postWorkTrackContainerJob();
+            }
+        }
+
+        public void reject(final ContainerJobMetadata jobData) {
+            wholeJob.preWorkTrackContainerJob();
+            try {
+                job.reject(jobData);
+            } finally {
+                wholeJob.postWorkTrackContainerJob();
+            }
+        }
+    }
+
+    private static class MessageDeliveryJobHolder {
+        private final MessageDeliveryJob job;
+        private final boolean limited;
+        private final AtomicLong numLimited;
+        private final AtomicLong queuedContainerJobsX = new AtomicLong(0);
+        private final AtomicLong unfinishedContainerJobsX = new AtomicLong(0);
+
+        public MessageDeliveryJobHolder(final MessageDeliveryJob job, final boolean limited, final AtomicLong numLimited,
+            final long maxNumWaitingLimitedTasks) {
+            this.job = job;
+            this.limited = limited;
+            this.numLimited = numLimited;
+            if(limited)
+                numLimited.incrementAndGet();
         }
 
         public final void reject() {
             if(limited)
                 numLimited.decrementAndGet();
-            jobX.rejected();
+            job.rejected();
         }
 
         public final boolean areContainersCalculated() {
-            return jobX.containersCalculated();
+            return job.containersCalculated();
         }
 
         public final void calculateContainers() {
-            jobX.calculateContainers();
+            job.calculateContainers();
+        }
+
+        public final void preEnqueuedTrackContainerJob() {
+            queuedContainerJobsX.incrementAndGet();
+            unfinishedContainerJobsX.incrementAndGet();
+        }
+
+        public final void preWorkTrackContainerJob() {
+            if(queuedContainerJobsX.decrementAndGet() == 0) {
+                // we're about to execute (or reject) the final container job from this individuated message
+                // so lets now discount it from the total queue length.
+                if(limited)
+                    numLimited.decrementAndGet();
+            }
+        }
+
+        public final void postWorkTrackContainerJob() {
+            if(unfinishedContainerJobsX.decrementAndGet() == 0) {
+                // everything with this message is done. decrement any resources.
+                job.individuatedJobsComplete();
+            }
         }
     }
 
     private class ContainerWorker implements Runnable {
         public final BlockingQueue<ContainerJobHolder> queue;
         public final Thread containerThread;
-        public final Container container;
+        public final ContainerJobMetadata container;
 
-        public ContainerWorker(final Container container) {
+        public ContainerWorker(final ContainerJobMetadata container) {
             this.queue = new LinkedBlockingQueue<>();
             this.container = container;
             containerThread = chain(new Thread(this, nameSupplier.get() + "-ContainerWorker-" + seq.incrementAndGet()),
@@ -153,10 +198,10 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             int tryCount = 0;
             while(!isStopped.get()) {
                 try {
-                    final ContainerJobHolder jobh = queue.poll();
-                    if(jobh != null) {
+                    final ContainerJobHolder job = queue.poll();
+                    if(job != null) {
                         tryCount = 0;
-                        jobh.process();
+                        job.process(container);
                     } else {
                         // spin down
                         tryCount++;
@@ -173,7 +218,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             // if we got here then we're shutting down ... we need to account for all of the queued jobs.
             final List<ContainerJobHolder> drainTo = new ArrayList<>(queue.size());
             queue.drainTo(drainTo);
-            drainTo.forEach(d -> d.reject());
+            drainTo.forEach(d -> d.reject(container));
         }
     }
 
@@ -181,26 +226,44 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
         private final Map<Container, ContainerWorker> containerWorkers = new HashMap<>();
 
-        private void handleCalculatedContainerMessage(final ContainerJobHolder message) {
+        private void handleCalculatedContainerMessage(final MessageDeliveryJobHolder message) {
             // the message should have containers ...
-            final ContainerJobMetadata[] deliveries = message.jobX.containerData();
+            final ContainerJobMetadata[] deliveries = message.job.containerData();
+
             // ... but just to double check.
             if(deliveries != null && deliveries.length > 0) {
-                Arrays.stream(deliveries)
+                // these MUST be either processed or rejected. The "individuate" call
+                // increments reference counts for each returned containerJobs so these
+                // need to have their lifecycle fully managed.
+                final List<ContainerJob> containerJobs = message.job.individuate();
+
+                // First we need to construct the holders. If we enqueue them in the same list there's a race condition
+                // where the job can finish before the the next one is enqueued and if that happens then the post
+                // processing is called while there's still messages to be delivered.
+                //
+                // Instantiating the ContainerJobHolders creates the bookeeping for knowing when everything is complete.
+                final ContainerJobHolder[] cjholders = containerJobs.stream().map(cj -> new ContainerJobHolder(cj, message))
+                    .toArray(ContainerJobHolder[]::new);
+
+                int i = 0;
+                for(final ContainerJobHolder curJobHolder: cjholders) {
+                    final ContainerJobMetadata jobData = deliveries[i];
+
                     // container
-                    .map(d -> d.c)
-                    // this is a single thread so this should be safe.
-                    // mapped to queue
-                    .map(c -> containerWorkers.computeIfAbsent(c, x -> new ContainerWorker(c)))
-                    .map(cw -> cw.queue)
-                    // mapped to whether or not the message could be inserted
-                    .map(lbq -> lbq.offer(message))
-                    // selecting out the failures
-                    .filter(v -> v.booleanValue() == false)
-                    // ... in order to log.
-                    // The reason we aren't "rejecting" the message is because we only want to do that
-                    // when there's a failure to deliver to ANY container.
-                    .forEach(v -> LOGGER.warn("Message {} failed to be inserted into unbounded queue.", SafeString.objectDescription(message)));
+                    final Container curContainer = jobData.container;
+                    // this is a single thread so this should be safe. The Function<> is NOT side effect free. It starts a thread.
+                    final ContainerWorker curWorker = containerWorkers.computeIfAbsent(curContainer, x -> new ContainerWorker(jobData));
+                    // current queue
+                    final BlockingQueue<ContainerJobHolder> curQ = curWorker.queue;
+                    // offer the job. If the job is queued then ownership of the lifecycle has been successfully passed to the container...
+                    if(!curQ.offer(curJobHolder)) {
+                        // ... otherwise we need to make sure we mark the job as rejected at the container level.
+                        curJobHolder.reject(jobData);
+                        LOGGER.warn("Message {} failed to be queued to container {}.", SafeString.objectDescription(message), curContainer.getClusterId());
+                    }
+
+                    i++;
+                }
             } else {
                 // the message should have had containers but didn't
                 LOGGER.info("Message didn't deserialize correctly.");
@@ -218,7 +281,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 // check the inqueue.
                 // ========================================================
                 try {
-                    final ContainerJobHolder message = inqueue.poll();
+                    final MessageDeliveryJobHolder message = inqueue.poll();
                     if(message != null) {
                         // there's work to be done.
                         someWorkDone = true;
@@ -244,10 +307,10 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 // ========================================================
                 try {
                     // peek into the next queue entry to see if the it's deserialized yet.
-                    final ContainerJobHolder peeked = deserQueue.peek();
+                    final MessageDeliveryJobHolder peeked = deserQueue.peek();
                     if(peeked != null && peeked.areContainersCalculated()) {
                         // we're the only thread reading this queue ...
-                        final ContainerJobHolder message = deserQueue.poll();
+                        final MessageDeliveryJobHolder message = deserQueue.poll();
                         // ... so 'message' should be the peeked value ...
                         // ... therefore it can't be null and must have containersCalculated == true
                         someWorkDone = true;
@@ -314,14 +377,14 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public void submit(final ContainerJob job) {
-        final ContainerJobHolder jobh = new ContainerJobHolder(job, false, numLimitedX, maxNumWaitingLimitedTasks);
+    public void submit(final MessageDeliveryJob job) {
+        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, false, numLimitedX, maxNumWaitingLimitedTasks);
         if(!inqueue.offer(jobh)) {
             jobh.reject();
             LOGGER.error("Failed to queue message destined for {}",
                 Optional.ofNullable(job.containerData())
                     .map(v -> Arrays.stream(v)
-                        .map(c -> c.c)
+                        .map(c -> c.container)
                         .filter(c -> c != null)
                         .map(c -> c.getClusterId())
                         .map(cid -> cid.toString())
@@ -331,14 +394,14 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public void submitLimited(final ContainerJob job) {
-        final ContainerJobHolder jobh = new ContainerJobHolder(job, true, numLimitedX, maxNumWaitingLimitedTasks);
+    public void submitLimited(final MessageDeliveryJob job) {
+        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, true, numLimitedX, maxNumWaitingLimitedTasks);
         if(!inqueue.offer(jobh)) {
             jobh.reject();// undo, since we failed. Though this should be impossible
             LOGGER.error("Failed to queue message destined for {}",
                 Optional.ofNullable(job.containerData())
                     .map(v -> Arrays.stream(v)
-                        .map(c -> c.c)
+                        .map(c -> c.container)
                         .filter(c -> c != null)
                         .map(c -> c.getClusterId())
                         .map(cid -> cid.toString())

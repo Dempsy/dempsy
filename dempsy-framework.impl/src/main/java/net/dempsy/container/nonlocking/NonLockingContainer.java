@@ -251,6 +251,8 @@ public class NonLockingContainer extends Container {
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(1);
+            if(youOwnMessage)
+                disposition.dispose(keyedMessage.message);
         }
 
         if(keyedMessage == null)

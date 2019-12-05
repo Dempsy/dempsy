@@ -3,14 +3,13 @@ package net.dempsy.threading;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.dempsy.container.ContainerJob;
+import net.dempsy.container.MessageDeliveryJob;
 
 public class DefaultThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(DefaultThreadingModel.class);
@@ -59,15 +58,20 @@ public class DefaultThreadingModel implements ThreadingModel {
         this(nameSupplier, -1, Integer.parseInt(DEFAULT_MAX_PENDING));
     }
 
+    private static Supplier<String> bakedDefaultName(final String threadNameBase) {
+        final long curTmNum = threadNum.getAndIncrement();
+        return () -> threadNameBase + "-" + curTmNum;
+    }
+
     public DefaultThreadingModel(final String threadNameBase) {
-        this(() -> threadNameBase + "-" + threadNum.getAndIncrement());
+        this(bakedDefaultName(threadNameBase));
     }
 
     /**
      * Create a DefaultDempsyExecutor with a fixed number of threads while setting the maximum number of limited tasks.
      */
     public DefaultThreadingModel(final String threadNameBase, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
-        this(() -> threadNameBase + "-" + threadNum.getAndIncrement(), threadPoolSize, maxNumWaitingLimitedTasks);
+        this(bakedDefaultName(threadNameBase), threadPoolSize, maxNumWaitingLimitedTasks);
     }
 
     /**
@@ -207,19 +211,19 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public void submit(final ContainerJob r) {
-        executor.submit(r);
+    public void submit(final MessageDeliveryJob r) {
+        executor.submit(() -> r.executeAllContainers());
     }
 
     @Override
-    public void submitLimited(final ContainerJob r) {
+    public void submitLimited(final MessageDeliveryJob r) {
         submitter.submitLimited(r);
     }
 
-    private static Object doCall(final ContainerJob r) throws Exception {
+    private static void doCall(final MessageDeliveryJob r) {
         if(!r.containersCalculated())
             r.calculateContainers();
-        return r.call();
+        r.executeAllContainers();
     }
 
     private static class NonBlockingLimited implements SubmitLimited {
@@ -234,19 +238,17 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public Future<Object> submitLimited(final ContainerJob r) {
+        public void submitLimited(final MessageDeliveryJob r) {
             // if it just arrived then we limit. Otherwise we just submit.
             numLimited.incrementAndGet();
 
-            final Future<Object> ret = executor.submit(() -> {
+            executor.submit(() -> {
                 final long num = numLimited.decrementAndGet();
-                if(num <= maxNumWaitingLimitedTasks) {
-                    return doCall(r);
-                }
-                r.rejected();
-                return null;
+                if(num <= maxNumWaitingLimitedTasks)
+                    doCall(r);
+                else
+                    r.rejected();
             });
-            return ret;
         }
     }
 
@@ -262,7 +264,7 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public Future<Object> submitLimited(final ContainerJob r) {
+        public void submitLimited(final MessageDeliveryJob r) {
             // only goes in if I get a position less than the max.
             long spinner = 0;
             for(boolean done = false; !done;) {
@@ -282,11 +284,10 @@ public class DefaultThreadingModel implements ThreadingModel {
                 }
             }
 
-            final Future<Object> ret = executor.submit(() -> {
+            executor.submit(() -> {
                 numLimited.decrementAndGet();
-                return doCall(r);
+                doCall(r);
             });
-            return ret;
         }
     }
 
@@ -298,13 +299,13 @@ public class DefaultThreadingModel implements ThreadingModel {
         }
 
         @Override
-        public Future<Object> submitLimited(final ContainerJob r) {
-            return executor.submit(() -> doCall(r));
+        public void submitLimited(final MessageDeliveryJob r) {
+            executor.submit(() -> doCall(r));
         }
     }
 
     @FunctionalInterface
     private static interface SubmitLimited {
-        public Future<Object> submitLimited(final ContainerJob r);
+        public void submitLimited(final MessageDeliveryJob r);
     }
 }

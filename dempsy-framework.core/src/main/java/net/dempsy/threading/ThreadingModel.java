@@ -2,7 +2,7 @@ package net.dempsy.threading;
 
 import java.util.concurrent.Callable;
 
-import net.dempsy.container.ContainerJob;
+import net.dempsy.container.MessageDeliveryJob;
 
 /**
  * <p>
@@ -18,13 +18,13 @@ public interface ThreadingModel extends AutoCloseable {
      * Submit a Callable that is guaranteed to execute. Unlike {@link #submitLimited(Rejectable, boolean)} this method acts
      * like the {@link Callable} was added to an unbounded queue and so should eventually execute.
      */
-    public void submit(ContainerJob r);
+    public void submit(MessageDeliveryJob r);
 
     /**
      * This method queues {@link Callable}s that can expire or have some maximum number allowed.
      * Normal message processing falls into this category since 'shedding' is the standard behavior.
      */
-    public void submitLimited(ContainerJob r);
+    public void submitLimited(MessageDeliveryJob r);
 
     /**
      * start a daemon process using this ThreadingModel. This defaults to using the

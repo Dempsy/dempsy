@@ -225,6 +225,8 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(1);
+            if(youOwnMessage)
+                disposition.dispose(keyedMessage.message);
         }
 
         if(keyedMessage == null)
@@ -318,7 +320,6 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                 break; // leave the do/while loop
             }
         }
-
     }
 
     @Override

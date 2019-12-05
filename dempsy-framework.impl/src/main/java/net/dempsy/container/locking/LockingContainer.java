@@ -216,7 +216,8 @@ public class LockingContainer extends Container {
         if(!isRunningLazy) {
             LOGGER.debug("Dispacth called on stopped container");
             statCollector.messageFailed(1);
-            disposition.dispose(keyedMessage.message);
+            if(youOwnMessage)
+                disposition.dispose(keyedMessage.message);
             return;
         }
 
