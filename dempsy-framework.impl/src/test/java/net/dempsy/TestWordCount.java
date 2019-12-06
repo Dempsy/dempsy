@@ -493,7 +493,8 @@ public class TestWordCount extends DempsyBaseTest {
                 final List<Rank> ranks = prototype.getPairs();
                 Collections.sort(ranks, (o1, o2) -> o2.rank.compareTo(o1.rank));
 
-                final List<Rank> top10 = ranks.subList(0, 10);
+                final int top10OrSo = (ranks.size() < 10) ? ranks.size() : 10;
+                final List<Rank> top10 = ranks.subList(0, top10OrSo);
                 final String errStr = "expected the top 10 results: " + top10 + " to all be in:" + finalResults;
                 top10.stream()
                     .forEach(r -> assertTrue(errStr, finalResults.contains(r.word)));
