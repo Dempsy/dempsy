@@ -104,7 +104,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                 if(bindAddr == null)
                     bindAddr = binding.bound.getAddress(); // this will be the wildcard address.
 
-                internal = new NioAddress(bindAddr, internalPort, serId, binding.recvBufferSize);
+                internal = new NioAddress(bindAddr, internalPort, serId, binding.recvBufferSize, this.maxMessageSize);
 
                 address = resolver.getExternalAddresses(internal);
             } catch(final IOException e) {

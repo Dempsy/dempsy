@@ -14,6 +14,7 @@ public abstract class TcpAddress implements NodeAddress {
     public final int port;
     public final String serializerId;
     public final int recvBufferSize;
+    public final long messageSizeLimit;
 
     protected TcpAddress() {
         guid = null;
@@ -21,15 +22,17 @@ public abstract class TcpAddress implements NodeAddress {
         port = -1;
         serializerId = null;
         recvBufferSize = -1;
+        messageSizeLimit = 2147483647L;
     }
 
-    public TcpAddress(final InetAddress inetAddress, final int port, final String serializerId, final int recvBufferSize) {
+    public TcpAddress(final InetAddress inetAddress, final int port, final String serializerId, final int recvBufferSize, final long messageSizeLimit) {
         this.inetAddress = inetAddress;
         this.port = port;
         final String uuid = UUID.randomUUID().toString();
         this.guid = inetAddress.getHostAddress() + ":" + port + "-" + uuid;
         this.serializerId = serializerId;
         this.recvBufferSize = recvBufferSize;
+        this.messageSizeLimit = messageSizeLimit;
     }
 
     @Override
@@ -49,17 +52,17 @@ public abstract class TcpAddress implements NodeAddress {
 
     @Override
     public boolean equals(final Object obj) {
-        if (this == obj)
+        if(this == obj)
             return true;
-        if (obj == null)
+        if(obj == null)
             return false;
-        if (getClass() != obj.getClass())
+        if(getClass() != obj.getClass())
             return false;
-        final TcpAddress other = (TcpAddress) obj;
-        if (guid == null) {
-            if (other.guid != null)
+        final TcpAddress other = (TcpAddress)obj;
+        if(guid == null) {
+            if(other.guid != null)
                 return false;
-        } else if (!guid.equals(other.guid))
+        } else if(!guid.equals(other.guid))
             return false;
         return true;
     }

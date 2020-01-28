@@ -42,7 +42,7 @@ public class NioDefaultExternalAddressResolver implements TcpAddressResolver<Nio
             try {
                 return new NioAddress(
                     ipAddr == null ? TcpUtils.getFirstNonLocalhostInetAddress() : InetAddress.getByName(ipAddr),
-                    port, addr.serializerId, addr.recvBufferSize);
+                    port, addr.serializerId, addr.recvBufferSize, addr.messageSizeLimit);
             } catch(final UnknownHostException | SocketException uhe) {
                 throw new DempsyException(uhe, true);
             }
@@ -53,7 +53,7 @@ public class NioDefaultExternalAddressResolver implements TcpAddressResolver<Nio
             try {
                 return new NioAddress(
                     TcpUtils.getFirstNonLocalhostInetAddress(),
-                    addr.port, addr.serializerId, addr.recvBufferSize);
+                    addr.port, addr.serializerId, addr.recvBufferSize, addr.messageSizeLimit);
             } catch(final SocketException e) {
                 throw new DempsyException(e, false);
             }
