@@ -134,7 +134,7 @@ public class LockingContainer extends Container {
         private boolean evicted = false;
 
         /**
-         * DO NOT CALL THIS WITH NULL OR THE LOCKING LOGIC WONT WORK
+         * DO NOT CALL THIS WITH NULL OR THE LOCKING LOGIC WON'T WORK
          */
         public InstanceWrapper(final Object o) {
             this.instance = o;
@@ -143,8 +143,6 @@ public class LockingContainer extends Container {
         /**
          * MAKE SURE YOU USE A FINALLY CLAUSE TO RELEASE THE LOCK.
          *
-         * @param block
-         *     - whether or not to wait for the lock.
          * @return the instance if the lock was acquired. null otherwise.
          */
         public Object getExclusive() {
@@ -214,7 +212,8 @@ public class LockingContainer extends Container {
     @Override
     public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(!isRunningLazy) {
-            LOGGER.debug("Dispacth called on stopped container");
+            if(LOGGER.isDebugEnabled())
+                LOGGER.debug("Dispatch called on stopped container");
             statCollector.messageFailed(1);
             if(youOwnMessage)
                 disposition.dispose(keyedMessage.message);
@@ -225,7 +224,7 @@ public class LockingContainer extends Container {
             return; // No. We didn't process the null message
 
         if(keyedMessage.message == null)
-            throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
+            throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch a null message.");
 
         final Object actualMessage = youOwnMessage ? keyedMessage.message : disposition.replicate(keyedMessage.message);
         final Object messageKey = keyedMessage.key;
