@@ -514,7 +514,7 @@ public class LockingContainer extends Container {
             } catch(final DempsyException e) {
                 if(e.userCaused()) {
                     LOGGER.warn("The message processor prototype " + SafeString.valueOf(prototype)
-                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key));
+                        + " threw an exception when trying to create a new message processor for they key " + SafeString.objectDescription(key), e.userCause);
                     statCollector.messageFailed(1);
                     instance = null;
                 } else
@@ -539,10 +539,7 @@ public class LockingContainer extends Container {
                 }
             } catch(final DempsyException e) {
                 if(e.userCaused()) {
-                    if(LOGGER.isDebugEnabled())
-                        LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.", e.userCause);
-                    else
-                        LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.");
+                    LOGGER.warn("The message processor " + SafeString.objectDescription(instance) + " activate call threw an exception.", e.userCause);
                     statCollector.messageFailed(1);
                 } else
                     throw new ContainerException(
