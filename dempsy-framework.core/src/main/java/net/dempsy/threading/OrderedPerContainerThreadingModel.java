@@ -47,7 +47,6 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     private ExecutorService calcContainersWork = null;
 
     private final BlockingQueue<MessageDeliveryJobHolder> inqueue = new LinkedBlockingQueue<>();
-    private final BlockingQueue<MessageDeliveryJobHolder> deserQueue = new LinkedBlockingQueue<>();
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
     private Thread shuttleThread = null;
 
@@ -225,6 +224,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     private class Shuttler implements Runnable {
 
         private final Map<Container, ContainerWorker> containerWorkers = new HashMap<>();
+        private final BlockingQueue<MessageDeliveryJobHolder> deserQueue = new LinkedBlockingQueue<>();
 
         private void handleCalculatedContainerMessage(final MessageDeliveryJobHolder message) {
             // the message should have containers ...

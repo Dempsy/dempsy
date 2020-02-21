@@ -207,7 +207,7 @@ public class Node {
         return this;
     }
 
-    private Node defaultRoutingStrategyId(final String rs) {
+    public Node defaultRoutingStrategyId(final String rs) {
         this.defaultRoutingStrategyId = rs;
         return this;
     }
@@ -234,19 +234,19 @@ public class Node {
     // =======================================================================
 
     // These are 'set' in order to be autowired by spring
-    public Node setClusters(final Cluster... defs) {
+    public void setClusters(final Cluster... defs) {
         if(!clusters.isEmpty())
             throw new IllegalStateException("Cannot \"set\" clusters on a " + Node.class.getSimpleName() + " that already has clusters. Attempting to set "
                 + defs + " while the following clusters is already on the node: " + clusters);
-        return addClusters(Arrays.asList(defs));
+        addClusters(Arrays.asList(defs));
     }
 
     // These are 'set' in order to be autowired by spring
-    public Node setClusters(final List<Cluster> defs) {
+    public void setClusters(final List<Cluster> defs) {
         if(!clusters.isEmpty())
             throw new IllegalStateException("Cannot \"set\" clusters on a " + Node.class.getSimpleName() + " that already has clusters. Attempting to set "
                 + defs + " while the following clusters is already on the node: " + clusters);
-        return addClusters(defs);
+        addClusters(defs);
     }
 
     public Node addClusters(final Cluster... defs) {
@@ -264,6 +264,21 @@ public class Node {
         });
         clusters.addAll(defs);
         return this;
+    }
+
+    public Node clusters(final Cluster... defs) {
+        if(!clusters.isEmpty())
+            throw new IllegalStateException("Cannot \"set\" clusters on a " + Node.class.getSimpleName() + " that already has clusters. Attempting to set "
+                + defs + " while the following clusters is already on the node: " + clusters);
+        return addClusters(Arrays.asList(defs));
+    }
+
+    // These are 'set' in order to be autowired by spring
+    public Node clusters(final List<Cluster> defs) {
+        if(!clusters.isEmpty())
+            throw new IllegalStateException("Cannot \"set\" clusters on a " + Node.class.getSimpleName() + " that already has clusters. Attempting to set "
+                + defs + " while the following clusters is already on the node: " + clusters);
+        return addClusters(defs);
     }
 
     public List<Cluster> getClusters() {
@@ -287,51 +302,49 @@ public class Node {
         return getCluster(new ClusterId(application, clusterId));
     }
 
-    public Node setDefaultRoutingStrategyId(final String rs) {
-        return defaultRoutingStrategyId(rs);
+    public void setDefaultRoutingStrategyId(final String rs) {
+        defaultRoutingStrategyId(rs);
     }
 
     public Object getDefaultRoutingStrategyId() {
         return defaultRoutingStrategyId;
     }
 
-    public Node setClusterStatsCollectorFactoryId(final String statsCollector) {
-        return clusterStatsCollectorFactoryId(statsCollector);
+    public void setClusterStatsCollectorFactoryId(final String statsCollector) {
+        clusterStatsCollectorFactoryId(statsCollector);
     }
 
     public String getClusterStatsCollectorFactoryId() {
         return clusterStatsCollectorFactoryId;
     }
 
-    public Node setNodeStatsCollector(final Object statsCollector) {
-        return nodeStatsCollector(statsCollector);
+    public void setNodeStatsCollector(final Object statsCollector) {
+        nodeStatsCollector(statsCollector);
     }
 
     public Object getNodeStatsCollector() {
         return nodeStatsCollector;
     }
 
-    public Node setReceiver(final Object receiver) {
+    public void setReceiver(final Object receiver) {
         this.receiver = receiver;
-        return this;
     }
 
     public Object getReceiver() {
         return receiver;
     }
 
-    public Node setContainerTypeId(final String containerTypeId) {
-        return containerTypeId(containerTypeId);
+    public void setContainerTypeId(final String containerTypeId) {
+        containerTypeId(containerTypeId);
     }
 
     public String getContainerTypeId() {
         return containerTypeId;
     }
 
-    public Node setConfiguration(final Map<String, String> conf) {
+    public void setConfiguration(final Map<String, String> conf) {
         configuration.clear();
         configuration.putAll(conf);
-        return this;
     }
 
     public Map<String, String> getConfiguration() {

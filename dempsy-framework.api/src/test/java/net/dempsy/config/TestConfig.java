@@ -150,11 +150,11 @@ public class TestConfig {
         final Node node = new Node.Builder("test").receiver(appSer = new Object())
             .clusterStatsCollectorFactoryId(appSc = "s").defaultRoutingStrategyId(appRs = "a").build();
 
-        Cluster cd = new Cluster("test-slot1").setAdaptor(new GoodAdaptor());
+        Cluster cd = new Cluster("test-slot1").adaptor(new GoodAdaptor());
         clusterDefs.add(cd);
 
         cd = new Cluster("test-slot2").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
-            .setDestinations(new ClusterId(new ClusterId("test", "test-slot3")));
+            .destination(new ClusterId(new ClusterId("test", "test-slot3")));
         clusterDefs.add(cd);
 
         cd = new Cluster("test-slot3");
@@ -162,15 +162,14 @@ public class TestConfig {
         cd.setDestinations(new ClusterId[] {new ClusterId("test", "test-slot4"),new ClusterId("test", "test-slot5")});
         clusterDefs.add(cd);
 
-        cd = new Cluster("test-slot4").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
+        cd = new Cluster("test-slot4").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
         clusterDefs.add(cd);
 
-        cd = new Cluster("test-slot5").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
+        cd = new Cluster("test-slot5").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
         clusterDefs.add(cd);
 
         final String clusRs = "c";
-        cd = new Cluster("test-slot6").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
-            .setRoutingStrategyId(clusRs);
+        cd = new Cluster("test-slot6").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())).routingStrategyId(clusRs);
         clusterDefs.add(cd);
 
         cd = new Cluster("test-slot1.5").adaptor(new GoodAdaptor());
@@ -276,9 +275,9 @@ public class TestConfig {
     @Test(expected = IllegalArgumentException.class)
     public void testFailNullClusterDefinition() throws Throwable {
         new Node.Builder("test")
-            .clusters(new Cluster("test-slot1").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+            .clusters(new Cluster("test-slot1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
                 null,
-                new Cluster("test-slot2").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
+                new Cluster("test-slot2").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -289,13 +288,13 @@ public class TestConfig {
 
     @Test(expected = IllegalStateException.class)
     public void testDupCluster() throws Throwable {
-        final Node app = new Node("test-tooMuchWine-needMore").setDefaultRoutingStrategyId("");
-        app.addClusters(
-            new Cluster("notTheSame").setAdaptor(new GoodAdaptor()),
-            new Cluster("mp-stage1").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
-            new Cluster("mp-stage2-dupped").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
-            new Cluster("mp-stage2-dupped").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
-            new Cluster("mp-stage3").setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
+        final Node app = new Node("test-tooMuchWine-needMore").defaultRoutingStrategyId("");
+        app.clusters(
+            new Cluster("notTheSame").adaptor(new GoodAdaptor()),
+            new Cluster("mp-stage1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+            new Cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+            new Cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+            new Cluster("mp-stage3").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
         app.validate();
     }
 
@@ -344,7 +343,7 @@ public class TestConfig {
     public void testConfigAdaptorWithKeyStore() throws Throwable {
         final Node app = new Node.Builder("test").defaultRoutingStrategyId("").build();
         final Cluster cd = new Cluster("test-slot");
-        cd.setAdaptor(new Adaptor() {
+        cd.adaptor(new Adaptor() {
             @Override
             public void stop() {}
 

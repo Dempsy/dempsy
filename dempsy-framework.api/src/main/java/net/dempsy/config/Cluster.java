@@ -118,7 +118,18 @@ public class Cluster {
         return this;
     }
 
+    /**
+     * Use routingStrategyId()
+     *
+     * @param routingStrategyId
+     * @return
+     */
+    @Deprecated
     public Cluster routing(final String routingStrategyId) {
+        return routingStrategyId(routingStrategyId);
+    }
+
+    public Cluster routingStrategyId(final String routingStrategyId) {
         this.routingStrategyId = routingStrategyId;
         return this;
     }
@@ -146,26 +157,24 @@ public class Cluster {
         return keySource;
     }
 
-    public Cluster setKeySource(final KeySource<?> keySource) {
+    public void setKeySource(final KeySource<?> keySource) {
         this.keySource = keySource;
-        return this;
     }
 
     public EvictionFrequency getEvictionFrequency() {
         return evictionFrequency;
     }
 
-    public Cluster setEvictionFrequency(final EvictionFrequency evictionFrequency) {
+    public void setEvictionFrequency(final EvictionFrequency evictionFrequency) {
         this.evictionFrequency = evictionFrequency;
-        return this;
     }
 
     public int getMaxPendingMessagesPerContainer() {
         return maxPendingMessagesPerContainer;
     }
 
-    public Cluster setMaxPendingMessagesPerContainer(final int maxPendingMessagesPerContainer) {
-        return maxPendingMessagesPerContainer(maxPendingMessagesPerContainer);
+    public void setMaxPendingMessagesPerContainer(final int maxPendingMessagesPerContainer) {
+        maxPendingMessagesPerContainer(maxPendingMessagesPerContainer);
     }
 
     private Cluster containerTypeId(final String containerTypeId) {
@@ -173,8 +182,8 @@ public class Cluster {
         return this;
     }
 
-    public Cluster setContainerTypeId(final String containerTypeId) {
-        return containerTypeId(containerTypeId);
+    public void setContainerTypeId(final String containerTypeId) {
+        containerTypeId(containerTypeId);
     }
 
     public String getContainerTypeId() {
@@ -185,8 +194,8 @@ public class Cluster {
         return outputExecutor;
     }
 
-    public Cluster setOutputScheduler(final Object outputScheduler) {
-        return outputScheduler(outputScheduler);
+    public void setOutputScheduler(final Object outputScheduler) {
+        outputScheduler(outputScheduler);
     }
 
     /**
@@ -206,28 +215,28 @@ public class Cluster {
     /**
      * Set the list of explicit destination that outgoing messages should be limited to.
      */
-    public Cluster setDestinations(final ClusterId... destinations) {
-        return destination(destinations);
+    public void setDestinations(final ClusterId... destinations) {
+        destination(destinations);
     }
 
     public String getRoutingStrategyId() {
         return routingStrategyId;
     }
 
-    public Cluster setRoutingStrategyId(final String routingStrategyId) {
-        return routing(routingStrategyId);
+    public void setRoutingStrategyId(final String routingStrategyId) {
+        routing(routingStrategyId);
     }
 
-    public Cluster setMessageProcessor(final MessageProcessorLifecycle<?> mp) {
-        return mp(mp);
+    public void setMessageProcessor(final MessageProcessorLifecycle<?> mp) {
+        mp(mp);
     }
 
     public MessageProcessorLifecycle<?> getMessageProcessor() {
         return mp;
     }
 
-    public Cluster setAdaptor(final Adaptor adaptor) {
-        return adaptor(adaptor);
+    public void setAdaptor(final Adaptor adaptor) {
+        adaptor(adaptor);
     }
 
     public Adaptor getAdaptor() {
