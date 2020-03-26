@@ -216,6 +216,12 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         if(outputConcurrency > 1)
             outputExecutorService = Executors.newFixedThreadPool(outputConcurrency,
                 r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
+
+        // check the container support for bulk
+        if(prototype.isBulkDeliverySupported() && !containerSupportsBulkProcessing())
+            LOGGER.warn("The MessageProcessor for {} supports bulk message processing but the container does not.", clusterId);
+        else if(!prototype.isBulkDeliverySupported() && containerSupportsBulkProcessing())
+            LOGGER.info("The container {} supports bulk processing but the message processor for {} does not.", this.getClass().getSimpleName(), clusterId);
     }
 
     @Override
@@ -243,15 +249,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // do things like throw away messages when the number pending to that container is too large.
     public static interface ContainerSpecific {
         void messageBeingDiscarded();
-    }
-
-    private class ContainerSpecificInternal implements ContainerSpecific {
-
-        @Override
-        public void messageBeingDiscarded() {
-            numPending.decrementAndGet();
-        }
-
     }
 
     // Called before being submitted to the ThreadingModel. It allows independent management
@@ -304,6 +301,20 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
      */
     public abstract Object getMp(Object key);
 
+    /**
+     * This needs to be overloaded to tell the framework whether or not the container implementation
+     * supports internal queuing. This is because some threading models are incompatible with containers
+     * that internally queue messages.
+     */
+    public abstract boolean containerInternallyQueuesMessages();
+
+    public abstract boolean containerSupportsBulkProcessing();
+
+    public void setEvictionCycle(final long evictionCycleTime, final TimeUnit timeUnit) {
+        this.evictionCycleTime = evictionCycleTime;
+        this.evictionTimeUnit = timeUnit;
+    }
+
     protected ExecutorService getOutputExecutorService() {
         return outputExecutorService;
     }
@@ -313,16 +324,18 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         outputConcurrency = concurrency;
     }
 
+    private class ContainerSpecificInternal implements ContainerSpecific {
+        @Override
+        public void messageBeingDiscarded() {
+            numPending.decrementAndGet();
+        }
+    }
+
     private void stopOutput() {
         if(outputExecutorService != null)
             outputExecutorService.shutdown();
 
         outputExecutorService = null;
-    }
-
-    public void setEvictionCycle(final long evictionCycleTime, final TimeUnit timeUnit) {
-        this.evictionCycleTime = evictionCycleTime;
-        this.evictionTimeUnit = timeUnit;
     }
 
     // =======================================================================================

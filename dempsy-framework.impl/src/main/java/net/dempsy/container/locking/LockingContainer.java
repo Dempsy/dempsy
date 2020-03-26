@@ -115,6 +115,16 @@ public class LockingContainer extends Container {
         return numBeingWorked.get();
     }
 
+    @Override
+    public boolean containerInternallyQueuesMessages() {
+        return false;
+    }
+
+    @Override
+    public boolean containerSupportsBulkProcessing() {
+        return false;
+    }
+
     // ----------------------------------------------------------------------------
     // Test Hooks
     // ----------------------------------------------------------------------------

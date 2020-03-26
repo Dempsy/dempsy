@@ -135,6 +135,16 @@ public class NonLockingContainer extends Container {
         return numBeingWorked.get();
     }
 
+    @Override
+    public boolean containerInternallyQueuesMessages() {
+        return true;
+    }
+
+    @Override
+    public boolean containerSupportsBulkProcessing() {
+        return false;
+    }
+
     // ----------------------------------------------------------------------------
     // Test Hooks
     // ----------------------------------------------------------------------------

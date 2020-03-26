@@ -15,10 +15,10 @@ public interface Mp {
 
     public default KeyedMessageWithType[] handleBulk(final List<KeyedMessage> messages) {
         final KeyedMessageWithType[] ret = messages.stream()
-                .map(m -> handle(m))
-                .filter(ms -> ms != null)
-                .flatMap(ms -> Arrays.stream(ms))
-                .toArray(KeyedMessageWithType[]::new);
+            .map(m -> handle(m))
+            .filter(ms -> ms != null)
+            .flatMap(ms -> Arrays.stream(ms))
+            .toArray(KeyedMessageWithType[]::new);
 
         return (ret.length > 0) ? ret : null;
     }

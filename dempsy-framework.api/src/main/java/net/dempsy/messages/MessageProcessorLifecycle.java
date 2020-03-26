@@ -49,6 +49,13 @@ public interface MessageProcessorLifecycle<T> {
     public List<KeyedMessageWithType> invokeBulk(final T instance, final List<KeyedMessage> message) throws DempsyException;
 
     /**
+     * If the implementation of this Mp can handle bulk delivery, this method should return true. Otherwise
+     * it should return false. This should be Mp specific and NOT simply set based on the implementation
+     * of this MessageProcessorLifecycle.
+     */
+    public boolean isBulkDeliverySupported();
+
+    /**
      * This method is invoked by the framework when output is enabled (see {@link #isOutputSupported()})
      * and it's time to invoke the output phase of the particular message processor 'instance.'
      */

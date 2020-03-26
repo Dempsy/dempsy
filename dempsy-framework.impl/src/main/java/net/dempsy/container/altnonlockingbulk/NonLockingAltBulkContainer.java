@@ -55,6 +55,16 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
         super(LOGGER);
     }
 
+    @Override
+    public boolean containerInternallyQueuesMessages() {
+        return true;
+    }
+
+    @Override
+    public boolean containerSupportsBulkProcessing() {
+        return true;
+    }
+
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
     public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {

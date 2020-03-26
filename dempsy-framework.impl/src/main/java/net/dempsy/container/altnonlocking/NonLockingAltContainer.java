@@ -323,6 +323,16 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     }
 
     @Override
+    public boolean containerInternallyQueuesMessages() {
+        return true;
+    }
+
+    @Override
+    public boolean containerSupportsBulkProcessing() {
+        return false;
+    }
+
+    @Override
     protected void doevict(final EvictCheck check) {
         if(!check.isGenerallyEvitable() || !isRunning.get())
             return;

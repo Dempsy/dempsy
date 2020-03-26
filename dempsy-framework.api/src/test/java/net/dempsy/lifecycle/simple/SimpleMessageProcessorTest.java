@@ -22,13 +22,13 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 import net.dempsy.lifecycle.annotation.MessageKey;
-import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.KeyedMessage;
+import net.dempsy.messages.KeyedMessageWithType;
 
 public class SimpleMessageProcessorTest {
     @Test
     public void testMethodHandleWithParameters() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMp());
+        final MessageProcessor helper = new MessageProcessor(() -> new TestMp(), false);
         final TestMp mp = (TestMp)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate");
@@ -40,7 +40,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleWithNoParameters() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpEmptyActivate());
+        final MessageProcessor helper = new MessageProcessor(() -> new TestMpEmptyActivate(), true);
         final TestMpEmptyActivate mp = (TestMpEmptyActivate)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate");
@@ -52,7 +52,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleWithOnlyKey() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpOnlyKey());
+        final MessageProcessor helper = new MessageProcessor(() -> new TestMpOnlyKey(), false);
         final TestMpOnlyKey mp = (TestMpOnlyKey)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate");
@@ -64,7 +64,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleExtraParameters() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParameters());
+        final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParameters(), false);
         final TestMpExtraParameters mp = (TestMpExtraParameters)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate");
@@ -76,7 +76,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleExtraParametersOrderChanged() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParametersChangedOrder());
+        final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParametersChangedOrder(), false);
         final TestMpExtraParametersChangedOrder mp = (TestMpExtraParametersChangedOrder)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate");
@@ -88,7 +88,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleNoActivation() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoActivation());
+        final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoActivation(), false);
         final TestMpNoActivation mp = (TestMpNoActivation)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate");
@@ -100,7 +100,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleNoKey() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoKey());
+        final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoKey(), true);
         final TestMpNoKey mp = (TestMpNoKey)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate");

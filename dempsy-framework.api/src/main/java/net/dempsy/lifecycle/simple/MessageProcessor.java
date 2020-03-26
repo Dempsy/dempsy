@@ -36,11 +36,13 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
     private final Set<String> messageTypes;
     private boolean isEvictable = false;
     private boolean hasOutput = false;
+    private final boolean handlesBulk;
 
-    public MessageProcessor(final Supplier<? extends Mp> newMp, final String... messageTypes) {
+    public MessageProcessor(final Supplier<? extends Mp> newMp, final boolean handlesBulk, final String... messageTypes) {
         if(newMp == null)
             throw new IllegalArgumentException("You must provide a Supplier that creates new " + Mp.class.getSimpleName() + "s.");
         this.newMp = newMp;
+        this.handlesBulk = handlesBulk;
         this.messageTypes = new HashSet<>(Arrays.asList(messageTypes));
     }
 
@@ -138,6 +140,11 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
         } catch(final RuntimeException rte) {
             throw new DempsyException(rte, true);
         }
+    }
+
+    @Override
+    public boolean isBulkDeliverySupported() {
+        return handlesBulk;
     }
 
     /**
