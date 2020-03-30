@@ -15,7 +15,7 @@ import net.dempsy.util.SafeString;
 import net.dempsy.utils.MetricUtils;
 
 public class DropwizardStatsReporter {
-    public static final Logger LOGGER = LoggerFactory.getLogger(DropwizardStatsReporter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DropwizardStatsReporter.class);
 
     private final List<Reporter> reporters = Collections.synchronizedList(new LinkedList<>());
 

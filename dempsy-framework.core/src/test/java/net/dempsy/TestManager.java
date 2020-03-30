@@ -25,7 +25,7 @@ import net.dempsy.utils.test.ConditionPoll;
 
 @RunWith(Parameterized.class)
 public class TestManager {
-    public static Logger LOGGER = LoggerFactory.getLogger(TestManager.class);
+    private static Logger LOGGER = LoggerFactory.getLogger(TestManager.class);
 
     public static final long RUN_TIME_MILLIS = 2000;
     public static final int NUM_THREADS = 48;

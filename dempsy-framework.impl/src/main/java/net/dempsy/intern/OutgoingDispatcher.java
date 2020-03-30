@@ -35,7 +35,9 @@ import net.dempsy.util.SafeString;
 import net.dempsy.utils.PersistentTask;
 
 public class OutgoingDispatcher extends Dispatcher implements Service {
-    public static Logger LOGGER = LoggerFactory.getLogger(OutgoingDispatcher.class);
+    // package protected because it's used in ApplicationState which is really an
+    // internal implementation detail of this class.
+    static Logger LOGGER = LoggerFactory.getLogger(OutgoingDispatcher.class);
     private static final long RETRY_TIMEOUT = 500L;
 
     private PersistentTask checkup;

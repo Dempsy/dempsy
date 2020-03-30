@@ -30,7 +30,7 @@ import net.dempsy.transport.tcp.TcpAddress;
 import net.dempsy.transport.tcp.nio.internal.NioUtils;
 
 public class NioSenderFactory implements SenderFactory {
-    public final static Logger LOGGER = LoggerFactory.getLogger(NioSenderFactory.class);
+    private final static Logger LOGGER = LoggerFactory.getLogger(NioSenderFactory.class);
 
     public static final String CONFIG_KEY_SENDER_THREADS = "send_threads";
     public static final String DEFAULT_SENDER_THREADS = "2";
