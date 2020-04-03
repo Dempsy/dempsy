@@ -43,7 +43,7 @@ public class MessageUtils {
                     return keyGetter.invoke(o);
                 } catch(IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
                     throw new DempsyException(
-                        "Failed to extract key from \"" + SafeString.objectDescription(o) + "\" using the method \"" + keyGetter.getName() + "\"");
+                        "Failed to extract key from \"" + SafeString.objectDescription(o) + "\" using the method \"" + keyGetter.getName() + "\"", e, true);
                 }
             };
         }
