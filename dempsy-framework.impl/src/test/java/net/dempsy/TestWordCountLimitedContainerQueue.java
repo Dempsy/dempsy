@@ -4,12 +4,14 @@ import java.util.function.Function;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.SystemPropertyManager;
 
+@Ignore
 public class TestWordCountLimitedContainerQueue extends TestWordCount {
     private static Logger LOGGER = LoggerFactory.getLogger(TestWordCountLimitedContainerQueue.class);
 
