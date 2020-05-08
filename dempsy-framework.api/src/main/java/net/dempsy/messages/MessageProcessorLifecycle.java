@@ -24,7 +24,7 @@ public interface MessageProcessorLifecycle<T> {
      * (see {@link MessageProcessorLifecycle#newInstance()}) and before the message handling is invoked to give the
      * message processor a chance to prepare.
      */
-    public void activate(T instance, Object key) throws DempsyException;
+    public void activate(T instance, Object key, Object activatingMessage) throws DempsyException;
 
     /**
      * The 'passivation' lifecycle phase is invoked by Dempsy just prior to the framework giving up

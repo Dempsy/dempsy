@@ -96,9 +96,9 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
      * @see MessageProcessorLifecycle#activate(Object, Object)
      */
     @Override
-    public void activate(final Mp instance, final Object key) throws DempsyException {
+    public void activate(final Mp instance, final Object key, final Object activatingMessage) throws DempsyException {
         try {
-            instance.activate(key);
+            instance.activate(key, activatingMessage);
         } catch(final RuntimeException rte) {
             throw new DempsyException(rte, true);
         }

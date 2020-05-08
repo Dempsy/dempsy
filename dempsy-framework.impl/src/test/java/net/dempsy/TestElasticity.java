@@ -155,8 +155,8 @@ public class TestElasticity extends DempsyBaseTest {
         String wordText;
 
         @Activation
-        public void initMe(final String key) {
-            this.wordText = key;
+        public void initMe(final Integer key) {
+            this.wordText = "" + key;
         }
 
         @MessageHandler
@@ -289,7 +289,7 @@ public class TestElasticity extends DempsyBaseTest {
                 // Grab the one NumberRank Mp from the single Node in the third (0 base 2nd) cluster.
                 final NumberRank rank = nodes.get(4).ctx.getBean(NumberRank.class);
 
-                try (final ClusterInfoSession session = ns.sessionFactory.createSession();) {
+                try(final ClusterInfoSession session = ns.sessionFactory.createSession();) {
                     waitForEvenShardDistribution(session, "test-cluster1", 3, nodes);
 
                     // get the Adaptor Router's statCollector
@@ -399,7 +399,7 @@ public class TestElasticity extends DempsyBaseTest {
                     }
                 };
 
-                try (final ClusterInfoSession session = ns.sessionFactory.createSession();) {
+                try(final ClusterInfoSession session = ns.sessionFactory.createSession();) {
                     waitForEvenShardDistribution(session, "test-cluster1", 3, ns.nodes);
 
                     // Grab the one NumberRank Mp from the single Node in the third (0 base 2nd) cluster.
@@ -463,7 +463,7 @@ public class TestElasticity extends DempsyBaseTest {
                     }
                 };
 
-                try (final ClusterInfoSession session = ns.sessionFactory.createSession();) {
+                try(final ClusterInfoSession session = ns.sessionFactory.createSession();) {
                     waitForEvenShardDistribution(session, "test-cluster1", 3, nodes);
 
                     // Grab the one NumberRank Mp from the single Node in the third (0 base 2nd) cluster.
@@ -528,7 +528,7 @@ public class TestElasticity extends DempsyBaseTest {
                     }
                 };
 
-                try (final ClusterInfoSession session = ns.sessionFactory.createSession();) {
+                try(final ClusterInfoSession session = ns.sessionFactory.createSession();) {
                     waitForEvenShardDistribution(session, "test-cluster1", 1, nodes);
 
                     final NumberRank rank = nodes.get(2).ctx.getBean(NumberRank.class);

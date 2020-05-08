@@ -38,7 +38,7 @@ public class TestMoreKeyDiscrim {
             public void startMethod() {}
 
             @Evictable
-            public boolean evict1(final Object arg) {
+            public boolean evict1() {
                 return false;
             }
 

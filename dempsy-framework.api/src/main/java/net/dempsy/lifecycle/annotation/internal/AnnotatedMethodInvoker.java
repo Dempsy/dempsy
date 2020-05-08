@@ -58,12 +58,12 @@ public class AnnotatedMethodInvoker {
      * Constructs an instance to be used with annotated setter methods.
      *
      * @param objectKlass
-     *            The class to be introspected for annotated methods.
+     *     The class to be introspected for annotated methods.
      * @param annotationType
-     *            Annotation that identifies setter or generic one argument methods.
+     *     Annotation that identifies setter or generic one argument methods.
      *
      * @throws IllegalArgumentException
-     *             if the class does not have any single-argument methods with the specified annotation
+     *     if the class does not have any single-argument methods with the specified annotation
      */
     public AnnotatedMethodInvoker(final Class<?> objectKlass) throws IllegalArgumentException {
 
@@ -73,42 +73,42 @@ public class AnnotatedMethodInvoker {
                 methods.put(argTypes[0], method);
             else
                 throw new IllegalArgumentException(
-                        "The class " + objectKlass.getName() + " has the method " + method.getName() + " and is annotated with "
-                                + MHCLASS.getSimpleName() + " but takes " + argTypes.length + " parameters when it must take exactly 1");
+                    "The class " + objectKlass.getName() + " has the method " + method.getName() + " and is annotated with "
+                        + MHCLASS.getSimpleName() + " but takes " + argTypes.length + " parameters when it must take exactly 1");
         }
 
         if(methods.size() == 0)
             throw new IllegalArgumentException(
-                    "class " + objectKlass.getName() + " does not have any 1-argument methods annotated with " +
-                            MHCLASS.getSimpleName());
+                "class " + objectKlass.getName() + " does not have any 1-argument methods annotated with " +
+                    MHCLASS.getSimpleName());
 
         final List<Method> bulkMethods = introspectAnnotationMultiple(objectKlass, BMHCLASS, true);
         if(bulkMethods.size() > 0) {
             if(bulkMethods.size() > 1)
                 throw new IllegalStateException("There appears to be more than one method marked with @" + BulkMessageHandler.class.getSimpleName()
-                        + " on " + objectKlass.getSimpleName() + ". Dempsy has no way to discriminate between these methods.");
+                    + " on " + objectKlass.getSimpleName() + ". Dempsy has no way to discriminate between these methods.");
 
             bulkMethod = bulkMethods.get(0);
             final Class<?>[] argTypes = bulkMethod.getParameterTypes();
             if(argTypes.length == 0)
                 throw new IllegalStateException(
-                        "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
-                                + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " take no parameters.");
+                    "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
+                        + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " take no parameters.");
             if(argTypes.length > 1)
                 throw new IllegalStateException(
-                        "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
-                                + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " take too many parameters.");
+                    "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
+                        + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " take too many parameters.");
             if(!argTypes[0].isAssignableFrom(List.class))
                 throw new IllegalStateException(
-                        "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
-                                + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " takes a " + argTypes[0].getSimpleName()
-                                + " which is not assignable to a List<.>.");
+                    "Methods marked with @" + BulkMessageHandler.class.getSimpleName() + " must take a List as a single parameter. The method \""
+                        + bulkMethod.getName() + "\" on " + objectKlass.getSimpleName() + " takes a " + argTypes[0].getSimpleName()
+                        + " which is not assignable to a List<.>.");
         } else
             bulkMethod = null;
     }
 
     public Object invokeBulkMethod(final Object instance, final List<?> value)
-            throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         return bulkMethod.invoke(instance, value);
     }
 
@@ -117,20 +117,20 @@ public class AnnotatedMethodInvoker {
      * returns its result.
      *
      * @throws IllegalArgumentException
-     *             if there is no annotated method appropriate to the value
+     *     if there is no annotated method appropriate to the value
      * @throws IllegalAccessException
-     *             if unable to invoke the annotated method
+     *     if unable to invoke the annotated method
      * @throws InvocationTargetException
-     *             if the invoked method threw an exception
+     *     if the invoked method threw an exception
      */
     public Object invokeMethod(final Object instance, final Object value)
-            throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
+        throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
         final Class<?> valueClass = value.getClass();
         final Method method = getInvokableMethodForClass(valueClass);
         if(method == null) {
             throw new IllegalArgumentException(
-                    "class " + instance.getClass().getName()
-                            + " does not have an annotated setter for values of type " + valueClass.getName());
+                "class " + instance.getClass().getName()
+                    + " does not have an annotated setter for values of type " + valueClass.getName());
         }
 
         return method.invoke(instance, value);
@@ -153,6 +153,8 @@ public class AnnotatedMethodInvoker {
      */
     public static <T extends Annotation> Method introspectAnnotationSingle(final Class<?> klass, final Class<T> annotationType) {
         final List<Method> methods = introspectAnnotationMultiple(klass, annotationType, true);
+        if(methods.size() > 1)
+            throw new IllegalStateException("Cannot have more than one method annotated with @" + annotationType.getSimpleName());
         return (methods.size() > 0) ? methods.get(0) : null;
     }
 

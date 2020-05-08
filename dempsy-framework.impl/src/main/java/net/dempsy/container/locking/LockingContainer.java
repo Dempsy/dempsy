@@ -260,7 +260,7 @@ public class LockingContainer extends Container {
             do {
                 evictedAndBlocking = false;
 
-                final InstanceWrapper wrapper = getInstanceForKey(messageKey);
+                final InstanceWrapper wrapper = getInstanceForKey(messageKey, actualMessage);
 
                 // wrapper will be null if the activate returns 'false'
                 if(wrapper != null) {
@@ -305,7 +305,7 @@ public class LockingContainer extends Container {
         if(!check.isGenerallyEvitable() || !isRunning.get())
             return;
 
-        try (final StatsCollector.TimerContext tctx = statCollector.evictionPassStarted()) {
+        try(final StatsCollector.TimerContext tctx = statCollector.evictionPassStarted()) {
 
             // we need to make a copy of the instances in order to make sure
             // the eviction check is done at once.
@@ -500,7 +500,7 @@ public class LockingContainer extends Container {
     /**
      * This is required to return non null or throw a ContainerException
      */
-    InstanceWrapper getInstanceForKey(final Object key) throws ContainerException {
+    InstanceWrapper getInstanceForKey(final Object key, final Object message) throws ContainerException {
         // common case has "no" contention
         InstanceWrapper wrapper = instances.get(key);
         if(wrapper != null)
@@ -544,7 +544,7 @@ public class LockingContainer extends Container {
                     if(LOGGER.isTraceEnabled())
                         LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
                             + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
-                    prototype.activate(instance, key);
+                    prototype.activate(instance, key, message);
                     activateSuccessful = true;
                 }
             } catch(final DempsyException e) {

@@ -57,10 +57,10 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
     private final String toStringValue;
 
     private final Method cloneMethod;
-    private MethodHandle activationMethod;
-    private final MethodHandle passivationMethod;
+    private UpToThreeParameterMethod activationMethod;
+    private final ZeroParameterMethod<byte[]> passivationMethod;
     private final List<Method> outputMethods;
-    private final MethodHandle evictableMethod;
+    private final ZeroParameterMethod<Boolean> evictableMethod;
     private final AnnotatedMethodInvoker invocationMethods;
     private final Set<Class<?>> stopTryingToSendTheseTypes = Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
     private final Set<String> typesHandled;
@@ -84,20 +84,32 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
 
         // =====================================================================
         // Find an activation method
-        // TODO: if there are multiple MessageHandlers then there can be multiple methods
-        // tagged with Activation. Fix this.
         // =====================================================================
         final Set<Class<?>> handledTypes = invocationMethods.getClassesHandled();
         for(final Class<?> handledType: handledTypes) {
-            final Method messageKey = AnnotatedMethodInvoker.introspectAnnotationSingle(handledType, MessageKey.class);
-            activationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Activation.class),
-                (messageKey == null) ? null : messageKey.getReturnType());
+            final List<Method> messageKeyExtractors = AnnotatedMethodInvoker.introspectAnnotationMultiple(handledType, MessageKey.class, true);
+            final Method messageKey = messageKeyExtractors != null && messageKeyExtractors.size() > 0 ? messageKeyExtractors.get(0) : null;
+            if(messageKey == null)
+                throw new IllegalStateException("The type handled by " + mpClassName + ", " + handledType.getName()
+                    + " doesn't appear to have a message key denoted by the annotation @" + MessageKey.class.getSimpleName());
+            final Class<?> messageKeyReturnType = messageKey.getReturnType();
+            if(messageKeyReturnType == null || messageKeyReturnType == void.class)
+                throw new IllegalStateException("The method to retrieve the key for the messages of type " + handledType.getName()
+                    + " denoted by the method annotated with @" + MessageKey.class.getSimpleName() + " seems to have no return type (it's declared 'void').");
+
+            if(activationMethod != null) {
+                // TODO: verify that the type is compatible
+            } else
+                activationMethod = findActivationMethodCall(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Activation.class), messageKeyReturnType);
         }
+        if(activationMethod == null)
+            activationMethod = (i, k, m, s) -> {};
         // =====================================================================
 
-        passivationMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Passivation.class));
+        passivationMethod = findZeroParameterMethod(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Passivation.class), byte[].class);
         outputMethods = AnnotatedMethodInvoker.introspectAnnotationMultiple(mpClass, Output.class, true);
-        evictableMethod = new MethodHandle(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Evictable.class));
+        evictableMethod = findZeroParameterMethod(AnnotatedMethodInvoker.introspectAnnotationSingle(mpClass, Evictable.class), Boolean.class, boolean.class,
+            false);
         typesHandled = new HashSet<>(Arrays.asList(getMessageTypesFromMpClass(prototype.getClass())));
         if(invocationMethods.getNumMethods() > 0 && typesHandled == null || typesHandled.size() == 0)
             throw new IllegalArgumentException(
@@ -117,8 +129,8 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
      * Invokes the activation method of the passed instance.
      */
     @Override
-    public void activate(final T instance, final Object key) throws DempsyException {
-        wrap(() -> activationMethod.invoke(instance, key));
+    public void activate(final T instance, final Object key, final Object activatingMessage) throws DempsyException {
+        wrap(() -> activationMethod.invoke(instance, key, activatingMessage, null));
     }
 
     /**
@@ -127,7 +139,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
      */
     @Override
     public void passivate(final T instance) throws DempsyException {
-        wrap(() -> (byte[])passivationMethod.invoke(instance));
+        wrap(() -> passivationMethod.invoke(instance));
     }
 
     /**
@@ -358,61 +370,179 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
         }
     }
 
-    /**
-     * Class to handle method calls for activation and passivation
-     */
-    protected class MethodHandle {
-        private final Method method;
-        private int keyPosition = -1;
-        private int totalArguments = 0;
+    @FunctionalInterface
+    protected static interface UpToThreeParameterMethod {
+        void invoke(Object instance, Object o1, Object o2, byte[] state) throws IllegalAccessException, InvocationTargetException;
+    }
 
-        public MethodHandle(final Method method) {
-            this(method, null);
-        }
+    @FunctionalInterface
+    protected static interface ZeroParameterMethod<RT> {
+        RT invoke(Object instance) throws IllegalAccessException, InvocationTargetException;
+    }
 
-        public MethodHandle(final Method method, final Class<?> keyClass) {
-            this.method = method;
-            if(this.method != null) {
-                final Class<?>[] parameterTypes = method.getParameterTypes();
-                this.totalArguments = parameterTypes.length;
-                for(int i = 0; i < parameterTypes.length; i++) {
-                    final Class<?> parameter = parameterTypes[i];
-                    if(keyClass != null && parameter.isAssignableFrom(keyClass)) {
-                        this.keyPosition = i;
-                    }
+    protected <RT> ZeroParameterMethod<RT> findZeroParameterMethod(final Method method, final Class<RT> returnType) {
+        return findZeroParameterMethod(method, returnType, null, true);
+    }
+
+    protected <RT> ZeroParameterMethod<RT> findZeroParameterMethod(final Method method, final Class<RT> returnType, final Class<?> alternateCastable,
+        final boolean allowVoid) {
+        try {
+            if(method != null) {
+                // there should be no parameters.
+                if(method.getParameterCount() != 0)
+                    throw new IllegalStateException(
+                        "The method " + method.getName() + " on the class " + method.getDeclaringClass().getName() + " should take no parameters.");
+                final Class<?> methodsReturnType = method.getReturnType();
+                if(methodsReturnType == null || methodsReturnType == void.class) {
+                    if(allowVoid)
+                        return i -> {
+                            method.invoke(i);
+                            return null;
+                        };
+
+                    throw new IllegalStateException("The method " + method.getName() + " on the class " + method.getDeclaringClass().getName()
+                        + " has a 'void' return type but it's expected to return something assignable to a " + returnType.getName());
+
                 }
+                if(!returnType.isAssignableFrom(methodsReturnType) && !(alternateCastable == null || alternateCastable.isAssignableFrom(methodsReturnType)))
+                    throw new IllegalStateException(
+                        "The method " + method.getName() + " on the class " + method.getDeclaringClass().getName() + " returns a " + methodsReturnType.getName()
+                            + " but is expected to return something assignable to a " + returnType.getName());
+
+                return i -> returnType.cast(method.invoke(i));
             }
-        }
-
-        public Object invoke(final Object instance, final Object key)
-            throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
-            if(this.method != null) {
-                final Object[] parameters = new Object[this.totalArguments];
-                if(this.keyPosition > -1)
-                    parameters[this.keyPosition] = key;
-                return this.method.invoke(instance, parameters);
-            }
-            return null;
-        }
-
-        public Object invoke(final Object instance) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
-            return this.invoke(instance, null);
-        }
-
-        public Method getMethod() {
-            return this.method;
-        }
-
-        public boolean canThrowCheckedException(final Throwable th) {
-            if(method == null || th == null)
-                return false;
-
-            for(final Class<?> cur: method.getExceptionTypes())
-                if(cur.isInstance(th))
-                    return true;
-            return false;
+            // the method is null, so we stub it out
+            return i -> null;
+        } catch(final IllegalStateException ise) {
+            throw new DempsyException(ise, true);
         }
     }
+
+    protected UpToThreeParameterMethod findActivationMethodCall(final Method method, final Class<?> keyClass) {
+        if(method == null)
+            return (i, k, m, s) -> {};
+
+        try {
+            // quick sanity check.
+            if(byte[].class.isAssignableFrom(keyClass))
+                throw new IllegalStateException(
+                    "A message's key class cannot by assignable to a byte[] and be used in an @" + Activation.class.getSimpleName() + " method");
+
+            final Class<?>[] parameterTypes = method.getParameterTypes();
+            final int totalArguments = parameterTypes.length;
+            if(totalArguments == 0)
+                return (i, k, m, s) -> method.invoke(i);
+
+            if(totalArguments > 3)
+                throw new IllegalStateException(
+                    "The method " + method.getName() + " on " + method.getDeclaringClass().getSimpleName()
+                        + " takes too many parameters. It should take 2 or less.");
+
+            int keyPosition = -1;
+            int byteArrayPos = -1;
+            int objectPos = -1;
+            for(int i = 0; i < parameterTypes.length; i++) {
+                final Class<?> parameter = parameterTypes[i];
+                // parameter needs to be exactly Object.class but since
+                // Object.class is assignable from anything, we need to check
+                // that first.
+                if(parameter.isAssignableFrom(Object.class)) {
+                    if(objectPos != -1)
+                        throw new IllegalStateException("It appears there's more than one parameter that takes exactly an Object in the @"
+                            + Activation.class.getSimpleName() + " method on " + method.getDeclaringClass().getName());
+                    objectPos = i;
+                } else if(parameter.isAssignableFrom(keyClass)) {
+                    if(keyPosition != -1)
+                        throw new IllegalStateException(
+                            "It appears there's more than one parameter on the @" + Activation.class.getSimpleName() + " method on "
+                                + method.getDeclaringClass().getName() + " that can take the key of type \"" + keyClass.getSimpleName() + "\"");
+                    keyPosition = i;
+                } else if(byte[].class.isAssignableFrom(parameter)) {
+                    if(byteArrayPos != -1)
+                        throw new IllegalStateException(
+                            "It appears there's more than one parameter on the @" + Activation.class.getSimpleName() + " method on "
+                                + method.getDeclaringClass().getName() + " that can take a byte array.");
+                    byteArrayPos = i;
+                } else {
+                    throw new IllegalStateException("The method " + method.getName() + " on " + method.getDeclaringClass().getSimpleName()
+                        + " takes a \"" + parameter.getName() + "\" which doesn't seem to be either the key (a \"" + keyClass.getName() +
+                        "\"), or an Object (where the activating message will be passed) or a byte[] where a prior passivated state will be provided");
+                }
+            }
+
+            final int keyPositionF = keyPosition;
+            final int objPositionF = objectPos;
+            final int byteArrayPosF = byteArrayPos;
+            final Object[] params = new Object[parameterTypes.length];
+            return (i, k, m, s) -> {
+                if(keyPositionF >= 0)
+                    params[keyPositionF] = k;
+                if(objPositionF >= 0)
+                    params[objPositionF] = m;
+                if(byteArrayPosF >= 0)
+                    params[byteArrayPosF] = s;
+                method.invoke(i, params);
+            };
+        } catch(final IllegalStateException ise) {
+            throw new DempsyException(ise, true);
+        }
+    }
+
+    // /**
+    // * Class to handle method calls for activation and passivation
+    // */
+    // protected class MethodHandleX {
+    // private final Method method;
+    // private int keyPosition = -1;
+    // private int totalArguments = 0;
+    //
+    // public MethodHandle(final Method method) {
+    // this(method, null);
+    // }
+    //
+    // public MethodHandle(final Method method, final Class<?> keyClass) {
+    // this.method = method;
+    // if(this.method != null) {
+    // final Class<?>[] parameterTypes = method.getParameterTypes();
+    // this.totalArguments = parameterTypes.length;
+    // for(int i = 0; i < parameterTypes.length; i++) {
+    // final Class<?> parameter = parameterTypes[i];
+    // if(keyClass != null && parameter.isAssignableFrom(keyClass)) {
+    // this.keyPosition = i;
+    // }
+    // }
+    // }
+    // }
+    //
+    // public Object invoke(final Object instance, final Object key)
+    // throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
+    // if(this.method != null) {
+    // final Object[] parameters = new Object[this.totalArguments];
+    // if(this.keyPosition > -1)
+    // parameters[this.keyPosition] = key;
+    // return this.method.invoke(instance, parameters);
+    // }
+    // return null;
+    // }
+    //
+    // public Object invoke(final Object instance) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
+    // return this.invoke(instance, null);
+    // }
+    //
+    // public Method getMethod() {
+    // return this.method;
+    // }
+    //
+    // public boolean canThrowCheckedException(final Throwable th) {
+    // if(method == null || th == null)
+    // return false;
+    //
+    // for(final Class<?> cur: method.getExceptionTypes())
+    // if(cur.isInstance(th))
+    // return true;
+    // return false;
+    // }
+    // }
 
     private List<KeyedMessageWithType> convertToKeyedMessage(final Object toSend) {
         final Class<?> messageClass = toSend.getClass();
@@ -477,6 +607,18 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
     @FunctionalInterface
     private static interface ThrowingSupplier<T> {
         public T run() throws IllegalAccessException, InvocationTargetException;
+    }
+
+    @FunctionalInterface
+    private static interface ThrowingRunnable {
+        public void run() throws IllegalAccessException, InvocationTargetException;
+    }
+
+    private static void wrap(final ThrowingRunnable runnable) throws DempsyException {
+        wrap((ThrowingSupplier<Object>)() -> {
+            runnable.run();
+            return null;
+        });
     }
 
     private static <T> T wrap(final ThrowingSupplier<T> runnable) throws DempsyException {

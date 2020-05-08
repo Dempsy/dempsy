@@ -159,7 +159,7 @@ public class NonLockingContainer extends Container {
 
     // this is called directly from tests but shouldn't be accessed otherwise.
 
-    private Object createAndActivate(final Object key) throws ContainerException {
+    private Object createAndActivate(final Object key, final Object activatingMessage) throws ContainerException {
         Object instance = null;
         try {
             instance = prototype.newInstance();
@@ -187,7 +187,7 @@ public class NonLockingContainer extends Container {
                     LOGGER.trace("the container for " + clusterId + " is activating instance " + String.valueOf(instance)
                         + " via " + SafeString.valueOf(prototype) + " for " + SafeString.valueOf(key));
 
-                prototype.activate(instance, key);
+                prototype.activate(instance, key, activatingMessage);
                 activateSuccessful = true;
             }
         } catch(final DempsyException e) {
@@ -295,7 +295,7 @@ public class NonLockingContainer extends Container {
             if(alreadyThere == null) { // we're it!
                 keepTrying = false; // we're not going to keep trying.
                 final WorkingPlaceholder wp = wph.ref;
-                try (InvocationResultsCloser resultsDisposerCloser = new InvocationResultsCloser(disposition);) {
+                try(InvocationResultsCloser resultsDisposerCloser = new InvocationResultsCloser(disposition);) {
                     List<KeyedMessageWithType> responseX = null; // these will be dispatched while NOT having the lock
                     try { // if we don't get the WorkingPlaceholder out of the working map then that Mp will forever be
                           // lost.
@@ -305,7 +305,7 @@ public class NonLockingContainer extends Container {
                         if(instance == null) {
                             try {
                                 // this can throw
-                                instance = createAndActivate(messageKey);
+                                instance = createAndActivate(messageKey, actualMessage);
                             } catch(final RuntimeException e) { // container or runtime exception
                                 // This will drain the swamp
                                 LOGGER.debug("Failed to process message with key " + SafeString.objectDescription(messageKey), e);
@@ -413,7 +413,7 @@ public class NonLockingContainer extends Container {
         if(!check.isGenerallyEvitable() || !isRunning.get())
             return;
 
-        try (final StatsCollector.TimerContext tctx = statCollector.evictionPassStarted();) {
+        try(final StatsCollector.TimerContext tctx = statCollector.evictionPassStarted();) {
 
             // we need to make a copy of the instances in order to make sure
             // the eviction check is done at once.
@@ -600,7 +600,7 @@ public class NonLockingContainer extends Container {
 
     @Override
     public void invokeOutput() {
-        try (final StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted();) {
+        try(final StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted();) {
             outputPass();
         }
     }

@@ -33,5 +33,5 @@ public interface Mp {
 
     public default void passivate() {}
 
-    public default void activate(final Object key) {}
+    public default void activate(final Object key, final Object activatingMessage) {}
 }

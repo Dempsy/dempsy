@@ -31,7 +31,7 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMp(), false);
         final TestMp mp = (TestMp)helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate");
+        helper.activate(mp, "activate", new Object());
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
         helper.passivate(mp);
@@ -43,7 +43,7 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpEmptyActivate(), true);
         final TestMpEmptyActivate mp = (TestMpEmptyActivate)helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate");
+        helper.activate(mp, "activate", new Object());
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
         helper.passivate(mp);
@@ -55,7 +55,7 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpOnlyKey(), false);
         final TestMpOnlyKey mp = (TestMpOnlyKey)helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate");
+        helper.activate(mp, "activate", new Object());
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
         helper.passivate(mp);
@@ -67,7 +67,7 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParameters(), false);
         final TestMpExtraParameters mp = (TestMpExtraParameters)helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate");
+        helper.activate(mp, "activate", new Object());
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
         helper.passivate(mp);
@@ -75,11 +75,11 @@ public class SimpleMessageProcessorTest {
     }
 
     @Test
-    public void testMethodHandleExtraParametersOrderChanged() throws Throwable {
+    public void testMethodHandleOrderChanged() throws Throwable {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParametersChangedOrder(), false);
         final TestMpExtraParametersChangedOrder mp = (TestMpExtraParametersChangedOrder)helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate");
+        helper.activate(mp, "activate", new Object());
         assertTrue(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
         helper.passivate(mp);
@@ -91,7 +91,7 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoActivation(), false);
         final TestMpNoActivation mp = (TestMpNoActivation)helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate");
+        helper.activate(mp, "activate", new Object());
         assertFalse(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
         helper.passivate(mp);
@@ -103,7 +103,7 @@ public class SimpleMessageProcessorTest {
         final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoKey(), true);
         final TestMpNoKey mp = (TestMpNoKey)helper.newInstance();
         assertFalse(mp.isActivated());
-        helper.activate(mp, "activate");
+        helper.activate(mp, "activate", new Object());
         assertFalse(mp.isActivated());
         assertFalse(mp.ispassivateCalled());
         helper.passivate(mp);
@@ -120,7 +120,7 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final Object key) {
+        public void activate(final Object key, final Object activatingMessage) {
             this.activated = true;
         }
 
@@ -148,7 +148,7 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final Object key) {
+        public void activate(final Object key, final Object activatingMessage) {
             this.activated = true;
         }
 
@@ -176,7 +176,7 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final Object key) {
+        public void activate(final Object key, final Object activatingMessage) {
             this.activated = true;
         }
 
@@ -204,7 +204,7 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final Object key) {
+        public void activate(final Object key, final Object activatingMessage) {
             this.activated = true;
         }
 
@@ -232,7 +232,7 @@ public class SimpleMessageProcessorTest {
         }
 
         @Override
-        public void activate(final Object key) {
+        public void activate(final Object key, final Object activatingMessage) {
             this.activated = true;
         }
 

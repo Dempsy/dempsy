@@ -203,8 +203,7 @@ public class TestInvocation {
     }
 
     @Mp
-    public static class LifecycleEqualityTestMP
-        extends InvocationTestMp {
+    public static class LifecycleEqualityTestMP extends InvocationTestMp {
         // most methods are inherited, but clone() has to be declared
 
         @Override
@@ -245,7 +244,7 @@ public class TestInvocation {
         assertNotSame("instantiation failed; returned prototype", prototype, instance);
 
         assertFalse("instance activated before activation method called", instance.isActivated);
-        invoker.activate(instance, null);
+        invoker.activate(instance, null, new Object());
         assertTrue("instance was not activated", instance.isActivated);
 
         assertFalse("instance passivated before passivation method called", instance.isPassivated);

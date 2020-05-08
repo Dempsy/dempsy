@@ -102,7 +102,7 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
         boolean instanceDone = false;
         while(!instanceDone) {
             instanceDone = true;
-            final InstanceWrapper wrapper = getInstanceForKey(messageKey);
+            final InstanceWrapper wrapper = getInstanceForKey(messageKey, actualMessage);
 
             // wrapper will be null if the activate returns 'false'
             if(wrapper != null) {

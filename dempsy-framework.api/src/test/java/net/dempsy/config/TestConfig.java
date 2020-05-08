@@ -397,7 +397,7 @@ public class TestConfig {
             public void startMethod() {}
 
             @Evictable
-            public boolean evict1(final Object arg) {
+            public boolean evict1() {
                 return false;
             }
 
@@ -416,7 +416,7 @@ public class TestConfig {
             public void startMethod() {}
 
             @Evictable
-            public boolean evict1(final Object arg) {
+            public boolean evict1() {
                 return false;
             }
 
@@ -448,7 +448,7 @@ public class TestConfig {
             public void startMethod() {}
 
             @Evictable
-            public boolean evict1(final Object arg) {
+            public boolean evict1() {
                 return false;
             }
 
@@ -477,7 +477,7 @@ public class TestConfig {
             public void startMethod() {}
 
             @Evictable
-            public boolean evict1(final Object arg) {
+            public boolean evict1() {
                 return false;
             }
 
@@ -507,7 +507,7 @@ public class TestConfig {
             public void startMethod() {}
 
             @Evictable
-            public boolean evict1(final Object arg) {
+            public boolean evict1() {
                 return false;
             }
 
@@ -534,7 +534,7 @@ public class TestConfig {
             public void startMethod() {}
 
             @Evictable
-            public boolean evict1(final Object arg) {
+            public boolean evict1() {
                 return false;
             }
 

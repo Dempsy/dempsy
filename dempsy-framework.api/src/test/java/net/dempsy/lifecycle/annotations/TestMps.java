@@ -1,10 +1,10 @@
 package net.dempsy.lifecycle.annotations;
 
-import java.util.Date;
 import java.util.List;
 
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.BulkMessageHandler;
+import net.dempsy.lifecycle.annotation.Evictable;
 import net.dempsy.lifecycle.annotation.MessageHandler;
 import net.dempsy.lifecycle.annotation.MessageKey;
 import net.dempsy.lifecycle.annotation.MessageType;
@@ -14,8 +14,8 @@ import net.dempsy.lifecycle.annotation.Passivation;
 public class TestMps {
     @Mp
     public static class TestMp implements Cloneable {
-        private boolean activated = false;
-        private boolean passivateCalled = false;
+        public boolean activated = false;
+        public boolean passivateCalled = false;
 
         @MessageHandler
         public void handleMsg(final Message val) {}
@@ -35,20 +35,39 @@ public class TestMps {
         public Object clone() throws CloneNotSupportedException {
             return super.clone();
         }
+    }
 
-        public boolean isActivated() {
-            return this.activated;
+    @Mp
+    public static class TestMpActivateWithMessage implements Cloneable {
+        public boolean activated = false;
+        public boolean passivateCalled = false;
+        public Message message = null;
+
+        @MessageHandler
+        public void handleMsg(final Message val) {}
+
+        @Activation
+        public void activate(final String key, final byte[] data, final Object message) {
+            this.activated = true;
+            this.message = (Message)message;
         }
 
-        public boolean ispassivateCalled() {
-            return this.passivateCalled;
+        @Passivation
+        public byte[] passivate() {
+            passivateCalled = true;
+            return "passivate".getBytes();
+        }
+
+        @Override
+        public Object clone() throws CloneNotSupportedException {
+            return super.clone();
         }
     }
 
     @Mp
     public static class TestMpEmptyActivate implements Cloneable {
-        private boolean activated = false;
-        private boolean passivateCalled = false;
+        public boolean activated = false;
+        public boolean passivateCalled = false;
 
         @MessageHandler
         public void handleMsg(final Message val) {}
@@ -67,20 +86,12 @@ public class TestMps {
         public Object clone() throws CloneNotSupportedException {
             return super.clone();
         }
-
-        public boolean isActivated() {
-            return this.activated;
-        }
-
-        public boolean ispassivateCalled() {
-            return this.passivateCalled;
-        }
     }
 
     @Mp
     public static class TestMpOnlyKey implements Cloneable {
-        private boolean activated = false;
-        private boolean passivateCalled = false;
+        public boolean activated = false;
+        public boolean passivateCalled = false;
 
         @MessageHandler
         public void handleMsg(final Message val) {}
@@ -91,7 +102,7 @@ public class TestMps {
         }
 
         @Passivation
-        public byte[] passivate(final String key) {
+        public byte[] passivate() {
             passivateCalled = true;
             return "passivate".getBytes();
         }
@@ -100,20 +111,12 @@ public class TestMps {
         public Object clone() throws CloneNotSupportedException {
             return super.clone();
         }
-
-        public boolean isActivated() {
-            return this.activated;
-        }
-
-        public boolean ispassivateCalled() {
-            return this.passivateCalled;
-        }
     }
 
     @Mp
     public static class TestMpExtraParameters implements Cloneable {
-        private boolean activated = false;
-        private boolean passivateCalled = false;
+        public boolean activated = false;
+        public boolean passivateCalled = false;
 
         @MessageHandler
         public void handleMsg(final Message val) {}
@@ -133,31 +136,23 @@ public class TestMps {
         public Object clone() throws CloneNotSupportedException {
             return super.clone();
         }
-
-        public boolean isActivated() {
-            return this.activated;
-        }
-
-        public boolean ispassivateCalled() {
-            return this.passivateCalled;
-        }
     }
 
     @Mp
-    public static class TestMpExtraParametersChangedOrder implements Cloneable {
-        private boolean activated = false;
-        private boolean passivateCalled = false;
+    public static class TestMpChangedOrder implements Cloneable {
+        public boolean activated = false;
+        public boolean passivateCalled = false;
 
         @MessageHandler
         public void handleMsg(final Message val) {}
 
         @Activation
-        public void activate(final byte[] data, final Integer arg1, final String key, final Date arg2) {
+        public void activate(final byte[] data, final String key) {
             this.activated = true;
         }
 
         @Passivation
-        public void passivate(final String key, final byte[] data, final String arg1, final String arg2) {
+        public void passivate() {
             passivateCalled = true;
         }
 
@@ -165,20 +160,12 @@ public class TestMps {
         public Object clone() throws CloneNotSupportedException {
             return super.clone();
         }
-
-        public boolean isActivated() {
-            return this.activated;
-        }
-
-        public boolean ispassivateCalled() {
-            return this.passivateCalled;
-        }
     }
 
     @Mp
     public static class TestMpNoActivation implements Cloneable {
-        private final boolean activated = false;
-        private final boolean passivateCalled = false;
+        public final boolean activated = false;
+        public final boolean passivateCalled = false;
 
         @MessageHandler
         public void handleMsg(final Message val) {}
@@ -186,14 +173,6 @@ public class TestMps {
         @Override
         public Object clone() throws CloneNotSupportedException {
             return super.clone();
-        }
-
-        public boolean isActivated() {
-            return this.activated;
-        }
-
-        public boolean ispassivateCalled() {
-            return this.passivateCalled;
         }
     }
 
@@ -244,8 +223,8 @@ public class TestMps {
 
     @Mp
     public static class TestMpNoKey implements Cloneable {
-        private final boolean activated = false;
-        private final boolean passivateCalled = false;
+        public final boolean activated = false;
+        public final boolean passivateCalled = false;
 
         @MessageHandler
         public void handleMsg(final MessgeNoKey val) {}
@@ -253,14 +232,6 @@ public class TestMps {
         @Override
         public Object clone() throws CloneNotSupportedException {
             return super.clone();
-        }
-
-        public boolean isActivated() {
-            return this.activated;
-        }
-
-        public boolean ispassivateCalled() {
-            return this.passivateCalled;
         }
     }
 
@@ -303,4 +274,54 @@ public class TestMps {
             return super.clone();
         }
     }
+
+    @Mp
+    public static class TestMpEvictionNative implements Cloneable {
+
+        @MessageHandler
+        public void handleMsg(final Message val) {}
+
+        @Evictable
+        public boolean evict() {
+            return true;
+        }
+
+        @Override
+        public Object clone() throws CloneNotSupportedException {
+            return super.clone();
+        }
+    }
+
+    @Mp
+    public static class TestMpEvictionObj implements Cloneable {
+
+        @MessageHandler
+        public void handleMsg(final Message val) {}
+
+        @Evictable
+        public Boolean evict() {
+            return true;
+        }
+
+        @Override
+        public Object clone() throws CloneNotSupportedException {
+            return super.clone();
+        }
+    }
+
+    @Mp
+    public static class TestMpEvictionNoReturn implements Cloneable {
+
+        @MessageHandler
+        public void handleMsg(final Message val) {}
+
+        @Evictable
+        public void evict() {}
+
+        @Override
+        public Object clone() throws CloneNotSupportedException {
+            return super.clone();
+        }
+    }
+
 }

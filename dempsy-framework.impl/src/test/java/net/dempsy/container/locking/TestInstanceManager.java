@@ -267,11 +267,11 @@ public class TestInstanceManager {
     @Test
     public void testSingleInstanceOneMessage() throws Throwable {
         final CombinedMP prototype = new CombinedMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
             final KeyedMessageWithType message = km(new MessageOne(123));
-            final InstanceWrapper wrapper = manager.getInstanceForKey(message.key);
+            final InstanceWrapper wrapper = manager.getInstanceForKey(message.key, message.message);
             assertEquals("instance was created", 1, manager.getProcessorCount());
 
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
@@ -304,13 +304,13 @@ public class TestInstanceManager {
     public void testSingleInstanceTwoMessagesSameClassSeparateExecution()
         throws Exception {
         final CombinedMP prototype = new CombinedMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
-            final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key);
+            final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, true);
             final CombinedMP instance = (CombinedMP)wrapper1.getInstance();
 
@@ -324,7 +324,7 @@ public class TestInstanceManager {
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             final KeyedMessageWithType message2 = km(new MessageOne(123));
-            final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key);
+            final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key, message2.message);
             manager.dispatch(message2, true);
             assertSame("same wrapper returned for second message", wrapper1, wrapper2);
             assertEquals("no other instance was created", 1, manager.getProcessorCount());
@@ -341,18 +341,18 @@ public class TestInstanceManager {
     public void testSingleInstanceTwoMessagesSameClassCombinedExecution()
         throws Exception {
         final CombinedMP prototype = new CombinedMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
-            final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key);
+            final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, true);
             assertEquals("instance was created", 1, manager.getProcessorCount());
             final KeyedMessageWithType message2 = km(new MessageOne(123));
             assertSame("same wrapper returned for second message",
-                wrapper, manager.getInstanceForKey(message2.key));
+                wrapper, manager.getInstanceForKey(message2.key, message2.message));
             manager.dispatch(message2, true);
 
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
@@ -372,13 +372,13 @@ public class TestInstanceManager {
     public void testSingleInstanceTwoMessagesDifferentClassSeparateExecution()
         throws Exception {
         final CombinedMP prototype = new CombinedMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
-            final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key);
+            final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, true);
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
 
@@ -392,7 +392,7 @@ public class TestInstanceManager {
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             final KeyedMessageWithType message2 = km(new MessageTwo(123));
-            assertSame("same wrapper returned for second message", wrapper, manager.getInstanceForKey(message2.key));
+            assertSame("same wrapper returned for second message", wrapper, manager.getInstanceForKey(message2.key, message2.message));
             manager.dispatch(message2, true);
             assertEquals("no other instance was created", 1, manager.getProcessorCount());
 
@@ -407,18 +407,18 @@ public class TestInstanceManager {
     @Test
     public void testMultipleInstanceCreation() throws Exception {
         final CombinedMP prototype = new CombinedMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             assertEquals("starts with no instances", 0, manager.getProcessorCount());
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
-            final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key);
+            final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, true);
             final CombinedMP instance1 = (CombinedMP)wrapper1.getInstance();
 
             final KeyedMessageWithType message2 = km(new MessageOne(456));
-            final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key);
+            final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key, message2.message);
             manager.dispatch(message2, true);
             final CombinedMP instance2 = (CombinedMP)wrapper2.getInstance();
 
@@ -438,15 +438,15 @@ public class TestInstanceManager {
     @Test
     public void testOutput() throws Exception {
         final OutputTestMP prototype = new OutputTestMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<OutputTestMP>(prototype));) {
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<OutputTestMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             // we need to dispatch messages to create MP instances
             final KeyedMessageWithType message1 = km(new MessageOne(1));
-            final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key);
+            final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, true);
             final KeyedMessageWithType message2 = km(new MessageOne(2));
-            final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key);
+            final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key, message2.message);
             manager.dispatch(message2, true);
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
@@ -466,7 +466,7 @@ public class TestInstanceManager {
     @Test
     public void testOutputCountsOkay() throws Exception {
         final OutputTestMP prototype = new OutputTestMP();
-        try (final Container manager = setupContainer(new MessageProcessor<OutputTestMP>(prototype));) {
+        try(final Container manager = setupContainer(new MessageProcessor<OutputTestMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             // we need to dispatch messages to create MP instances
@@ -506,10 +506,10 @@ public class TestInstanceManager {
     @Test
     public void testQueueIsClearedAfterExecution() throws Exception {
         final CombinedMP prototype = new CombinedMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
 
             final KeyedMessageWithType message = km(new MessageOne(123));
-            final InstanceWrapper wrapper = manager.getInstanceForKey(message.key);
+            final InstanceWrapper wrapper = manager.getInstanceForKey(message.key, message.message);
             manager.dispatch(message, true);
             assertEquals("instance was created", 1, manager.getProcessorCount());
 
@@ -534,15 +534,16 @@ public class TestInstanceManager {
     @Test(expected = NullPointerException.class)
     public void testFailureNullMessage() throws Exception {
         final CombinedMP prototype = new CombinedMP();
-        try (final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
-            manager.getInstanceForKey(null);
+        try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
+            manager.getInstanceForKey(null, null);
         }
     }
 
     @Test(expected = NullPointerException.class)
     public void testFailureNoKeyMethod() throws Exception {
-        try (final LockingContainer dispatcher = setupContainer(new MessageProcessor<NullKeyTestMP>(new NullKeyTestMP()));) {
-            dispatcher.getInstanceForKey(km(new MessageWithNullKey()).key);
+        try(final LockingContainer dispatcher = setupContainer(new MessageProcessor<NullKeyTestMP>(new NullKeyTestMP()));) {
+            final KeyedMessageWithType message = km(new MessageWithNullKey());
+            dispatcher.getInstanceForKey(message.key, message.message);
         }
     }
 
@@ -561,7 +562,7 @@ public class TestInstanceManager {
 
     @Test
     public void testMpThrows() throws Exception {
-        try (final LockingContainer dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
+        try(final LockingContainer dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
 
             dispatcher.dispatch(km(new MessageOne(123)), true);
 
