@@ -28,6 +28,7 @@ import net.dempsy.DempsyException;
 import net.dempsy.lifecycle.annotation.MessageProcessor;
 import net.dempsy.lifecycle.annotations.TestMps.TestMp;
 import net.dempsy.lifecycle.annotations.TestMps.TestMpActivateWithMessage;
+import net.dempsy.lifecycle.annotations.TestMps.TestMpActivateWithMessageOnly;
 import net.dempsy.lifecycle.annotations.TestMps.TestMpChangedOrder;
 import net.dempsy.lifecycle.annotations.TestMps.TestMpEmptyActivate;
 import net.dempsy.lifecycle.annotations.TestMps.TestMpEvictionNative;
@@ -112,6 +113,21 @@ public class MessageProcessorTest {
         final MessageProcessor<TestMpActivateWithMessage> helper = new MessageProcessor<TestMpActivateWithMessage>(new TestMpActivateWithMessage());
         helper.validate();
         final TestMpActivateWithMessage mp = helper.newInstance();
+        assertFalse(mp.activated);
+        final TestMps.Message message = new TestMps.Message("activate");
+        helper.activate(mp, message.getKey(), message);
+        assertTrue(mp.activated);
+        assertFalse(mp.passivateCalled);
+        helper.passivate(mp);
+        assertTrue(mp.passivateCalled);
+        assertSame(message, mp.message);
+    }
+
+    @Test
+    public void testMethodHandleWithMessageOnly() throws Throwable {
+        final MessageProcessor<TestMpActivateWithMessageOnly> helper = new MessageProcessor<TestMpActivateWithMessageOnly>(new TestMpActivateWithMessageOnly());
+        helper.validate();
+        final TestMpActivateWithMessageOnly mp = helper.newInstance();
         assertFalse(mp.activated);
         final TestMps.Message message = new TestMps.Message("activate");
         helper.activate(mp, message.getKey(), message);

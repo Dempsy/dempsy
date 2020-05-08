@@ -65,6 +65,33 @@ public class TestMps {
     }
 
     @Mp
+    public static class TestMpActivateWithMessageOnly implements Cloneable {
+        public boolean activated = false;
+        public boolean passivateCalled = false;
+        public Message message = null;
+
+        @MessageHandler
+        public void handleMsg(final Message val) {}
+
+        @Activation
+        public void activate(final Object message) {
+            this.activated = true;
+            this.message = (Message)message;
+        }
+
+        @Passivation
+        public byte[] passivate() {
+            passivateCalled = true;
+            return "passivate".getBytes();
+        }
+
+        @Override
+        public Object clone() throws CloneNotSupportedException {
+            return super.clone();
+        }
+    }
+
+    @Mp
     public static class TestMpEmptyActivate implements Cloneable {
         public boolean activated = false;
         public boolean passivateCalled = false;
