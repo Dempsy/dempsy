@@ -182,13 +182,16 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     private class ContainerWorker implements Runnable {
         public final BlockingQueue<ContainerJobHolder> queue;
-        public final Thread containerThread;
         public final ContainerJobMetadata container;
 
         public ContainerWorker(final ContainerJobMetadata container) {
             this.queue = new LinkedBlockingQueue<>();
             this.container = container;
-            containerThread = chain(new Thread(this, nameSupplier.get() + "-ContainerWorker-" + seq.incrementAndGet()),
+            chain(
+                // this used to use the nameSupplier but the name is too long in `htop`
+                // to understand what's going on so it's been switched to simple "c-"
+                // (for "container") and the name of the cluster.
+                new Thread(this, "c-" + container.container.getClusterId().clusterName),
                 t -> t.start());
         }
 
