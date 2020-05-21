@@ -314,7 +314,7 @@ public class MessageProcessor<T> implements MessageProcessorLifecycle<T> {
 
     private void checkOrInvokeValidStartMethod(final boolean invoke, final ClusterId clusterId) throws IllegalStateException {
         Method startMethod = null;
-        for(final Method method: prototype.getClass().getDeclaredMethods()) {
+        for(final Method method: prototype.getClass().getMethods()) {
             if(method.isAnnotationPresent(Start.class)) {
                 if(startMethod != null)
                     throw new IllegalStateException("Multiple methods on the message processor of type\""
