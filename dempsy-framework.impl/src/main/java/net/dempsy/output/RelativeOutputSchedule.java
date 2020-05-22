@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -44,10 +44,10 @@ public class RelativeOutputSchedule implements OutputScheduler {
     private final TimeUnit timeUnit;
 
     /** The output invoker. */
-    private OutputInvoker outputInvoker;
+    private OutputInvoker outputInvoker = null;
 
     /** The scheduler. */
-    private Scheduler scheduler;
+    private Scheduler scheduler = null;
 
     /** Contains the number of threads to set on the {@link OutputInvoker} */
     private int concurrency = -1;
@@ -73,14 +73,14 @@ public class RelativeOutputSchedule implements OutputScheduler {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
      */
     @Override
     public void setOutputInvoker(final OutputInvoker outputInvoker) {
         this.outputInvoker = outputInvoker;
 
-        if (concurrency > 1)
+        if(concurrency > 1)
             outputInvoker.setOutputConcurrency(concurrency);
     }
 
@@ -92,11 +92,11 @@ public class RelativeOutputSchedule implements OutputScheduler {
         try {
             final OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
             final JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
-            final Trigger trigger = outputQuartzHelper.getSimpleTrigger(timeUnit, (int) interval);
+            final Trigger trigger = outputQuartzHelper.getSimpleTrigger(timeUnit, (int)interval);
             scheduler = StdSchedulerFactory.getDefaultScheduler();
             scheduler.scheduleJob(jobDetail, trigger);
             scheduler.start();
-        } catch (final SchedulerException se) {
+        } catch(final SchedulerException se) {
             LOGGER.error("Error occurred while starting the relative scheduler : " + se.getMessage(), se);
         }
     }
@@ -112,9 +112,10 @@ public class RelativeOutputSchedule implements OutputScheduler {
     @Override
     public void stop() {
         try {
-            // gracefully shutting down
-            scheduler.shutdown(false);
-        } catch (final SchedulerException se) {
+            if(scheduler != null)
+                // gracefully shutting down
+                scheduler.shutdown(false);
+        } catch(final SchedulerException se) {
             LOGGER.error("Error occurred while stopping the relative scheduler : " + se.getMessage(), se);
         }
     }
