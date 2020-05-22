@@ -81,23 +81,23 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                 if(ifNameToGetAddrFrom != null)
                     LOGGER.warn("Both \"useLocalHost\" as well as the property " + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for "
                         + NioReceiver.class.getPackage().getName() + ". The property will be ignored.");
-                if(addrSupplier != null)
-                    LOGGER.warn("Both IP address supplier (" + addrSupplier.getClass().getName()
+                if(ipToBindToProvider != null)
+                    LOGGER.warn("Both a supplier for the IP address to bind to (" + ipToBindToProvider.getClass().getName()
                         + ") as well as \"useLocalHost\" was set. The address supplier will be ignored.");
             } else {
-                if(addrSupplier != null && ifNameToGetAddrFrom != null)
-                    LOGGER.warn("Both IP Address supplier (" + addrSupplier.getClass().getName() + ") as well as the property "
+                if(ipToBindToProvider != null && ifNameToGetAddrFrom != null)
+                    LOGGER.warn("Both a supplier for the IP address to bind to (" + ipToBindToProvider.getClass().getName() + ") as well as the property "
                         + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for " + NioReceiver.class.getPackage().getName()
                         + ". The property will be ignored.");
             }
             try {
                 InetAddress bindAddr = useLocalHost ? Inet4Address.getLocalHost()
-                    : (addrSupplier == null ?
+                    : (ipToBindToProvider == null ?
 
                     // if someone set the variable for explicitly using a particular interface, then use it.
                         (ifNameToGetAddrFrom == null ? null : TcpUtils.getFirstNonLocalhostInetAddress(ifNameToGetAddrFrom))
 
-                        : addrSupplier.get());
+                        : ipToBindToProvider.ipToBindTo());
                 binding = new Binding(bindAddr, internalPort);
                 final InetSocketAddress inetSocketAddress = binding.bound;
                 internalPort = inetSocketAddress.getPort();
@@ -406,7 +406,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             final ReturnableBufferOutput toGo = partialRead;
             partialRead = null;
             typedListener.onMessage(() -> {
-                try (final ReturnableBufferOutput mbo = toGo;
+                try(final ReturnableBufferOutput mbo = toGo;
                     final MessageBufferInput mbi = new MessageBufferInput(mbo.getBuffer(), mbo.messageStart, mbo.getBb().position());) {
                     @SuppressWarnings("unchecked")
                     final T rm = (T)serializer.deserialize(mbi, RoutedMessage.class);

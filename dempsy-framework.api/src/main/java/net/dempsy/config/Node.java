@@ -48,7 +48,7 @@ public class Node {
     private String clusterStatsCollectorFactoryId = "net.dempsy.monitoring.dummy";
     private Object nodeStatsCollector = null;
     private String defaultRoutingStrategyId = null;
-    private Object receiver = null;
+    private ReceiverStub receiver = null;
     private boolean configed = false;
     private String containerTypeId = "net.dempsy.container.altnonlocking";
     private final Map<String, String> configuration = new HashMap<>();
@@ -105,7 +105,7 @@ public class Node {
             return this;
         }
 
-        public Builder receiver(final Object receiver) {
+        public Builder receiver(final ReceiverStub receiver) {
             node.receiver(receiver);
             return this;
         }
@@ -221,7 +221,7 @@ public class Node {
         return this;
     }
 
-    private Node receiver(final Object receiver) {
+    private Node receiver(final ReceiverStub receiver) {
         this.receiver = receiver;
         return this;
     }
@@ -326,11 +326,11 @@ public class Node {
         return nodeStatsCollector;
     }
 
-    public void setReceiver(final Object receiver) {
+    public void setReceiver(final ReceiverStub receiver) {
         this.receiver = receiver;
     }
 
-    public Object getReceiver() {
+    public ReceiverStub getReceiver() {
         return receiver;
     }
 
@@ -363,6 +363,7 @@ public class Node {
         final Set<ClusterId> clusterNames = new HashSet<ClusterId>();
 
         boolean hasNonAdaptor = false;
+        final List<ClusterId> nonAdaptorClusters = new ArrayList<>();
         for(final Cluster clusterDef: clusters) {
             if(clusterDef == null)
                 throw new IllegalStateException("The application definition for \"" + application + "\" has a null ClusterDefinition.");
@@ -376,12 +377,15 @@ public class Node {
 
             clusterDef.validate();
 
-            if(!clusterDef.isAdaptor())
+            if(!clusterDef.isAdaptor()) {
                 hasNonAdaptor = true;
+                nonAdaptorClusters.add(clusterDef.getClusterId());
+            }
         }
 
         if(hasNonAdaptor && getReceiver() == null)
-            throw new IllegalStateException("Cannot have a " + Node.class.getSimpleName() + " with a non-adaptor cluster but with no receiver.");
+            throw new IllegalStateException(
+                "Cannot have a " + Node.class.getSimpleName() + " with a non-adaptor cluster (" + nonAdaptorClusters + ") but with no receiver.");
     }
 
     private void fillout(final Cluster cd) {

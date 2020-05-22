@@ -14,7 +14,7 @@ public class TestMoreKeyDiscrim {
 
     @Test(expected = IllegalStateException.class)
     public void testConfigMpWithMessageWithBadKeys() throws Throwable {
-        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
 
         @MessageType
         class MessageWithBadKeys {

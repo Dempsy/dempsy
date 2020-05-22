@@ -111,7 +111,7 @@ public class TestConfig {
 
     @Test
     public void testSimpleConfig() throws Throwable {
-        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
         final Cluster cd = new Cluster("test-slot");
         cd.setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
 
@@ -127,7 +127,7 @@ public class TestConfig {
 
     @Test
     public void testSimpleConfigBuilder() throws Throwable {
-        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object())
+        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {})
             .cluster("test-slot").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())).build();
 
         final Cluster cd = node.getCluster("test-slot");
@@ -144,10 +144,10 @@ public class TestConfig {
     public void testConfig() throws Throwable {
         final List<Cluster> clusterDefs = new ArrayList<Cluster>();
 
-        Object appSer;
+        ReceiverStub appSer;
         String appRs;
         String appSc;
-        final Node node = new Node.Builder("test").receiver(appSer = new Object())
+        final Node node = new Node.Builder("test").receiver(appSer = () -> {})
             .clusterStatsCollectorFactoryId(appSc = "s").defaultRoutingStrategyId(appRs = "a").build();
 
         Cluster cd = new Cluster("test-slot1").adaptor(new GoodAdaptor());
@@ -202,12 +202,12 @@ public class TestConfig {
     @Test
     public void testConfigBuilder() throws Throwable {
 
-        Object appSer;
+        ReceiverStub appSer;
         String appRs;
         String appScf;
         String clusRs;
         final Node app = new Node.Builder("test")
-            .receiver(appSer = new Object())
+            .receiver(appSer = () -> {})
             .defaultRoutingStrategyId(appRs = "s")
             .clusterStatsCollectorFactoryId(appScf = "st")
             .cluster("test-slot1").adaptor(new GoodAdaptor())
@@ -312,7 +312,7 @@ public class TestConfig {
 
     @Test
     public void testSimpleConfigWithKeyStore() throws Throwable {
-        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
         final Cluster cd = new Cluster("test-slot");
         cd.setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
         cd.setKeySource(new KeySource<Object>() {
@@ -327,7 +327,7 @@ public class TestConfig {
 
     @Test
     public void testSimpleConfigWithKeyStoreBuilder() throws Throwable {
-        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object())
+        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {})
             .cluster("test-slot").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
             .keySource(new KeySource<Object>() {
                 @Override
@@ -386,7 +386,7 @@ public class TestConfig {
 
     @Test
     public void testConfigMpWithGoodWith2Keys() throws Throwable {
-        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
 
         @Mp
         class mp1 implements Cloneable {
@@ -437,7 +437,7 @@ public class TestConfig {
 
     @Test(expected = IllegalStateException.class)
     public void testConfigMpWithGoodWith2KeysButMpFailsToPickOne() throws Throwable {
-        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
 
         @Mp
         class mp1 implements Cloneable {
@@ -466,7 +466,7 @@ public class TestConfig {
 
     @Test(expected = IllegalStateException.class)
     public void testConfigMpWithGoodButMpSelects() throws Throwable {
-        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
 
         @Mp
         class mp1 implements Cloneable {
@@ -495,7 +495,7 @@ public class TestConfig {
 
     @Test
     public void testConfigMpWithGoodMPEvict() throws Throwable {
-        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object()).build();
+        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
         final Cluster cd = new Cluster("test-slot");
 
         @Mp
@@ -544,7 +544,7 @@ public class TestConfig {
             }
         }
 
-        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(new Object())
+        final Node node = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {})
             .cluster("slot").mp(new MessageProcessor<mp>(new mp())).build();
         node.validate();
     }

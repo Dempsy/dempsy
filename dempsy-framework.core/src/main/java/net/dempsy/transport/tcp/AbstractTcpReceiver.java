@@ -1,7 +1,6 @@
 package net.dempsy.transport.tcp;
 
 import java.net.InetAddress;
-import java.util.function.Supplier;
 
 import net.dempsy.Infrastructure;
 import net.dempsy.serialization.Serializer;
@@ -16,7 +15,12 @@ public abstract class AbstractTcpReceiver<A extends TcpAddress, T extends Abstra
     protected TcpAddressResolver<A> resolver = a -> a;
     protected final String serId;
     protected int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE_BYTES;
-    protected Supplier<InetAddress> addrSupplier = null;
+    protected BindIpAddressProvider ipToBindToProvider = null;
+
+    @FunctionalInterface
+    public static interface BindIpAddressProvider {
+        public InetAddress ipToBindTo();
+    }
 
     public AbstractTcpReceiver(final Serializer serializer, final int port) {
         this.internalPort = port;
@@ -35,8 +39,8 @@ public abstract class AbstractTcpReceiver<A extends TcpAddress, T extends Abstra
     }
 
     @SuppressWarnings("unchecked")
-    public T addressSupplier(final Supplier<InetAddress> addrSupplier) {
-        this.addrSupplier = addrSupplier;
+    public T addressSupplier(final BindIpAddressProvider ipToBindTo) {
+        this.ipToBindToProvider = ipToBindTo;
         return (T)this;
     }
 
@@ -68,12 +72,12 @@ public abstract class AbstractTcpReceiver<A extends TcpAddress, T extends Abstra
         return useLocalHost;
     }
 
-    public void setAddressSupplier(final Supplier<InetAddress> addrSupplier) {
+    public void setAddressSupplier(final BindIpAddressProvider addrSupplier) {
         addressSupplier(addrSupplier);
     }
 
-    public final Supplier<InetAddress> getAddressSupplier() {
-        return addrSupplier;
+    public final BindIpAddressProvider getAddressSupplier() {
+        return ipToBindToProvider;
     }
 
     public void setResolver(final TcpAddressResolver<A> resolver) {

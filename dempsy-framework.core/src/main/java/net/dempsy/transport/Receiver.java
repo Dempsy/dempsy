@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,8 +17,9 @@
 package net.dempsy.transport;
 
 import net.dempsy.Infrastructure;
+import net.dempsy.config.ReceiverStub;
 
-public interface Receiver extends AutoCloseable {
+public interface Receiver extends ReceiverStub {
     /**
      * What address can a Sender use to send messages to this receiver. This is called PRIOR to start
      */
@@ -30,7 +31,8 @@ public interface Receiver extends AutoCloseable {
     public void start(Listener<?> listener, Infrastructure threadingModel) throws MessageTransportException;
 
     /**
-     * What is a unique Id for the transport that this {@link Receiver} is associated with. This information is used by the TransportManager to look up a {@link SenderFactory} that's compatible with this
+     * What is a unique Id for the transport that this {@link Receiver} is associated with. This information is used by the TransportManager to look up a
+     * {@link SenderFactory} that's compatible with this
      * {@link Receiver}. The default behavior for this method is to provide the package name of the implementing class
      */
     public default String transportTypeId() {
