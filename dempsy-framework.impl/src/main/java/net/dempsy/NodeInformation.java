@@ -21,7 +21,7 @@ public class NodeInformation implements Serializable {
     }
 
     public NodeInformation(final String transportTypeId, final NodeAddress nodeAddress,
-            final Map<ClusterId, ClusterInformation> messageTypesByClusterId) {
+        final Map<ClusterId, ClusterInformation> messageTypesByClusterId) {
         this.transportTypeId = transportTypeId;
         this.nodeAddress = nodeAddress;
         this.clusterInfoByClusterId = new HashMap<>(messageTypesByClusterId);
@@ -39,26 +39,32 @@ public class NodeInformation implements Serializable {
 
     @Override
     public boolean equals(final Object obj) {
-        if (obj == null)
+        if(obj == null)
             return false;
-        if (getClass() != obj.getClass())
+        if(getClass() != obj.getClass())
             return false;
-        final NodeInformation other = (NodeInformation) obj;
-        if (clusterInfoByClusterId == null) {
-            if (other.clusterInfoByClusterId != null)
+        final NodeInformation other = (NodeInformation)obj;
+        if(clusterInfoByClusterId == null) {
+            if(other.clusterInfoByClusterId != null)
                 return false;
-        } else if (!clusterInfoByClusterId.equals(other.clusterInfoByClusterId))
+        } else if(!clusterInfoByClusterId.equals(other.clusterInfoByClusterId))
             return false;
-        if (nodeAddress == null) {
-            if (other.nodeAddress != null)
+        if(nodeAddress == null) {
+            if(other.nodeAddress != null)
                 return false;
-        } else if (!nodeAddress.equals(other.nodeAddress))
+        } else if(!nodeAddress.equals(other.nodeAddress))
             return false;
-        if (transportTypeId == null) {
-            if (other.transportTypeId != null)
+        if(transportTypeId == null) {
+            if(other.transportTypeId != null)
                 return false;
-        } else if (!transportTypeId.equals(other.transportTypeId))
+        } else if(!transportTypeId.equals(other.transportTypeId))
             return false;
         return true;
+    }
+
+    @Override
+    public String toString() {
+        return "NodeInformation [transportTypeId=" + transportTypeId + ", nodeAddress=" + nodeAddress + ", clusterInfoByClusterId=" + clusterInfoByClusterId
+            + "]";
     }
 }

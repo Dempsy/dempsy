@@ -226,7 +226,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     @Override
     public void invokeOutput() {
-        try (final StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted()) {
+        try(final StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted()) {
             outputPass();
         }
     }
@@ -538,6 +538,10 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     }
 
+    private static void doNothingWith(final int i) {
+
+    }
+
     /**
      * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and
      * forwarding any results.
@@ -545,10 +549,14 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     protected void invokeOperationAndHandleDispose(final Object instance, final Operation op, final KeyedMessage message) {
         try {
             if(instance != null) { // possibly passivated ...
-                try (InvocationResultsCloser resultsDisposerCloser = new InvocationResultsCloser(disposition);) {
+                try(InvocationResultsCloser resultsDisposerCloser = new InvocationResultsCloser(disposition);) {
                     final List<KeyedMessageWithType> result = invokeGuts(resultsDisposerCloser, instance, op, message, null, 1);
                     if(result != null) {
                         try {
+                            if("ThermalMaxAggregation".equals(instance.getClass().getSimpleName())) {
+                                final int i = 12 + 12;
+                                doNothingWith(i);
+                            }
                             dispatcher.dispatch(result, hasDisposition ? disposition : null);
                         } catch(final Exception de) {
                             LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());
@@ -565,7 +573,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     protected void invokeBulkHandleAndHandleDispose(final Object instance, final List<KeyedMessage> messages) {
         try {
             if(instance != null) { // possibly passivated ...
-                try (InvocationResultsCloser resultsCloser = new InvocationResultsCloser(disposition);) {
+                try(InvocationResultsCloser resultsCloser = new InvocationResultsCloser(disposition);) {
                     final List<KeyedMessageWithType> result = invokeGuts(resultsCloser, instance, Operation.bulk, null, messages, messages.size());
                     if(result != null) {
                         try {

@@ -4,10 +4,10 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import net.dempsy.container.Container;
-import net.dempsy.container.MessageDeliveryJob;
 import net.dempsy.container.DefaultDeliverMessageJob;
 import net.dempsy.container.DeliverDelayedMessageJob;
 import net.dempsy.container.DeliverResourceJob;
+import net.dempsy.container.MessageDeliveryJob;
 import net.dempsy.messages.MessageResourceManager;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.threading.ThreadingModel;
@@ -61,8 +61,18 @@ public class NodeReceiver implements Listener<RoutedMessage> {
             final MessageDeliveryJob rejectable = new DeliverResourceJob(containers, statsCollector, message, justArrived, disposition);
             if(justArrived)
                 threadModel.submitLimited(rejectable);
-            else
+            else {
+                if(message.message.getClass().getSimpleName().equals("ThermalSamplingIntervalByCamera")) {
+                    int i = 0;
+                    i += 13;
+                    dump(i);
+                }
                 threadModel.submit(rejectable);
+            }
         }
+    }
+
+    private static void dump(final int i) {
+
     }
 }

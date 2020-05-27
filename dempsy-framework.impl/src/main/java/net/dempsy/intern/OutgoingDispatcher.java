@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -38,6 +39,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
     // package protected because it's used in ApplicationState which is really an
     // internal implementation detail of this class.
     static Logger LOGGER = LoggerFactory.getLogger(OutgoingDispatcher.class);
+    static Logger LOGGER_SESSION = LoggerFactory.getLogger(OutgoingDispatcher.class.getName() + ".session");
     private static final long RETRY_TIMEOUT = 500L;
 
     private PersistentTask checkup;
@@ -91,7 +93,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
             throw new NullPointerException("Message " + SafeString.objectDescription(messageParam) + " has a null key.");
         boolean messageSentSomewhere = false;
 
-        try (ResourceManagerClosable x = new ResourceManagerClosable(disposer, messageParam);) {
+        try(ResourceManagerClosable x = new ResourceManagerClosable(disposer, messageParam);) {
             final KeyedMessageWithType message = x.toUse;
             ApplicationState tmp = outbounds.get();
 
@@ -129,7 +131,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                         final ContainerAddress ca = routers[i].selectDestinationForMessage(message);
                         // it's possible 'ca' is null when we don't know where to send the message.
                         if(ca == null) {
-                            if(traceEnabled)
+                            if(LOGGER.isDebugEnabled())
                                 LOGGER.debug("[{}] No way to send the message {} to specific cluster for the time being", thisNodeId, message.message);
                         } else {
                             // When the message will be sent to 2 different clusters, but both clusters
@@ -204,7 +206,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
         final ClusterInfoSession session = infra.getCollaborator();
         final String nodesDir = infra.getRootPaths().nodesDir;
 
-        checkup = new PersistentTask(LOGGER, isRunning, infra.getScheduler(), RETRY_TIMEOUT) {
+        checkup = new PersistentTask(LOGGER_SESSION, isRunning, infra.getScheduler(), RETRY_TIMEOUT) {
 
             @Override
             public boolean execute() {
@@ -219,18 +221,18 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                         final NodeInformation ni = (NodeInformation)session.getData(nodesDir + "/" + subdir, null);
 
                         if(ni == null) {
-                            LOGGER.warn("[{}] A node directory was empty at " + subdir, thisNodeId);
+                            LOGGER_SESSION.warn("[{}] A node directory was empty at " + subdir, thisNodeId);
                             return false;
                         }
 
                         // see if node info is dupped.
                         if(alreadySeen.contains(ni)) {
-                            LOGGER.warn("[{}] The node " + ni.nodeAddress + " seems to be registed more than once.", thisNodeId);
+                            LOGGER_SESSION.warn("[{}] The node " + ni.nodeAddress + " seems to be registed more than once.", thisNodeId);
                             continue;
                         }
 
                         if(ni.clusterInfoByClusterId.size() == 0) { // it's ALL adaptor so there's no sense in dealing with it
-                            LOGGER.trace("[{}] NodeInformation {} appears to be only an Adaptor.", thisNodeId, ni);
+                            LOGGER_SESSION.trace("[{}] NodeInformation {} appears to be only an Adaptor.", thisNodeId, ni);
                             continue;
                         }
 
@@ -241,31 +243,32 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                     final ApplicationState.Update ud = outbounds.get().update(alreadySeen, thisNode, thisNodeId);
 
                     if(!ud.change()) {
+                        LOGGER_SESSION.info("[{}] Topology change notification resulted in no changes.", thisNodeId);
                         isReady.set(true);
                         return true; // nothing to update.
-                    } else if(LOGGER.isTraceEnabled())
-                        LOGGER.trace("[{}] Updating for {} ", thisNodeId, thisNodeId);
+                    } else if(LOGGER_SESSION.isTraceEnabled())
+                        LOGGER_SESSION.info("[{}] Topology change notification resulted in changes ", thisNodeId);
 
                     // otherwise we will be making changes so remove the current ApplicationState
                     final ApplicationState obs = outbounds.getAndSet(null); // this can cause instability.
                     try {
-                        final ApplicationState newState = obs.apply(ud, tmanager, statsCollector, manager);
+                        final ApplicationState newState = obs.apply(ud, tmanager, statsCollector, manager, thisNodeId);
                         outbounds.set(newState);
                         isReady.set(true);
                         return true;
                     } catch(final RuntimeException rte) {
                         // if we threw an exception after clearing the outbounds we need to restore it.
                         // This is likely a configuration error so we should probably warn about it.
-                        LOGGER.warn("[{}] Unexpected exception while applying a topology update", thisNodeId, rte);
+                        LOGGER_SESSION.warn("[{}] Unexpected exception while applying a topology update", thisNodeId, rte);
                         outbounds.set(obs);
                         throw rte;
                     }
                 } catch(final ClusterInfoException e) {
                     final String message = "Failed to find outgoing route information. Will retry shortly.";
-                    if(LOGGER.isTraceEnabled())
-                        LOGGER.debug("[{}] {}", new Object[] {thisNodeId,message,e});
+                    if(LOGGER_SESSION.isTraceEnabled())
+                        LOGGER_SESSION.debug("[{}] {}", new Object[] {thisNodeId,message,e});
                     else
-                        LOGGER.debug("[{}] {}", thisNodeId, message);
+                        LOGGER_SESSION.debug("[{}] {}", thisNodeId, message);
                     return false;
                 }
             }
@@ -277,7 +280,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
         };
 
-        outbounds.set(new ApplicationState(tmanager, thisNode));
+        outbounds.set(new ApplicationState(tmanager, thisNode, new ConcurrentHashMap<>()));
 
         isRunning.set(true);
         checkup.process();

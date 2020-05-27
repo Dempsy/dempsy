@@ -30,6 +30,10 @@ import net.dempsy.util.SafeString;
 public class OrderedPerContainerThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(OrderedPerContainerThreadingModel.class);
 
+    // when this anded (&) with the current message count is
+    // zero, we'll log a message to the logger (as long as the log level is set appropriately).
+    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT_MASK = 1024 - 1;
+
     private static final int INTERIM_SPIN_COUNT1 = 100;
     private static final int INTERIM_SPIN_COUNT2 = 500;
 
@@ -277,6 +281,10 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         @Override
         public void run() {
             int tryCount = 0;
+
+            // This is used to log the message
+            long messageCount = 0;
+
             while(!isStopped.get()) {
                 boolean someWorkDone = false;
                 // ========================================================
@@ -285,6 +293,13 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 // ========================================================
                 try {
                     final MessageDeliveryJobHolder message = inqueue.poll();
+
+                    if(LOGGER.isDebugEnabled()) {
+                        messageCount++;
+                        if((messageCount & LOG_QUEUE_LEN_MESSAGE_COUNT_MASK) == 0L)
+                            LOGGER.debug("Total messages pending on {}: {}", OrderedPerContainerThreadingModel.class.getSimpleName(), inqueue.size());
+                    }
+
                     if(message != null) {
                         // there's work to be done.
                         someWorkDone = true;

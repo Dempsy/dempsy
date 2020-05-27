@@ -69,6 +69,7 @@ public final class NioSender implements Sender {
 
     @Override
     public synchronized void stop() {
+        LOGGER.info("Stopping sender for " + addr);
         running = false;
         dontInterrupt(() -> Thread.sleep(1));
 
@@ -121,6 +122,11 @@ public final class NioSender implements Sender {
     @Override
     public boolean considerMessageOwnsershipTransfered() {
         return false;
+    }
+
+    @Override
+    public String toString() {
+        return NioSender.class.getSimpleName() + " to " + addr;
     }
 
     static class StopMessage {}

@@ -61,7 +61,11 @@ public abstract class Dispatcher {
     public void dispatch(final List<KeyedMessageWithType> messages, final MessageResourceManager dispose) {
         if(messages == null)
             throw new NullPointerException("Cannot dispatch a null message list.");
-        messages.forEach(v -> dispatch(v, dispose));
+        messages.forEach(v ->
+
+        dispatch(v, dispose)
+
+        );
     }
 
     public void dispatch(final List<KeyedMessageWithType> messages) {
