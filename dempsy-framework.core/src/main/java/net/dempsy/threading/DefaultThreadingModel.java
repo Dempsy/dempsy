@@ -1,8 +1,11 @@
 package net.dempsy.threading;
 
+import static net.dempsy.config.ConfigLogger.logConfig;
+
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -15,6 +18,10 @@ public class DefaultThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(DefaultThreadingModel.class);
 
     private static final int minNumThreads = 1;
+
+    // when this anded (&) with the current message count is
+    // zero, we'll log a message to the logger (as long as the log level is set appropriately).
+    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT_MASK = (1024 * 2) - 1;
 
     public static final String CONFIG_KEY_MAX_PENDING = "max_pending";
     public static final String DEFAULT_MAX_PENDING = "100000";
@@ -32,6 +39,7 @@ public class DefaultThreadingModel implements ThreadingModel {
     public static final String DEFAULT_BLOCKING = "false";
 
     private ExecutorService executor = null;
+
     private final AtomicLong numLimited = new AtomicLong(0);
     private long maxNumWaitingLimitedTasks;
     private int threadPoolSize;
@@ -47,6 +55,8 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     private final static AtomicLong threadNum = new AtomicLong();
     private boolean started = false;
+
+    private long messageCount = 0;
 
     private DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
         this.nameSupplier = nameSupplier;
@@ -76,7 +86,8 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     /**
      * <p>
-     * Prior to calling start you can set the cores factor and additional cores. Ultimately the number of threads in the pool will be given by:
+     * Prior to calling start you can set the cores factor and additional cores.
+     * Ultimately the number of threads in the pool will be given by:
      * </p>
      *
      * <p>
@@ -133,6 +144,13 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public synchronized DefaultThreadingModel start() {
+        logConfig(LOGGER, "Threading Model", DefaultThreadingModel.class.getName());
+        logConfig(LOGGER, configKey(CONFIG_KEY_CORES_FACTOR), m, DEFAULT_CORES_FACTOR);
+        logConfig(LOGGER, configKey(CONFIG_KEY_ADDITIONAL_THREADS), additionalThreads, DEFAULT_ADDITIONAL_THREADS);
+        logConfig(LOGGER, configKey(CONFIG_KEY_MAX_PENDING), getMaxNumberOfQueuedLimitedTasks(), DEFAULT_MAX_PENDING);
+        logConfig(LOGGER, configKey(CONFIG_KEY_HARD_SHUTDOWN), hardShutdown, DEFAULT_HARD_SHUTDOWN);
+        logConfig(LOGGER, configKey(CONFIG_KEY_BLOCKING), blocking, DEFAULT_BLOCKING);
+
         if(threadPoolSize == -1) {
             // figure out the number of cores.
             final int cores = Runtime.getRuntime().availableProcessors();
@@ -217,6 +235,12 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public void submitLimited(final MessageDeliveryJob r) {
+        if(LOGGER.isDebugEnabled()) {
+            messageCount++;
+            if((messageCount & LOG_QUEUE_LEN_MESSAGE_COUNT_MASK) == 0L)
+                LOGGER.debug("Total messages pending on {}: {}", OrderedPerContainerThreadingModel.class.getSimpleName(),
+                    ((ThreadPoolExecutor)executor).getQueue().size());
+        }
         submitter.submitLimited(r);
     }
 

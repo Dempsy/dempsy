@@ -1,5 +1,6 @@
 package net.dempsy.threading;
 
+import static net.dempsy.config.ConfigLogger.logConfig;
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.util.Functional.ignore;
 
@@ -32,16 +33,13 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     // when this anded (&) with the current message count is
     // zero, we'll log a message to the logger (as long as the log level is set appropriately).
-    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT_MASK = 1024 - 1;
+    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT_MASK = (1024 * 4) - 1;
 
     private static final int INTERIM_SPIN_COUNT1 = 100;
     private static final int INTERIM_SPIN_COUNT2 = 500;
 
     public static final String CONFIG_KEY_MAX_PENDING = "max_pending";
     public static final String DEFAULT_MAX_PENDING = "100000";
-
-    public static final String CONFIG_KEY_HARD_SHUTDOWN = "hard_shutdown";
-    public static final String DEFAULT_HARD_SHUTDOWN = "true";
 
     public static final String CONFIG_KEY_DESERIALIZATION_THREADS = "deserialization_threads";
     public static final String DEFAULT_DESERIALIZATION_THREADS = "2";
@@ -294,13 +292,13 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 try {
                     final MessageDeliveryJobHolder message = inqueue.poll();
 
-                    if(LOGGER.isDebugEnabled()) {
-                        messageCount++;
-                        if((messageCount & LOG_QUEUE_LEN_MESSAGE_COUNT_MASK) == 0L)
-                            LOGGER.debug("Total messages pending on {}: {}", OrderedPerContainerThreadingModel.class.getSimpleName(), inqueue.size());
-                    }
-
                     if(message != null) {
+                        if(LOGGER.isDebugEnabled()) {
+                            messageCount++;
+                            if((messageCount & LOG_QUEUE_LEN_MESSAGE_COUNT_MASK) == 0L)
+                                LOGGER.debug("Total messages pending on {}: {}", OrderedPerContainerThreadingModel.class.getSimpleName(), inqueue.size());
+                        }
+
                         // there's work to be done.
                         someWorkDone = true;
                         tryCount = 0;
@@ -353,6 +351,10 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     @Override
     public OrderedPerContainerThreadingModel start() {
+        logConfig(LOGGER, "Threading Model", OrderedPerContainerThreadingModel.class.getName());
+        logConfig(LOGGER, configKey(CONFIG_KEY_MAX_PENDING), getMaxNumberOfQueuedLimitedTasks(), DEFAULT_MAX_PENDING);
+        logConfig(LOGGER, configKey(CONFIG_KEY_DESERIALIZATION_THREADS), deserializationThreadCount, DEFAULT_DESERIALIZATION_THREADS);
+
         shuttleThread = chain(newThread(new Shuttler(), nameSupplier.get() + "-Shuttle"), t -> t.start());
         calcContainersWork = Executors.newFixedThreadPool(deserializationThreadCount,
             r -> new Thread(r, nameSupplier.get() + "-Deser-" + seq.getAndIncrement()));
