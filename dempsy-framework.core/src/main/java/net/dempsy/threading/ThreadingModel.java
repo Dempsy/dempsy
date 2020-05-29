@@ -1,7 +1,9 @@
 package net.dempsy.threading;
 
+import java.util.Map;
 import java.util.concurrent.Callable;
 
+import net.dempsy.Infrastructure;
 import net.dempsy.container.MessageDeliveryJob;
 
 /**
@@ -61,4 +63,20 @@ public interface ThreadingModel extends AutoCloseable {
     public void close();
 
     public boolean isStarted();
+
+    /**
+     * Helper method for reading constructed {@link Infrastructure} configuration values.
+     */
+    public default String getConfigValue(final Map<String, String> conf, final String suffix, final String defaultValue) {
+        final String entireKey = configKey(suffix);
+        return conf.containsKey(entireKey) ? conf.get(entireKey) : defaultValue;
+    }
+
+    /**
+     * Helper method for reading constructed {@link Infrastructure} configuration values.
+     */
+    public default String configKey(final String suffix) {
+        return this.getClass().getPackageName() + "." + suffix;
+    }
+
 }

@@ -16,10 +16,12 @@
 
 package net.dempsy.container;
 
+import static net.dempsy.config.ConfigLogger.logConfig;
 import static net.dempsy.util.SafeString.objectDescription;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -48,6 +50,7 @@ import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.output.OutputInvoker;
 import net.dempsy.router.RoutingStrategy.Inbound;
 import net.dempsy.transport.RoutedMessage;
+import net.dempsy.util.OccasionalRunnable;
 import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.SafeString;
 import net.dempsy.util.executor.RunningEventSwitch;
@@ -66,6 +69,10 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     protected final boolean traceEnabled;
 
     private static final AtomicLong containerNumSequence = new AtomicLong(0L);
+
+    private static final long DEFAULT_LOG_QUEUE_LEN_MESSAGE_COUNT = 1024;
+    private static final String CONFIG_KEY_LOG_QUEUE_LEN_MESSAGE_COUNT = "log_queue_len_message_count";
+
     protected long containerNum = containerNumSequence.getAndIncrement();
 
     protected Dispatcher dispatcher;
@@ -92,6 +99,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     protected AtomicInteger numPending = new AtomicInteger(0);
     protected int maxPendingMessagesPerContainer = Cluster.DEFAULT_MAX_PENDING_MESSAGES_PER_CONTAINER;
+
+    protected long logQueueMessageCount = DEFAULT_LOG_QUEUE_LEN_MESSAGE_COUNT;
+    protected Runnable occLogger = () -> {};
 
     protected Container(final Logger LOGGER) {
         this.LOGGER = LOGGER;
@@ -197,6 +207,15 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         if(traceEnabled)
             LOGGER.trace("Container {} maxPendingMessagesPerContainer:", clusterId, maxPendingMessagesPerContainer);
 
+        final Map<String, String> configuration = infra.getConfiguration();
+        logQueueMessageCount = Long
+            .parseLong(getConfigValue(configuration, CONFIG_KEY_LOG_QUEUE_LEN_MESSAGE_COUNT, "" + DEFAULT_LOG_QUEUE_LEN_MESSAGE_COUNT));
+        if(LOGGER.isDebugEnabled()) { // this configuration is ignored if the log level isn't debug
+            logConfig(LOGGER, configKey(CONFIG_KEY_LOG_QUEUE_LEN_MESSAGE_COUNT), logQueueMessageCount, DEFAULT_LOG_QUEUE_LEN_MESSAGE_COUNT);
+            occLogger = OccasionalRunnable.staticOccasionalRunnable(logQueueMessageCount,
+                () -> LOGGER.debug("Total messages pending on " + this.getClass().getSimpleName() + ": {}", getMessageWorkingCount()));
+        }
+
         isRunningLazy = true;
         isRunning.set(true);
 
@@ -271,6 +290,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     public void dispatch(final KeyedMessage message, final ContainerSpecific cs, final boolean justArrived)
         throws IllegalArgumentException, ContainerException {
+        if(LOGGER.isDebugEnabled())
+            LOGGER.debug("");
+
         if(cs != null) {
             final int num = numPending.decrementAndGet(); // dec first.
 
@@ -279,8 +301,12 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
                 return;
             }
         }
+
         if(traceEnabled)
             LOGGER.trace("dispatch: Pending messages on {} container is: ", clusterId, numPending);
+
+        occLogger.run();
+
         dispatch(message, justArrived);
     }
 
@@ -538,10 +564,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     }
 
-    private static void doNothingWith(final int i) {
-
-    }
-
     /**
      * helper method to invoke an operation (handle a message or run output) handling all of hte exceptions and
      * forwarding any results.
@@ -553,10 +575,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
                     final List<KeyedMessageWithType> result = invokeGuts(resultsDisposerCloser, instance, op, message, null, 1);
                     if(result != null) {
                         try {
-                            if("ThermalMaxAggregation".equals(instance.getClass().getSimpleName())) {
-                                final int i = 12 + 12;
-                                doNothingWith(i);
-                            }
                             dispatcher.dispatch(result, hasDisposition ? disposition : null);
                         } catch(final Exception de) {
                             LOGGER.warn("Failed on subsequent dispatch of " + result + ": " + de.getLocalizedMessage());

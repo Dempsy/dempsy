@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.dempsy.container.MessageDeliveryJob;
+import net.dempsy.util.OccasionalRunnable;
 
 public class DefaultThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(DefaultThreadingModel.class);
@@ -21,7 +22,7 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     // when this anded (&) with the current message count is
     // zero, we'll log a message to the logger (as long as the log level is set appropriately).
-    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT_MASK = (1024 * 2) - 1;
+    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT = (1024 * 2);
 
     public static final String CONFIG_KEY_MAX_PENDING = "max_pending";
     public static final String DEFAULT_MAX_PENDING = "100000";
@@ -56,7 +57,9 @@ public class DefaultThreadingModel implements ThreadingModel {
     private final static AtomicLong threadNum = new AtomicLong();
     private boolean started = false;
 
-    private long messageCount = 0;
+    private final Runnable occLogger = OccasionalRunnable.staticOccasionalRunnable(LOG_QUEUE_LEN_MESSAGE_COUNT,
+        () -> LOGGER.debug("Total messages pending on " + DefaultThreadingModel.class.getSimpleName() + ": {}",
+            ((ThreadPoolExecutor)executor).getQueue().size()));
 
     private DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
         this.nameSupplier = nameSupplier;
@@ -138,10 +141,6 @@ public class DefaultThreadingModel implements ThreadingModel {
         return this;
     }
 
-    public static String configKey(final String suffix) {
-        return DefaultThreadingModel.class.getPackageName() + "." + suffix;
-    }
-
     @Override
     public synchronized DefaultThreadingModel start() {
         logConfig(LOGGER, "Threading Model", DefaultThreadingModel.class.getName());
@@ -182,11 +181,6 @@ public class DefaultThreadingModel implements ThreadingModel {
     @Override
     public synchronized boolean isStarted() {
         return started;
-    }
-
-    private static String getConfigValue(final Map<String, String> conf, final String key, final String defaultValue) {
-        final String entireKey = DefaultThreadingModel.class.getPackage().getName() + "." + key;
-        return conf.containsKey(entireKey) ? conf.get(entireKey) : defaultValue;
     }
 
     public DefaultThreadingModel configure(final Map<String, String> configuration) {
@@ -235,12 +229,8 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public void submitLimited(final MessageDeliveryJob r) {
-        if(LOGGER.isDebugEnabled()) {
-            messageCount++;
-            if((messageCount & LOG_QUEUE_LEN_MESSAGE_COUNT_MASK) == 0L)
-                LOGGER.debug("Total messages pending on {}: {}", OrderedPerContainerThreadingModel.class.getSimpleName(),
-                    ((ThreadPoolExecutor)executor).getQueue().size());
-        }
+        if(LOGGER.isDebugEnabled())
+            occLogger.run();
         submitter.submitLimited(r);
     }
 
