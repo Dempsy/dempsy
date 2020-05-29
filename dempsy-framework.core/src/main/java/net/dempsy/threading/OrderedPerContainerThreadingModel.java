@@ -34,7 +34,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     // when this anded (&) with the current message count is
     // zero, we'll log a message to the logger (as long as the log level is set appropriately).
-    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT = (1024 * 4) - 1;
+    private static final long LOG_QUEUE_LEN_MESSAGE_COUNT = (1024 * 4);
 
     private static final int INTERIM_SPIN_COUNT1 = 100;
     private static final int INTERIM_SPIN_COUNT2 = 500;
