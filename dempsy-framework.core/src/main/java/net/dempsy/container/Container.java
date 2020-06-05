@@ -151,6 +151,9 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         return this;
     }
 
+    /**
+     * Always called from the Dempsy infrastructure (NodeManager) prior to calling start().
+     */
     public Container setClusterId(final ClusterId clusterId) {
         if(clusterId == null)
             throw new IllegalArgumentException("The container must have a cluster id");
@@ -213,7 +216,8 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         if(LOGGER.isDebugEnabled()) { // this configuration is ignored if the log level isn't debug
             logConfig(LOGGER, configKey(CONFIG_KEY_LOG_QUEUE_LEN_MESSAGE_COUNT), logQueueMessageCount, DEFAULT_LOG_QUEUE_LEN_MESSAGE_COUNT);
             occLogger = OccasionalRunnable.staticOccasionalRunnable(logQueueMessageCount,
-                () -> LOGGER.debug("Total messages pending on " + this.getClass().getSimpleName() + ": {}", getMessageWorkingCount()));
+                () -> LOGGER.debug("Total messages pending on " + this.getClass().getSimpleName() + " container for {}: {}", clusterId,
+                    getMessageWorkingCount()));
         }
 
         isRunningLazy = true;
@@ -290,8 +294,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     public void dispatch(final KeyedMessage message, final ContainerSpecific cs, final boolean justArrived)
         throws IllegalArgumentException, ContainerException {
-        if(LOGGER.isDebugEnabled())
-            LOGGER.debug("");
 
         if(cs != null) {
             final int num = numPending.decrementAndGet(); // dec first.
