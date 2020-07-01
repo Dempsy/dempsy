@@ -34,7 +34,7 @@
     <metrics.version>4.1.1</metrics.version>
     <metrics-ganglia.version>3.2.6</metrics-ganglia.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <quartz.version>2.3.0</quartz.version>
+    <quartz.version>2.3.2</quartz.version>
     <slf4j.version>1.7.25</slf4j.version>
   </properties>
 
