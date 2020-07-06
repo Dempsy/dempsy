@@ -78,6 +78,12 @@ public class RelativeOutputSchedule implements OutputScheduler {
      */
     @Override
     public void setOutputInvoker(final OutputInvoker outputInvoker) {
+        if(this.outputInvoker != null) {
+            LOGGER.error("Cannot supply a second output invoker to a " + RelativeOutputSchedule.class.getSimpleName()
+                + ". Do you have the same instance of the " + RelativeOutputSchedule.class.getSimpleName() + " being used in more than one container?");
+            throw new IllegalStateException("Cannot supply a second output invoker to a " + RelativeOutputSchedule.class.getSimpleName()
+                + ". Do you have the same instance of the " + RelativeOutputSchedule.class.getSimpleName() + " being used in more than one container?");
+        }
         this.outputInvoker = outputInvoker;
 
         if(concurrency > 1)

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,9 +27,9 @@ import org.slf4j.LoggerFactory;
 import net.dempsy.Infrastructure;
 
 /**
- * The Class CronOutputScheduler. 
- * This class executes @Output method on MPs based on provided cron time expression (example: '*\/1 * * * * ?', run job at every one sec) 
- *  
+ * The Class CronOutputScheduler.
+ * This class executes @Output method on MPs based on provided cron time expression (example: '*\/1 * * * * ?', run job at every one sec)
+ * 
  */
 public class CronOutputSchedule implements OutputScheduler {
 
@@ -57,17 +57,17 @@ public class CronOutputSchedule implements OutputScheduler {
     }
 
     /**
-       * Instantiates a new cron output scheduler.
-       *
-       * @param cronExpression the cron expression
-       */
+     * Instantiates a new cron output scheduler.
+     *
+     * @param cronExpression the cron expression
+     */
     public CronOutputSchedule(final String cronExpression) {
         this.cronExpression = cronExpression;
     }
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.nokia.dempsy.output.OutputExecuter#start()
      */
     @Override
@@ -79,7 +79,7 @@ public class CronOutputSchedule implements OutputScheduler {
             scheduler = StdSchedulerFactory.getDefaultScheduler();
             scheduler.scheduleJob(jobDetail, trigger);
             scheduler.start();
-        } catch (final SchedulerException se) {
+        } catch(final SchedulerException se) {
             LOGGER.error("Error occurred while starting the cron scheduler : " + se.getMessage(), se);
         }
     }
@@ -91,7 +91,7 @@ public class CronOutputSchedule implements OutputScheduler {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.nokia.dempsy.output.OutputExecuter#stop()
      */
     @Override
@@ -99,21 +99,27 @@ public class CronOutputSchedule implements OutputScheduler {
         try {
             // gracefully shutting down
             scheduler.shutdown(false);
-        } catch (final SchedulerException se) {
+        } catch(final SchedulerException se) {
             LOGGER.error("Error occurred while stopping the cron scheduler : " + se.getMessage(), se);
         }
     }
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
      */
     @Override
     public void setOutputInvoker(final OutputInvoker outputInvoker) {
+        if(this.outputInvoker != null) {
+            LOGGER.error("Cannot supply a second output invoker to a " + CronOutputSchedule.class.getSimpleName()
+                + ". Do you have the same instance of the " + CronOutputSchedule.class.getSimpleName() + " being used in more than one container?");
+            throw new IllegalStateException("Cannot supply a second output invoker to a " + CronOutputSchedule.class.getSimpleName()
+                + ". Do you have the same instance of the " + CronOutputSchedule.class.getSimpleName() + " being used in more than one container?");
+        }
         this.outputInvoker = outputInvoker;
 
-        if (concurrency > 1)
+        if(concurrency > 1)
             outputInvoker.setOutputConcurrency(concurrency);
     }
 
