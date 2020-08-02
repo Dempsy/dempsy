@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -184,8 +185,22 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         public final ContainerJobMetadata container;
 
         public ContainerWorker(final ContainerJobMetadata container) {
-            this.queue = new LinkedBlockingQueue<>();
             this.container = container;
+            final Container c = container.container;
+            if(c.containerInternallyQueuesMessages())
+                throw new IllegalArgumentException(
+                    "Cannot use an " + OrderedPerContainerThreadingModel.class.getSimpleName() + " with a " + c.getClass().getSimpleName()
+                        + " container, as is being done for the cluster \"" + c.getClusterId().clusterName
+                        + "\" because it internally queues messages, defeating the only reason to use this threading model.");
+            final int maxPendingMessagesPerContainer = c.getMaxPendingMessagesPerContainer();
+            if(maxPendingMessagesPerContainer <= 0) {
+                LOGGER.warn(
+                    "The container for \"{}\" has no limit set on the number of maximum queued messages. If the processing thread hangs up the messages will queue indefinitely potentially causing the process to run out of memory.",
+                    c.getClusterId().clusterName);
+                this.queue = new LinkedBlockingQueue<>();
+            } else
+                this.queue = new ArrayBlockingQueue<>(maxPendingMessagesPerContainer);
+
             chain(
                 // this used to use the nameSupplier but the name is too long in `htop`
                 // to understand what's going on so it's been switched to simple "c-"
