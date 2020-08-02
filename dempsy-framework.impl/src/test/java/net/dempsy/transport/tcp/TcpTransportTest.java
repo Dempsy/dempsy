@@ -7,6 +7,7 @@ import static net.dempsy.utils.test.ConditionPoll.poll;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.net.Inet4Address;
 import java.net.NetworkInterface;
 import java.util.Arrays;
 import java.util.Collection;
@@ -73,7 +74,7 @@ public class TcpTransportTest {
     @Test
     public void testReceiverStart() throws Exception {
         final AtomicBoolean resolverCalled = new AtomicBoolean(false);
-        try (ServiceTracker tr = new ServiceTracker();) {
+        try(ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .resolver(a -> {
                     resolverCalled.set(true);
@@ -94,6 +95,9 @@ public class TcpTransportTest {
     public void testReceiverStartOnSpecifiedIf() throws Exception {
         final List<NetworkInterface> ifs = Collections.list(TcpUtils.getInterfaces(null)).stream()
             .filter(nif -> !uncheck(() -> nif.isLoopback()))
+            .filter(nif -> nif.inetAddresses()
+                .filter(ia -> ia instanceof Inet4Address)
+                .anyMatch(ia -> uncheck(() -> ia.isReachable(100))))
             .collect(Collectors.toList());
 
         final NetworkInterface nif = (ifs.size() > 1) ? ifs.get(1) : ((ifs.size() == 1) ? ifs.get(0) : null);
@@ -103,7 +107,7 @@ public class TcpTransportTest {
             if(Collections.list(nif.getInetAddresses()).size() > 0) { // otherwise, we still can't really do anything without a lot of work
 
                 final AtomicBoolean resolverCalled = new AtomicBoolean(false);
-                try (ServiceTracker tr = new ServiceTracker();) {
+                try(ServiceTracker tr = new ServiceTracker();) {
                     final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                         .resolver(a -> {
                             resolverCalled.set(true);
@@ -137,7 +141,7 @@ public class TcpTransportTest {
 
     @Test
     public void testMessage() throws Exception {
-        try (ServiceTracker tr = new ServiceTracker();) {
+        try(ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .numHandlers(2)
                 .useLocalHost(true);
@@ -152,7 +156,7 @@ public class TcpTransportTest {
                 return true;
             }, infra);
 
-            try (final SenderFactory sf = senderFactory.get();) {
+            try(final SenderFactory sf = senderFactory.get();) {
                 sf.start(new TestInfrastructure(tm) {
                     @Override
                     public String getNodeId() {
@@ -171,7 +175,7 @@ public class TcpTransportTest {
     @Test
     public void testLargeMessage() throws Exception {
         final String huge = TestWordCount.readBible();
-        try (final ServiceTracker tr = new ServiceTracker();) {
+        try(final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .numHandlers(2)
                 .useLocalHost(true)
@@ -188,7 +192,7 @@ public class TcpTransportTest {
                 return true;
             }, infra);
 
-            try (final SenderFactory sf = senderFactory.get();) {
+            try(final SenderFactory sf = senderFactory.get();) {
                 sf.start(new TestInfrastructure(null, null));
                 final Sender sender = sf.getSender(addr);
                 sender.send(new RoutedMessage(new int[] {0}, "Hello", huge));
@@ -203,7 +207,7 @@ public class TcpTransportTest {
 
     private void runMultiMessage(final String testName, final int numThreads, final int numMessagePerThread, final String message,
         final Serializer serializer) throws Exception {
-        try (final ServiceTracker tr = new ServiceTracker();) {
+        try(final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .numHandlers(2)
                 .useLocalHost(true)
@@ -223,7 +227,7 @@ public class TcpTransportTest {
             final CountDownLatch waitToExit = new CountDownLatch(1);
 
             final List<Thread> threads = IntStream.range(0, numThreads).mapToObj(threadNum -> new Thread(() -> {
-                try (final SenderFactory sf = senderFactory.get();) {
+                try(final SenderFactory sf = senderFactory.get();) {
                     sf.start(new TestInfrastructure(null, null) {
                         @Override
                         public Map<String, String> getConfiguration() {
@@ -280,7 +284,7 @@ public class TcpTransportTest {
 
     @Test
     public void testConnectionRecovery() throws Exception {
-        try (final ServiceTracker tr = new ServiceTracker();) {
+        try(final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .numHandlers(2)
                 .useLocalHost(true);
@@ -299,7 +303,7 @@ public class TcpTransportTest {
                 return true;
             }, infra);
 
-            try (final SenderFactory sf = senderFactory.get();) {
+            try(final SenderFactory sf = senderFactory.get();) {
                 sf.start(new TestInfrastructure(tm) {
                     @Override
                     public String getNodeId() {

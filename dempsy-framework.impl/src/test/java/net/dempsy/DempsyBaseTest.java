@@ -127,6 +127,7 @@ public abstract class DempsyBaseTest {
     private static List<String> transportsThatRequireSerializer = Arrays.asList("nio");
     private static List<String> groupRoutingStrategies = Arrays.asList("group");
     private static List<String> containersThatSupportLimitedQueueLen = Arrays.asList("locking");
+    private static List<String> containersThatDontInternallyQueue = Arrays.asList("locking");
 
     // ======================================================
     // These define how the tests use the threading model. Don't
@@ -208,6 +209,14 @@ public abstract class DempsyBaseTest {
         return containersThatSupportLimitedQueueLen.contains(containerId);
     }
 
+    public static boolean containerDoesntInternallyQueue(final String containerId) {
+        return containersThatDontInternallyQueue.contains(containerId);
+    }
+
+    public static boolean containerInternallyQueues(final String containerId) {
+        return !containerDoesntInternallyQueue(containerId);
+    }
+
     @Parameters(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
     public static Collection<Object[]> combos() {
         final Combos combos = (hardcore) ? hardcore() : production();
@@ -221,6 +230,11 @@ public abstract class DempsyBaseTest {
             for(final String container: combos.containers) {
                 for(final String sessFact: combos.sessions) {
                     for(final Object[] threading: combos.threadingDetails) {
+                        // OrderedPerContainerThreadingModel can't be used with
+                        // containers that internally queue.
+                        if("ordered".equals(threading[0]) && containerInternallyQueues(container))
+                            continue;
+
                         for(final String tp: combos.transports) {
                             if(requiresSerialization(tp)) {
                                 if(butRotateSerializer) {
@@ -320,7 +334,7 @@ public abstract class DempsyBaseTest {
         LOGGER.info("======== Running (" + comboSequence + ") " + testName + " with " + routerId + ", " + containerId + ", " + sessionType + ", "
             + threadingModelDescription + ", " + transportType + "/" + serializerType);
 
-        try (final ServiceTracker tr = new ServiceTracker()) {
+        try(final ServiceTracker tr = new ServiceTracker()) {
             currentlyTracking = tr;
             tr.track(new SystemPropertyManager())
                 .set("routing-strategy", ROUTER_ID_PREFIX + routerId)
@@ -337,7 +351,7 @@ public abstract class DempsyBaseTest {
 
             final List<NodeManagerWithContext> reverseCpCtxs = reverseRange(0, ctxs.length)
                 .mapToObj(i -> {
-                    try (final SystemPropertyManager p2 = new SystemPropertyManager()) {
+                    try(final SystemPropertyManager p2 = new SystemPropertyManager()) {
                         if(perNodeProps != null && perNodeProps[i] != null) {
                             for(final String[] kv: perNodeProps[i]) {
                                 if(kv != null) {
