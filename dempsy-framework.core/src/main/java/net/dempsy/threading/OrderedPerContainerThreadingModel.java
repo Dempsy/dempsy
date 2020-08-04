@@ -11,7 +11,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,7 +27,6 @@ import net.dempsy.container.Container;
 import net.dempsy.container.ContainerJob;
 import net.dempsy.container.ContainerJobMetadata;
 import net.dempsy.container.MessageDeliveryJob;
-import net.dempsy.util.SafeString;
 
 public class OrderedPerContainerThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(OrderedPerContainerThreadingModel.class);
@@ -181,8 +179,10 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     }
 
     private class ContainerWorker implements Runnable {
-        public final BlockingQueue<ContainerJobHolder> queue;
+        public final LinkedBlockingQueue<ContainerJobHolder> queue;
         public final ContainerJobMetadata container;
+        public final int maxPendingMessagesPerContainerX2;
+        public final boolean shedMode;
 
         public ContainerWorker(final ContainerJobMetadata container) {
             this.container = container;
@@ -192,14 +192,16 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                     "Cannot use an " + OrderedPerContainerThreadingModel.class.getSimpleName() + " with a " + c.getClass().getSimpleName()
                         + " container, as is being done for the cluster \"" + c.getClusterId().clusterName
                         + "\" because it internally queues messages, defeating the only reason to use this threading model.");
-            final int maxPendingMessagesPerContainer = c.getMaxPendingMessagesPerContainer();
-            if(maxPendingMessagesPerContainer <= 0) {
+            maxPendingMessagesPerContainerX2 = c.getMaxPendingMessagesPerContainer() * 2;
+            if(maxPendingMessagesPerContainerX2 <= 0) {
                 LOGGER.warn(
                     "The container for \"{}\" has no limit set on the number of maximum queued messages. If the processing thread hangs up the messages will queue indefinitely potentially causing the process to run out of memory.",
                     c.getClusterId().clusterName);
-                this.queue = new LinkedBlockingQueue<>();
+                shedMode = false;
             } else
-                this.queue = new ArrayBlockingQueue<>(maxPendingMessagesPerContainer);
+                shedMode = true;
+
+            this.queue = new LinkedBlockingQueue<>();
 
             chain(
                 // this used to use the nameSupplier but the name is too long in `htop`
@@ -207,6 +209,34 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 // (for "container") and the name of the cluster.
                 new Thread(this, "c-" + container.container.getClusterId().clusterName),
                 t -> t.start());
+        }
+
+        /**
+         * Because the OrderedPerContainerThreadingModel uses a dedicated thread per container,
+         * the message processor can block that thread through IO or some long running calculation.
+         * In that case the Shuttle thread will perpetually enqueue messages resulting in a
+         * potential to run out of memory. This method will dequeue the oldest messages in the
+         * queue IFF the size of the queue grows to TWICE the maxPendingMessagesPerContainer
+         * set on the container.
+         */
+        public void handleEnqueuing(final ContainerJobHolder curJobHolder) {
+            // offer the job. If the job is queued then ownership of the lifecycle has been successfully passed to the container...
+            if(!queue.offer(curJobHolder)) {
+                // ... otherwise we need to make sure we mark the job as rejected at the container level.
+                curJobHolder.reject(container);
+                LOGGER.trace("Failed to be queued to container {}. The queue has {} messages in it",
+                    container.container.getClusterId(), queue.size());
+            } else if(shedMode) {
+                // we need to check the length of the queue and remove the oldest if it's too long
+                // and we need to make sure we mark the job as rejected at the container level.
+                final int queueSize = queue.size();
+                if(queueSize > maxPendingMessagesPerContainerX2) {
+                    final ContainerJobHolder rejectedOld = queue.poll();
+                    rejectedOld.reject(container);
+                    LOGGER.trace("Failed to be queued to container {}. The queue has {} messages in it",
+                        container.container.getClusterId(), queueSize);
+                }
+            }
         }
 
         @Override
@@ -270,14 +300,8 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                     final Container curContainer = jobData.container;
                     // this is a single thread so this should be safe. The Function<> is NOT side effect free. It starts a thread.
                     final ContainerWorker curWorker = containerWorkers.computeIfAbsent(curContainer, x -> new ContainerWorker(jobData));
-                    // current queue
-                    final BlockingQueue<ContainerJobHolder> curQ = curWorker.queue;
-                    // offer the job. If the job is queued then ownership of the lifecycle has been successfully passed to the container...
-                    if(!curQ.offer(curJobHolder)) {
-                        // ... otherwise we need to make sure we mark the job as rejected at the container level.
-                        curJobHolder.reject(jobData);
-                        LOGGER.warn("Message {} failed to be queued to container {}.", SafeString.objectDescription(message), curContainer.getClusterId());
-                    }
+
+                    curWorker.handleEnqueuing(curJobHolder);
 
                     i++;
                 }
