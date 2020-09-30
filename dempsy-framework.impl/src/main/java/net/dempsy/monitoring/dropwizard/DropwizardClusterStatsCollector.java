@@ -1,5 +1,7 @@
 package net.dempsy.monitoring.dropwizard;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -16,6 +18,7 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     public static final String MESSAGES_FAILED = "messages-failed";
     public static final String MESSAGES_COLLISION = "messages-collision";
     public static final String MESSAGES_DISCARDED = "messages-discarded";
+    public static final String MESSAGES_PENDING = "messages-pending";
     public static final String MESSAGES_PROCESSOR_CREATED = "messages-processor-created";
     public static final String MESSAGES_PROCESSOR_DELETED = "messages-processor-deleted";
     public static final String OUTPUT_INVOKE_STARTED_TIMER = "output-invoke-started-timer";
@@ -32,7 +35,8 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
         MESSAGES_PROCESSOR_DELETED,
         OUTPUT_INVOKE_STARTED_TIMER,
         EVICTION_PASS_STARTED_TIMER,
-        PRE_INSTANTIATION_STARTED_TIMER
+        PRE_INSTANTIATION_STARTED_TIMER,
+        MESSAGES_PENDING
     };
 
     private static class DropwizardTimerContext implements StatsCollector.TimerContext {
@@ -61,6 +65,8 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
     private final Meter messageProcessorCreated;
     private final Meter messageProcessorDeleted;
 
+    private final AtomicLong inProcessMessages = new AtomicLong();
+
     public DropwizardClusterStatsCollector(final ClusterId clusterId) {
         super();
 
@@ -74,21 +80,25 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
         messageDiscarded = registry.meter(getName(MESSAGES_DISCARDED));
         messageProcessorCreated = registry.meter(getName(MESSAGES_PROCESSOR_CREATED));
         messageProcessorDeleted = registry.meter(getName(MESSAGES_PROCESSOR_DELETED));
+        registry.gauge(getName(MESSAGES_PENDING), () -> () -> inProcessMessages.get());
     }
 
     @Override
     public void messageDispatched(final int num) {
         messageDispatched.mark(num);
+        inProcessMessages.getAndAdd(num);
     }
 
     @Override
     public void messageProcessed(final int num) {
         messageProcessed.mark(num);
+        inProcessMessages.getAndAdd(-num);
     }
 
     @Override
     public void messageFailed(final int num) {
         messageFailed.mark(num);
+        inProcessMessages.getAndAdd(-num);
     }
 
     @Override
