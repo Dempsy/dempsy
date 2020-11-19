@@ -147,7 +147,7 @@ public class Node {
 
         public Builder routingOnCluster(final String routingStrategyId) {
             check("routing");
-            curCluster.routing(routingStrategyId);
+            curCluster.routingStrategyId(routingStrategyId);
             return this;
         }
 

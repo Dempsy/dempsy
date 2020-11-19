@@ -258,7 +258,7 @@ public class TcpTransportTest {
             letMeGo.set(true);
 
             // the total number of messages sent should be this count.
-            assertTrue(poll(new Long((long)numThreads * (long)numMessagePerThread), v -> v.longValue() == msgCount.get()));
+            assertTrue(poll(Long.valueOf((long)numThreads * (long)numMessagePerThread), v -> v.longValue() == msgCount.get()));
 
             // let the threads exit
             waitToExit.countDown();

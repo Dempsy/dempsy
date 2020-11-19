@@ -81,7 +81,7 @@ public class TestInvocation {
 
         @Override
         public Number getNumber() {
-            return new Integer(value);
+            return Integer.valueOf(value);
         }
     }
 
@@ -109,7 +109,7 @@ public class TestInvocation {
 
         @Override
         public Number getNumber() {
-            return new Double(value);
+            return Double.valueOf(value);
         }
     }
 

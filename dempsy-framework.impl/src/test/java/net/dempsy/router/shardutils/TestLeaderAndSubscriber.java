@@ -27,7 +27,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
     static final Logger LOGGER = LoggerFactory.getLogger(TestLeaderAndSubscriber.class);
 
     public TestLeaderAndSubscriber(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
-            final Consumer<ClusterInfoSession> disruptor) {
+        final Consumer<ClusterInfoSession> disruptor) {
         super(LOGGER, factory.get(), disruptor);
     }
 
@@ -35,7 +35,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
     public void testOneLeader() throws InterruptedException {
         final ClusterId cid = setTestName("testOneLeader");
         final Utils<ContainerAddress> utils = new Utils<ContainerAddress>(makeInfra(session, sched), cid.clusterName,
-                new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+            new ContainerAddress(new DummyNodeAddress(), new int[] {0}));
 
         final AtomicBoolean isRunning = new AtomicBoolean(true);
         try {
@@ -70,16 +70,16 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
         try {
             final List<ListenerHolder> holders = new ArrayList<>();
 
-            for (int i = 0; i < NUM_THREADS; i++) {
+            for(int i = 0; i < NUM_THREADS; i++) {
                 final ClusterInfoSession session = sessFact.createSession();
                 final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName,
-                        new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+                    new ContainerAddress(new DummyNodeAddress(), new int[] {0}));
                 final Leader<ContainerAddress> l = new Leader<>(utils, 256, 1, infra, isRunning, ContainerAddress[]::new);
 
                 final Thread t = new Thread(() -> {
                     // wait for it.
-                    while (!go.get()) {
-                        if (!isRunning.get())
+                    while(!go.get()) {
+                        if(!isRunning.get())
                             return;
                         Thread.yield();
                     }
@@ -121,7 +121,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
     public void testLeaderWithSubscriber() throws Exception {
         final ClusterId cid = setTestName("testLeaderWithSubscriber");
         final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName,
-                new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+            new ContainerAddress(new DummyNodeAddress(), new int[] {0}));
 
         final AtomicBoolean isRunning = new AtomicBoolean(true);
         try {
@@ -135,7 +135,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
             assertTrue(poll(o -> s.isReady()));
 
             // s should now own all shards.
-            for (int i = 0; i < 256; i++)
+            for(int i = 0; i < 256; i++)
                 assertTrue(s.doIOwnShard(i));
         } finally {
             isRunning.set(false);
@@ -153,15 +153,15 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
             final List<Subscriber<ContainerAddress>> subs = new ArrayList<>();
             final AtomicBoolean go = new AtomicBoolean(false);
 
-            for (int i = 0; i < NUM_SUBS; i++) {
+            for(int i = 0; i < NUM_SUBS; i++) {
                 final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName,
-                        new ContainerAddress(new DummyNodeAddress(), new int[] { 0 }));
+                    new ContainerAddress(new DummyNodeAddress(), new int[] {0}));
                 final Subscriber<ContainerAddress> s;
                 subs.add(s = new Subscriber<>(utils, infra, isRunning, (l, m) -> {}, 256));
                 final Thread t = new Thread(() -> {
                     // wait for it.
-                    while (!go.get()) {
-                        if (!isRunning.get())
+                    while(!go.get()) {
+                        if(!isRunning.get())
                             return;
                         Thread.yield();
                     }
@@ -182,13 +182,13 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
             assertTrue(poll(o -> subs.stream().filter(s -> s.isReady()).count() == NUM_SUBS));
 
             final int lowerNum = Math.floorDiv(256, NUM_SUBS);
-            final int upperNum = (int) Math.ceil((double) 256 / NUM_SUBS);
+            final int upperNum = (int)Math.ceil((double)256 / NUM_SUBS);
 
             // do we have balanced subs?
             assertTrue(poll(o -> subs.stream()
-                    .filter(s -> s.numShardsIOwn() >= lowerNum)
-                    .filter(s -> s.numShardsIOwn() <= upperNum)
-                    .count() == NUM_SUBS));
+                .filter(s -> s.numShardsIOwn() >= lowerNum)
+                .filter(s -> s.numShardsIOwn() <= upperNum)
+                .count() == NUM_SUBS));
 
             isRunning.set(false);
             assertTrue(poll(o -> threads.stream().filter(t -> t.isAlive()).count() == 0));
@@ -208,7 +208,7 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
         }
 
         public DummyNodeAddress() {
-            this(new Long(sequence.getAndIncrement()));
+            this(Long.valueOf(sequence.getAndIncrement()));
         }
 
         @Override
@@ -218,14 +218,14 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
 
         @Override
         public boolean equals(final Object obj) {
-            if (this == obj)
+            if(this == obj)
                 return true;
-            if (obj == null)
+            if(obj == null)
                 return false;
-            if (getClass() != obj.getClass())
+            if(getClass() != obj.getClass())
                 return false;
-            final DummyNodeAddress other = (DummyNodeAddress) obj;
-            if (!id.equals(other.id))
+            final DummyNodeAddress other = (DummyNodeAddress)obj;
+            if(!id.equals(other.id))
                 return false;
             return true;
         }
