@@ -232,9 +232,11 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 final int queueSize = queue.size();
                 if(queueSize > maxPendingMessagesPerContainerX2) {
                     final ContainerJobHolder rejectedOld = queue.poll();
-                    rejectedOld.reject(container);
-                    LOGGER.trace("Failed to be queued to container {}. The queue has {} messages in it",
-                        container.container.getClusterId(), queueSize);
+                    if(rejectedOld != null) {
+                        rejectedOld.reject(container);
+                        LOGGER.trace("Failed to be queued to container {}. The queue has {} messages in it",
+                            container.container.getClusterId(), queueSize);
+                    }
                 }
             }
         }
