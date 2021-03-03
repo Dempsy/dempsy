@@ -89,7 +89,7 @@ public class TestElasticity extends DempsyBaseTest {
     }
 
     @MessageType
-    public static class VerifyNumber extends Number implements Serializable {
+    public static class VerifyNumber extends Number {
         private static final long serialVersionUID = 1L;
 
         public VerifyNumber() {}

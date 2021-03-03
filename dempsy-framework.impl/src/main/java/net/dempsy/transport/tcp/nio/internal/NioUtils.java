@@ -11,14 +11,11 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import net.dempsy.util.Functional.RunnableThrows;
 import net.dempsy.util.io.MessageBufferOutput;
 
 public class NioUtils {
-    private static final Logger LOGGER = LoggerFactory.getLogger(NioUtils.class);
-
     // =============================================================================
     // These classes manage the buffer pool used by the readers and clients
     // =============================================================================
