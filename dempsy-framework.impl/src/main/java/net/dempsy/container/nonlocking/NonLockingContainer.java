@@ -24,6 +24,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
@@ -45,7 +46,6 @@ import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.util.SafeString;
-import net.dempsy.util.StupidHashMap;
 
 /**
  * <p>
@@ -64,11 +64,12 @@ import net.dempsy.util.StupidHashMap;
  * <li>non-deterministic behavior</li>
  * </ul>
  */
+@Deprecated(since = "This class is severly broken")
 public class NonLockingContainer extends Container {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonLockingContainer.class);
 
-    private final StupidHashMap<Object, WorkingPlaceholder> working = new StupidHashMap<>();
-    private final StupidHashMap<Object, Object> instances = new StupidHashMap<>();
+    private final ConcurrentHashMap<Object, WorkingPlaceholder> working = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Object, Object> instances = new ConcurrentHashMap<>();
 
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     protected final AtomicInteger numBeingWorked = new AtomicInteger(0);
@@ -239,12 +240,9 @@ public class NonLockingContainer extends Container {
         return waitFor(() -> wp.mailbox.getAndSet(null));
     }
 
-    private static final <T> T putIfAbsent(final StupidHashMap<Object, T> map, final Object key, final Supplier<T> value) {
-        // final T ret = map.get(key);
-        // if (ret == null)
-        // return map.putIfAbsent(key, value);
-        // return ret;
-        return map.computeIfAbsent(key, value);
+    private static final <T> T putIfAbsent(final ConcurrentHashMap<Object, T> map, final Object key, final Supplier<T> value) {
+        // return map.computeIfAbsent(key, value);
+        return map.computeIfAbsent(key, k -> value.get());
     }
 
     final static class MutRef<X> {

@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.dempsy.Infrastructure;
+import net.dempsy.threading.QuartzHelper;
 
 /**
  * This is a default implementation of OutputExecuter. At fixed time interval,
@@ -98,7 +99,7 @@ public class RelativeOutputSchedule implements OutputScheduler {
         try {
             final OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
             final JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
-            final Trigger trigger = outputQuartzHelper.getSimpleTrigger(timeUnit, (int)interval);
+            final Trigger trigger = QuartzHelper.getSimpleTrigger(timeUnit, (int)interval);
             scheduler = StdSchedulerFactory.getDefaultScheduler();
             scheduler.scheduleJob(jobDetail, trigger);
             scheduler.start();
