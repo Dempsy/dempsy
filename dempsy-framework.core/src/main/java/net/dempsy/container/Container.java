@@ -25,13 +25,23 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.quartz.Job;
+import org.quartz.JobBuilder;
+import org.quartz.JobDataMap;
+import org.quartz.JobDetail;
+import org.quartz.JobExecutionContext;
+import org.quartz.JobExecutionException;
+import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
+import org.quartz.Trigger;
+import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.dempsy.DempsyException;
 import net.dempsy.Infrastructure;
@@ -49,6 +59,7 @@ import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.output.OutputInvoker;
 import net.dempsy.router.RoutingStrategy.Inbound;
+import net.dempsy.threading.QuartzHelper;
 import net.dempsy.transport.RoutedMessage;
 import net.dempsy.util.OccasionalRunnable;
 import net.dempsy.util.QuietCloseable;
@@ -64,6 +75,7 @@ import net.dempsy.util.executor.RunningEventSwitch;
  * has provided the thread that's needed
  */
 public abstract class Container implements Service, KeyspaceChangeListener, OutputInvoker {
+    private static final Logger SLOGGER = LoggerFactory.getLogger(Container.class);
     protected final Logger LOGGER;
 
     protected final boolean traceEnabled;
@@ -195,8 +207,13 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     @Override
     public void stop() {
-        if(evictionScheduler != null)
-            evictionScheduler.shutdownNow();
+        if(evictionScheduler != null) {
+            try {
+                evictionScheduler.shutdown(false);
+            } catch(final SchedulerException se) {
+                LOGGER.error("Failed to shut down the scheduler for the eviction check cycle.");
+            }
+        }
 
         // the following will close up any output executor that might be running
         stopOutput();
@@ -213,10 +230,10 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         final Map<String, String> configuration = infra.getConfiguration();
         logQueueMessageCount = Long
             .parseLong(getConfigValue(configuration, CONFIG_KEY_LOG_QUEUE_LEN_MESSAGE_COUNT, "" + DEFAULT_LOG_QUEUE_LEN_MESSAGE_COUNT));
-        if(LOGGER.isDebugEnabled()) { // this configuration is ignored if the log level isn't debug
+        if(LOGGER.isTraceEnabled()) { // this configuration is ignored if the log level isn't debug
             logConfig(LOGGER, configKey(CONFIG_KEY_LOG_QUEUE_LEN_MESSAGE_COUNT), logQueueMessageCount, DEFAULT_LOG_QUEUE_LEN_MESSAGE_COUNT);
             occLogger = OccasionalRunnable.staticOccasionalRunnable(logQueueMessageCount,
-                () -> LOGGER.debug("Total messages pending on " + this.getClass().getSimpleName() + " container for {}: {}", clusterId,
+                () -> LOGGER.trace("Total messages pending on " + this.getClass().getSimpleName() + " container for {}: {}", clusterId,
                     getMessageWorkingCount()));
         }
 
@@ -227,8 +244,13 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         validate();
 
-        if(evictionCycleTime != -1)
-            startEvictionThread();
+        if(evictionCycleTime != -1) {
+            try {
+                startEvictionThread();
+            } catch(final SchedulerException e) {
+                throw new DempsyException("Failed to start eviction checking scheduler", e, false);
+            }
+        }
 
         prototype.start(clusterId);
 
@@ -397,26 +419,42 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     // Scheduler to handle eviction thread.
-    private ScheduledExecutorService evictionScheduler;
+    private Scheduler evictionScheduler = null;
 
-    private final static AtomicLong evictionThreadNumber = new AtomicLong(0);
+    public static final String EVICTION_CHECK_JOB_NAME = "evictionCheckInvoker";
 
-    private void startEvictionThread() {
+    public static class EvictionCheckJob implements Job {
+        @Override
+        public void execute(final JobExecutionContext context) throws JobExecutionException {
+
+            final JobDataMap dataMap = context.getJobDetail().getJobDataMap();
+            final Container evictInvoker = (Container)dataMap.get(EVICTION_CHECK_JOB_NAME);
+
+            if(evictInvoker != null) {
+                // execute MP's output method
+                evictInvoker.evict();
+            } else {
+                SLOGGER.warn("evition check invoker is NULL");
+            }
+        }
+
+    }
+
+    private void startEvictionThread() throws SchedulerException {
         if(0 == evictionCycleTime || null == evictionTimeUnit) {
             LOGGER.warn("Eviction Thread cannot start with zero cycle time or null TimeUnit {} {}", evictionCycleTime, evictionTimeUnit);
             return;
         }
 
         if(prototype != null && prototype.isEvictionSupported()) {
-            evictionScheduler = Executors.newSingleThreadScheduledExecutor(
-                r -> new Thread(r, this.getClass().getSimpleName() + "-Eviction-" + evictionThreadNumber.getAndIncrement()));
+            final JobBuilder jobBuilder = JobBuilder.newJob(EvictionCheckJob.class);
+            final JobDetail jobDetail = jobBuilder.build();
+            jobDetail.getJobDataMap().put(EVICTION_CHECK_JOB_NAME, this);
 
-            evictionScheduler.scheduleWithFixedDelay(new Runnable() {
-                @Override
-                public void run() {
-                    evict();
-                }
-            }, evictionCycleTime, evictionCycleTime, evictionTimeUnit);
+            final Trigger trigger = QuartzHelper.getSimpleTrigger(evictionTimeUnit, (int)evictionCycleTime, true);
+            evictionScheduler = StdSchedulerFactory.getDefaultScheduler();
+            evictionScheduler.scheduleJob(jobDetail, trigger);
+            evictionScheduler.start();
         }
     }
 

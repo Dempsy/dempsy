@@ -28,6 +28,7 @@ import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
+import net.dempsy.container.altnonlocking.NonLockingAltContainer;
 import net.dempsy.container.mocks.DummyInbound;
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.MessageHandler;
@@ -241,7 +242,7 @@ public class TestInstanceManager {
         dispatcher = new DummyDispatcher();
         statsCollector = new BasicClusterStatsCollector();
 
-        manager = new NonLockingContainer().setMessageProcessor(prototype).setClusterId(new ClusterId("test", "test"));
+        manager = new NonLockingAltContainer().setMessageProcessor(prototype).setClusterId(new ClusterId("test", "test"));
         manager.setDispatcher(dispatcher);
         manager.setInbound(new DummyInbound());
         manager.start(new TestInfrastructure(null, null) {
@@ -264,7 +265,7 @@ public class TestInstanceManager {
     @Test
     public void testOutputCountsOkay() throws Exception {
         final OutputTestMP prototype = new OutputTestMP();
-        try (final Container manager = setupContainer(new MessageProcessor<OutputTestMP>(prototype));) {
+        try(final Container manager = setupContainer(new MessageProcessor<OutputTestMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
             // we need to dispatch messages to create MP instances
@@ -314,7 +315,7 @@ public class TestInstanceManager {
 
     @Test
     public void testMpThrows() throws Exception {
-        try (final Container dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
+        try(final Container dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
 
             dispatcher.dispatch(km(new MessageOne(123)), true);
 

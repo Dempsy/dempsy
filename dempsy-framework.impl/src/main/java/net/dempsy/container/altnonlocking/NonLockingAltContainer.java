@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
@@ -36,13 +37,11 @@ import org.slf4j.LoggerFactory;
 
 import net.dempsy.DempsyException;
 import net.dempsy.Infrastructure;
-import net.dempsy.KeyspaceChangeListener;
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.util.SafeString;
-import net.dempsy.util.StupidHashMap;
 
 /**
  * <p>
@@ -62,7 +61,7 @@ import net.dempsy.util.StupidHashMap;
  * <li>Least deterministic behavior</li>
  * </ul>
  */
-public class NonLockingAltContainer extends Container implements KeyspaceChangeListener {
+public class NonLockingAltContainer extends Container {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonLockingAltContainer.class);
     // This is a bad idea but only used to gate trace logging the invocation.
 
@@ -70,7 +69,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
 
     // message key -> instance that handles messages with this key
     // changes to this map will be synchronized; read-only may be concurrent
-    private final StupidHashMap<Object, InstanceWrapper> instances = new StupidHashMap<>();
+    private final ConcurrentHashMap<Object, InstanceWrapper> instances = new ConcurrentHashMap<>();
 
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     protected final AtomicInteger numBeingWorked = new AtomicInteger(0);
@@ -375,13 +374,15 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
                                 try {
                                     prototype.passivate(instance);
                                 } catch(final Throwable e) {
+                                    // even if passivate throws an exception, if the eviction check returned 'true' then
+                                    // we need to remove the instance.
                                     LOGGER.warn("Checking the eviction status/passivating of the Mp "
                                         + SafeString.objectDescription(instance) + " resulted in an exception.", e);
                                 }
 
-                                // even if passivate throws an exception, if the eviction check returned 'true' then
-                                // we need to remove the instance.
                                 instances.remove(key);
+                                if(LOGGER.isDebugEnabled())
+                                    LOGGER.debug("[{}]: Evicting/Actually removing Mp for {}. {} remaining", clusterId, key, instances.size());
                                 wrapper.evicted = true;
                                 statCollector.messageProcessorDeleted(key);
                             } else {
@@ -513,7 +514,7 @@ public class NonLockingAltContainer extends Container implements KeyspaceChangeL
     // Internals
     // ----------------------------------------------------------------------------
 
-    StupidHashMap<Object, Boolean> keysBeingWorked = new StupidHashMap<>();
+    ConcurrentHashMap<Object, Boolean> keysBeingWorked = new ConcurrentHashMap<>();
 
     /**
      * This is required to return non null or throw a ContainerException
