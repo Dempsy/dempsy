@@ -226,6 +226,7 @@ public class TestAlmostSimple {
             // now enable them to actually be removed from the container.
             // we need to stop the adaptor or we'll keep recreating them
             adaptor.stop();
+            Thread.sleep(2000); // need to wait for all of the adaptor messages to play through before evicting
             MpEven.allowEviction.set(true);
             final List<Container> containers = nm.getContainers().stream()
                 .filter(c -> "mpEven".equals(c.getClusterId().clusterName))

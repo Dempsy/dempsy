@@ -20,7 +20,7 @@ public class ServiceTracker implements AutoCloseable {
     }
 
     public <T extends Service> T start(final T service, final Infrastructure infra) {
-        if (service == null)
+        if(service == null)
             return service;
 
         add(service);
@@ -30,7 +30,7 @@ public class ServiceTracker implements AutoCloseable {
 
     public void stopAll() {
         final List<AutoCloseable> tmp = new ArrayList<>();
-        synchronized (services) {
+        synchronized(services) {
             tmp.addAll(services);
             services.clear();
         }
@@ -39,22 +39,23 @@ public class ServiceTracker implements AutoCloseable {
             final AutoCloseable ac = tmp.get(i);
             try {
                 ac.close();
-            } catch (final Exception e) {
+            } catch(final Exception e) {
                 final String message = "Failed to stop the service " + SafeString.objectDescription(ac) + ". Continuing.";
-                if (LOGGER.isDebugEnabled())
+                if(LOGGER.isDebugEnabled())
                     LOGGER.warn("Failed to stop the service " + SafeString.objectDescription(ac) + ". Continuing.", e);
-                else LOGGER.warn(message);
+                else
+                    LOGGER.warn(message, e);
             }
         });
     }
 
     public boolean allReady() {
-        synchronized (services) {
-            for (final AutoCloseable ac : services) {
-                if (Service.class.isAssignableFrom(ac.getClass())) {
-                    final boolean isReady = ((Service) ac).isReady();
-                    if (!isReady) {
-                        if (LOGGER.isTraceEnabled())
+        synchronized(services) {
+            for(final AutoCloseable ac: services) {
+                if(Service.class.isAssignableFrom(ac.getClass())) {
+                    final boolean isReady = ((Service)ac).isReady();
+                    if(!isReady) {
+                        if(LOGGER.isTraceEnabled())
                             LOGGER.trace("The Service \"" + ac.getClass().getSimpleName() + "\" isnt' ready.");
                         return false;
                     }
@@ -65,8 +66,8 @@ public class ServiceTracker implements AutoCloseable {
     }
 
     private void add(final AutoCloseable service) {
-        if (service != null) {
-            synchronized (services) {
+        if(service != null) {
+            synchronized(services) {
                 services.add(service);
             }
         }

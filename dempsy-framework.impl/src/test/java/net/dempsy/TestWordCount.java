@@ -35,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
+import io.netty.util.internal.ConcurrentSet;
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
 import net.dempsy.container.NodeMetricGetters;
@@ -45,6 +46,7 @@ import net.dempsy.lifecycle.annotation.MessageProcessor;
 import net.dempsy.lifecycle.annotation.MessageType;
 import net.dempsy.lifecycle.annotation.Mp;
 import net.dempsy.lifecycle.annotation.Output;
+import net.dempsy.lifecycle.annotation.Passivation;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
@@ -65,7 +67,7 @@ public class TestWordCount extends DempsyBaseTest {
     protected boolean considerOnlyContainersThatCanLimit = false;
 
     public static String readBible() throws IOException {
-        try (final InputStream is = new GZIPInputStream(new BufferedInputStream(WordProducer.class.getClassLoader().getResourceAsStream(wordResource)));
+        try(final InputStream is = new GZIPInputStream(new BufferedInputStream(WordProducer.class.getClassLoader().getResourceAsStream(wordResource)));
             final StringWriter writer = new StringWriter();) {
             IOUtils.copy(is, writer);
             return writer.toString();
@@ -228,12 +230,19 @@ public class TestWordCount extends DempsyBaseTest {
 
     @Mp
     public static class WordCounter implements Cloneable {
+        static Set<String> aliveWordsToTestPassivate = new ConcurrentSet<String>();
         long counter = 0;
         String wordText;
 
         @Activation
         public void initMe(final String key) {
             this.wordText = key;
+            aliveWordsToTestPassivate.add(key);
+        }
+
+        @Passivation
+        public void close() {
+            aliveWordsToTestPassivate.remove(wordText);
         }
 
         @MessageHandler
@@ -406,12 +415,14 @@ public class TestWordCount extends DempsyBaseTest {
 
     @Test
     public void testWordCountNoRank() throws Throwable {
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {
             final String[][] ctxs = {{
                 "classpath:/word-count/adaptor-kjv.xml",
                 "classpath:/word-count/mp-word-count.xml",
             }};
+
+            WordCounter.aliveWordsToTestPassivate.clear();
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountNoRank", (r, c, s, t, ser) -> isContainerOkay(c), ctxs, n -> {
@@ -437,12 +448,17 @@ public class TestWordCount extends DempsyBaseTest {
                     return adaptor.numDispatched == (stats.getProcessedMessageCount() + stats.getMessageDiscardedCount());
                 }));
             });
+
+            final int remaining = WordCounter.aliveWordsToTestPassivate.size();
+            WordCounter.aliveWordsToTestPassivate.clear();
+            assertEquals(0, remaining);
+
         }
     }
 
     @Test
     public void testWordCountWithRank() throws Throwable {
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {
 
             final String[][] ctxs = {{
@@ -450,6 +466,8 @@ public class TestWordCount extends DempsyBaseTest {
                 "classpath:/word-count/mp-word-count.xml",
                 "classpath:/word-count/mp-word-rank.xml",
             }};
+
+            WordCounter.aliveWordsToTestPassivate.clear();
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountWithRank", (r, c, s, t, ser) -> isContainerOkay(c), ctxs, n -> {
@@ -499,6 +517,10 @@ public class TestWordCount extends DempsyBaseTest {
                 top10.stream()
                     .forEach(r -> assertTrue(errStr, finalResults.contains(r.word)));
             });
+
+            final int remaining = WordCounter.aliveWordsToTestPassivate.size();
+            WordCounter.aliveWordsToTestPassivate.clear();
+            assertEquals(0, remaining);
         }
     }
 
@@ -517,13 +539,15 @@ public class TestWordCount extends DempsyBaseTest {
 
     @Test
     public void testWordCountNoRankMultinode() throws Throwable {
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "2")) {
 
             final String[][] ctxs = {
                 {"classpath:/word-count/adaptor-kjv.xml","classpath:/word-count/mp-word-count.xml",},
                 {"classpath:/word-count/mp-word-count.xml",},
             };
+
+            WordCounter.aliveWordsToTestPassivate.clear();
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> isElasticRoutingStrategy(r) && isContainerOkay(c), ctxs, n -> {
@@ -554,12 +578,16 @@ public class TestWordCount extends DempsyBaseTest {
                         .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
             });
+
+            final int remaining = WordCounter.aliveWordsToTestPassivate.size();
+            WordCounter.aliveWordsToTestPassivate.clear();
+            assertEquals(0, remaining);
         }
     }
 
     @Test
     public void testWordCountNoRankAdaptorOnlyNode() throws Throwable {
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "2")) {
 
             final String[][] ctxs = {
@@ -572,6 +600,8 @@ public class TestWordCount extends DempsyBaseTest {
             };
 
             final int NUM_WC = ctxs.length - 1; // the adaptor is the first one.
+
+            WordCounter.aliveWordsToTestPassivate.clear();
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> isElasticRoutingStrategy(r) && isContainerOkay(c), ctxs, n -> {
@@ -599,6 +629,10 @@ public class TestWordCount extends DempsyBaseTest {
                         .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
                 }));
             });
+
+            final int remaining = WordCounter.aliveWordsToTestPassivate.size();
+            WordCounter.aliveWordsToTestPassivate.clear();
+            assertEquals(0, remaining);
         }
     }
 
@@ -614,13 +648,15 @@ public class TestWordCount extends DempsyBaseTest {
 
         final int NUM_WC = ctxs.length - 1; // the adaptor is the first one.
 
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager()
             .set("min_nodes", Integer.toString(NUM_WC))
             .set("routing-group", ":group")
             .set("send_threads", "1")
             .set("receive_threads", "1")
             .set("blocking-queue-size", "500000")) {
+
+            WordCounter.aliveWordsToTestPassivate.clear();
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountHomogeneousProcessing", (r, c, s, t, ser) -> isElasticRoutingStrategy(r) && isContainerOkay(c), ctxs, n -> {
@@ -676,6 +712,10 @@ public class TestWordCount extends DempsyBaseTest {
                     assertNotNull(nodeStats.stream().filter(mg -> mg.getMessagesSentCount() > 0).findFirst().orElse(null));
                 }
             });
+
+            final int remaining = WordCounter.aliveWordsToTestPassivate.size();
+            WordCounter.aliveWordsToTestPassivate.clear();
+            assertEquals(0, remaining);
         }
     }
 
@@ -699,7 +739,7 @@ public class TestWordCount extends DempsyBaseTest {
 
         final int NUM_WC = ctxs.length - 2; // the adaptor is the first one, rank catcher the last.
 
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager()
             .set("min_nodes", Integer.toString(NUM_WC))
             .set("routing-group", ":group")

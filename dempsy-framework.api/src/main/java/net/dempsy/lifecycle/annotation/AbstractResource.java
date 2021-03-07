@@ -64,7 +64,7 @@ public abstract class AbstractResource implements Resource {
                     tracking.add(new RefTracking(Dir.FINALIZED));
                 }
                 synchronized(AbstractResource.class) {
-                    try (final OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
+                    try(final OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
                         final PrintStream ps = new PrintStream(os);) {
                         ps.println("===============================================");
                         tracking.forEach(cur -> cur.out(ps));
@@ -91,7 +91,7 @@ public abstract class AbstractResource implements Resource {
             }
             if(count < 0) {
                 synchronized(AbstractResource.class) {
-                    try (OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
+                    try(OutputStream os = new BufferedOutputStream(new FileOutputStream(trackFile, true));
                         PrintStream ps = new PrintStream(os);) {
                         ps.println("===============================================");
                         tracking.forEach(cur -> cur.out(ps));

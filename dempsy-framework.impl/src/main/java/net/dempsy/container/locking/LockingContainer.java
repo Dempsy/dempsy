@@ -41,6 +41,7 @@ import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.StatsCollector;
+import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.SafeString;
 
 /**
@@ -91,6 +92,38 @@ public class LockingContainer extends Container {
     public void start(final Infrastructure infra) {
         super.start(infra);
         isReady.set(true);
+    }
+
+    @Override
+    public void stop() {
+        super.stop();
+
+        while(instances.size() > 0) {
+            final Map<Object, InstanceWrapper> cur = new HashMap<>(instances);
+            for(final Object key: cur.keySet()) {
+                final InstanceWrapper iw = instances.remove(key);
+                if(iw != null) {
+                    Object mp;
+                    do {
+                        mp = iw.getExclusive();
+                    } while(mp == null);
+
+                    if(LOGGER.isDebugEnabled())
+                        LOGGER.debug("[{}]: Passivating and removing Mp for {}. {} remaining", clusterId, key, instances.size());
+
+                    try {
+                        prototype.passivate(mp);
+                    } catch(final Throwable e) {
+                        // even if passivate throws an exception, if the eviction check returned 'true' then
+                        // we need to remove the instance.
+                        LOGGER.warn("Checking the eviction status/passivating of the Mp "
+                            + SafeString.objectDescription(mp) + " resulted in an exception.", e);
+                    }
+
+                    statCollector.messageProcessorDeleted(key);
+                }
+            }
+        }
     }
 
     @Override
@@ -266,7 +299,7 @@ public class LockingContainer extends Container {
                 if(wrapper != null) {
                     final Object instance = wrapper.getExclusive();
                     if(instance != null) { // null indicates we didn't get the lock
-                        try {
+                        try(QuietCloseable qc = () -> wrapper.releaseLock();) {
                             if(wrapper.isEvicted()) {
                                 // if we're not blocking then we need to just return a failure. Otherwise we want to try
                                 // again because eventually the current Mp will be passivated and removed from the container
@@ -276,8 +309,6 @@ public class LockingContainer extends Container {
                             } else {
                                 invokeOperationAndHandleDispose(wrapper.getInstance(), Operation.handle, new KeyedMessage(messageKey, actualMessage));
                             }
-                        } finally {
-                            wrapper.releaseLock();
                         }
                     } else { // ... we didn't get the lock
                         if(LOGGER.isTraceEnabled())

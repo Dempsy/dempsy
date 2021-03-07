@@ -332,6 +332,44 @@ public class NonLockingAltContainer extends Container {
     }
 
     @Override
+    public void stop() {
+        super.stop();
+
+        final MutRef<WorkingQueueHolder> mref = new MutRef<>();
+
+        while(instances.size() > 0) {
+            final Set<Object> keys = new HashSet<>(instances.size() + 10);
+            keys.addAll(instances.keySet());
+
+            for(final Object key: keys) {
+                final InstanceWrapper wrapper = instances.get(key);
+
+                if(wrapper != null) { // if the MP still exists
+                    final WorkingQueueHolder mailbox = setIfAbsent(wrapper.mailbox, () -> mref.set(new WorkingQueueHolder(true)));
+                    if(mailbox == null) { // this means I got it.
+
+                        // it was created locked so no one else will be able to drop messages in the mailbox.
+                        final Object instance = wrapper.instance;
+                        try {
+                            prototype.passivate(instance);
+                        } catch(final RuntimeException e) {
+                            LOGGER.warn("Passivating of the Mp " + SafeString.objectDescription(instance) +
+                                " resulted in an exception.", e.getCause());
+                        }
+
+                        instances.remove(key);
+                        if(LOGGER.isDebugEnabled())
+                            LOGGER.debug("[{}]: Passivating Mp for {}. {} remaining", clusterId, key, instances.size());
+                        wrapper.evicted = true;
+                        statCollector.messageProcessorDeleted(key);
+                    }
+                }
+            }
+
+        }
+    }
+
+    @Override
     protected void doevict(final EvictCheck check) {
         if(!check.isGenerallyEvitable() || !isRunning.get())
             return;
@@ -484,7 +522,10 @@ public class NonLockingAltContainer extends Container {
                     } // didn't get the lock
                 } else { // end if mp exists. Otherwise the mp is already gone.
                     iter.remove();
-                    LOGGER.warn("There was an attempt to output a non-existent Mp for key " + SafeString.objectDescription(key));
+                    if(isRunning.get())
+                        LOGGER.warn("There was an attempt to output a non-existent Mp for key " + SafeString.objectDescription(key));
+                    else
+                        break;
                 }
             } // loop over every mp
         } // end while there are still Mps that haven't had output invoked.
@@ -602,5 +643,4 @@ public class NonLockingAltContainer extends Container {
             return wrapper;
         }
     }
-
 }
