@@ -248,6 +248,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
             try {
                 startEvictionThread();
             } catch(final SchedulerException e) {
+                LOGGER.error("Failed to start eviction checking scheduler", e);
                 throw new DempsyException("Failed to start eviction checking scheduler", e, false);
             }
         }
@@ -441,20 +442,25 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     private void startEvictionThread() throws SchedulerException {
-        if(0 == evictionCycleTime || null == evictionTimeUnit) {
-            LOGGER.warn("Eviction Thread cannot start with zero cycle time or null TimeUnit {} {}", evictionCycleTime, evictionTimeUnit);
-            return;
-        }
+        // There seems to be a bug in Quartz where getting the default scheduler causes a failure
+        // when done in parallel.
+        synchronized(StdSchedulerFactory.class) {
 
-        if(prototype != null && prototype.isEvictionSupported()) {
-            final JobBuilder jobBuilder = JobBuilder.newJob(EvictionCheckJob.class);
-            final JobDetail jobDetail = jobBuilder.build();
-            jobDetail.getJobDataMap().put(EVICTION_CHECK_JOB_NAME, this);
+            if(0 == evictionCycleTime || null == evictionTimeUnit) {
+                LOGGER.warn("Eviction Thread cannot start with zero cycle time or null TimeUnit {} {}", evictionCycleTime, evictionTimeUnit);
+                return;
+            }
 
-            final Trigger trigger = QuartzHelper.getSimpleTrigger(evictionTimeUnit, (int)evictionCycleTime, true);
-            evictionScheduler = StdSchedulerFactory.getDefaultScheduler();
-            evictionScheduler.scheduleJob(jobDetail, trigger);
-            evictionScheduler.start();
+            if(prototype != null && prototype.isEvictionSupported()) {
+                final JobBuilder jobBuilder = JobBuilder.newJob(EvictionCheckJob.class);
+                final JobDetail jobDetail = jobBuilder.build();
+                jobDetail.getJobDataMap().put(EVICTION_CHECK_JOB_NAME, this);
+
+                final Trigger trigger = QuartzHelper.getSimpleTrigger(evictionTimeUnit, (int)evictionCycleTime, true);
+                evictionScheduler = StdSchedulerFactory.getDefaultScheduler();
+                evictionScheduler.scheduleJob(jobDetail, trigger);
+                evictionScheduler.start();
+            }
         }
     }
 

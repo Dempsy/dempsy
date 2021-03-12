@@ -29,7 +29,7 @@ import net.dempsy.Infrastructure;
 /**
  * The Class CronOutputScheduler.
  * This class executes @Output method on MPs based on provided cron time expression (example: '*\/1 * * * * ?', run job at every one sec)
- * 
+ *
  */
 public class CronOutputSchedule implements OutputScheduler {
 
@@ -72,15 +72,19 @@ public class CronOutputSchedule implements OutputScheduler {
      */
     @Override
     public void start(final Infrastructure infra) {
-        try {
-            final OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
-            final JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
-            final Trigger trigger = outputQuartzHelper.getCronTrigger(cronExpression);
-            scheduler = StdSchedulerFactory.getDefaultScheduler();
-            scheduler.scheduleJob(jobDetail, trigger);
-            scheduler.start();
-        } catch(final SchedulerException se) {
-            LOGGER.error("Error occurred while starting the cron scheduler : " + se.getMessage(), se);
+        // There seems to be a bug in Quartz where getting the default scheduler causes a failure
+        // when done in parallel.
+        synchronized(StdSchedulerFactory.class) {
+            try {
+                final OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
+                final JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
+                final Trigger trigger = outputQuartzHelper.getCronTrigger(cronExpression);
+                scheduler = StdSchedulerFactory.getDefaultScheduler();
+                scheduler.scheduleJob(jobDetail, trigger);
+                scheduler.start();
+            } catch(final SchedulerException se) {
+                LOGGER.error("Error occurred while starting the cron scheduler : " + se.getMessage(), se);
+            }
         }
     }
 

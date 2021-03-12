@@ -96,15 +96,19 @@ public class RelativeOutputSchedule implements OutputScheduler {
      */
     @Override
     public void start(final Infrastructure infra) {
-        try {
-            final OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
-            final JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
-            final Trigger trigger = QuartzHelper.getSimpleTrigger(timeUnit, (int)interval);
-            scheduler = StdSchedulerFactory.getDefaultScheduler();
-            scheduler.scheduleJob(jobDetail, trigger);
-            scheduler.start();
-        } catch(final SchedulerException se) {
-            LOGGER.error("Error occurred while starting the relative scheduler : " + se.getMessage(), se);
+        // There seems to be a bug in Quartz where getting the default scheduler causes a failure
+        // when done in parallel.
+        synchronized(StdSchedulerFactory.class) {
+            try {
+                final OutputQuartzHelper outputQuartzHelper = new OutputQuartzHelper();
+                final JobDetail jobDetail = outputQuartzHelper.getJobDetail(outputInvoker);
+                final Trigger trigger = QuartzHelper.getSimpleTrigger(timeUnit, (int)interval);
+                scheduler = StdSchedulerFactory.getDefaultScheduler();
+                scheduler.scheduleJob(jobDetail, trigger);
+                scheduler.start();
+            } catch(final SchedulerException se) {
+                LOGGER.error("Error occurred while starting the relative scheduler : " + se.getMessage(), se);
+            }
         }
     }
 
