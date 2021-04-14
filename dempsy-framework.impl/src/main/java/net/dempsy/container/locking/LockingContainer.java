@@ -254,15 +254,6 @@ public class LockingContainer extends Container {
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
     public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
-        if(!isRunningLazy) {
-            if(LOGGER.isDebugEnabled())
-                LOGGER.debug("Dispatch called on stopped container");
-            statCollector.messageFailed(1);
-            if(youOwnMessage)
-                disposition.dispose(keyedMessage.message);
-            return;
-        }
-
         if(keyedMessage == null)
             return; // No. We didn't process the null message
 

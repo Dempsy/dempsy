@@ -332,6 +332,15 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         occLogger.run();
 
+        if(!isRunningLazy) {
+            if(LOGGER.isDebugEnabled())
+                LOGGER.debug("Dispatch called on stopped container");
+            statCollector.messageFailed(1);
+            if(justArrived)
+                disposition.dispose(message.message);
+            return;
+        }
+
         dispatch(message, justArrived);
     }
 
