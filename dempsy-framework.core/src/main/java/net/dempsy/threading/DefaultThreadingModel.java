@@ -244,25 +244,31 @@ public class DefaultThreadingModel implements ThreadingModel {
         private final AtomicLong numLimited;
         private final ExecutorService executor;
         private final long maxNumWaitingLimitedTasks;
+        private final long twiceMaxNumWaitingLimitedTasks;
 
         NonBlockingLimited(final AtomicLong numLimited, final ExecutorService executor, final long maxNumWaitingLimitedTasks) {
             this.numLimited = numLimited;
             this.executor = executor;
             this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+            this.twiceMaxNumWaitingLimitedTasks = 2 * maxNumWaitingLimitedTasks;
         }
 
         @Override
         public void submitLimited(final MessageDeliveryJob r) {
-            // if it just arrived then we limit. Otherwise we just submit.
-            numLimited.incrementAndGet();
+            final long curCount = numLimited.incrementAndGet();
 
-            executor.submit(() -> {
-                final long num = numLimited.decrementAndGet();
-                if(num <= maxNumWaitingLimitedTasks)
-                    doCall(r);
-                else
-                    r.rejected();
-            });
+            if(curCount > twiceMaxNumWaitingLimitedTasks) {
+                LOGGER.warn("We're at twice the number of acceptable pending messages. The system appears to be thread starved. Rejecting new message.");
+                r.rejected();
+            } else {
+                executor.submit(() -> {
+                    final long num = numLimited.decrementAndGet();
+                    if(num <= maxNumWaitingLimitedTasks)
+                        doCall(r);
+                    else
+                        r.rejected();
+                });
+            }
         }
     }
 
