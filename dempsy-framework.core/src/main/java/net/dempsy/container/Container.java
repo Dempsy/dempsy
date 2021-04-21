@@ -206,7 +206,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     public abstract int getMessageWorkingCount();
 
     @Override
-    public void stop() {
+    public synchronized void stop() {
         if(evictionScheduler != null) {
             try {
                 evictionScheduler.shutdown(false);
@@ -223,7 +223,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     @Override
-    public void start(final Infrastructure infra) {
+    public synchronized void start(final Infrastructure infra) {
         if(traceEnabled)
             LOGGER.trace("Container {} maxPendingMessagesPerContainer:", clusterId, maxPendingMessagesPerContainer);
 

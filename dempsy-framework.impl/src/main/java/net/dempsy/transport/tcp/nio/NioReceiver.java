@@ -355,7 +355,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             final SocketChannel channel = (SocketChannel)key.channel();
             final ReturnableBufferOutput buf;
             if(partialRead == null) {
-                buf = NioUtils.get();
+                buf = NioUtils.getReturnableBufferOutput();
                 buf.getBb().limit(2); // set it to read the short for size initially
                 partialRead = buf; // set the partialRead. We'll unset this when we pass it on
             } else

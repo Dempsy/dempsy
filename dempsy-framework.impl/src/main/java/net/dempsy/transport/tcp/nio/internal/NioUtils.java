@@ -21,7 +21,7 @@ public class NioUtils {
     // =============================================================================
     private static ConcurrentLinkedQueue<ReturnableBufferOutput> bufferPool = new ConcurrentLinkedQueue<>();
 
-    public static ReturnableBufferOutput get() {
+    public static ReturnableBufferOutput getReturnableBufferOutput() {
         ReturnableBufferOutput ret = bufferPool.poll();
         if(ret == null)
             ret = new ReturnableBufferOutput();

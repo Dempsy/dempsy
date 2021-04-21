@@ -185,8 +185,8 @@ public class SenderHolder {
 
         final Object toSer = sender.messages.poll();
         if(toSer != null) {
-            final ReturnableBufferOutput header = NioUtils.get();
-            final ReturnableBufferOutput data = NioUtils.get();
+            final ReturnableBufferOutput header = NioUtils.getReturnableBufferOutput();
+            final ReturnableBufferOutput data = NioUtils.getReturnableBufferOutput();
             serialize(sender.serializer, toSer, header, data, sender.addr.messageSizeLimit);
             add(header);
             add(data);
