@@ -265,7 +265,8 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             final ServerSocketChannel serverChannel = (ServerSocketChannel)key.channel();
             final SocketChannel channel = serverChannel.accept();
 
-            LOGGER.trace(thisNode + " is accepting a connection from " + channel.getRemoteAddress());
+            // This only happens when a client connects so info level isn't that bad
+            LOGGER.info(thisNode + " is accepting a connection from " + channel.getRemoteAddress());
 
             reader.newClient(channel);
         }
@@ -332,7 +333,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                     size = ssize;
                 }
             } else {
-                // we already tried to read the short but didn't get enought bytes.
+                // we already tried to read the short but didn't get enough bytes.
                 size = -1; // try again.
             }
 
