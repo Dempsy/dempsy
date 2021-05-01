@@ -67,26 +67,31 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
 
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
-    public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
+    public void dispatch(final KeyedMessage keyedMessage, final Operation op, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(keyedMessage == null)
             return; // No. We didn't process the null message
 
         if(keyedMessage.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
-        final Object actualMessage = youOwnMessage ? keyedMessage.message : disposition.replicate(keyedMessage.message);
+        final boolean callDisposition = !(youOwnMessage || op == Operation.output);
+
+        final Object actualMessage = callDisposition ? disposition.replicate(keyedMessage.message) : keyedMessage.message;
         final Object messageKey = keyedMessage.key;
 
         if(messageKey == null) {
-            disposition.dispose(actualMessage);
+            if(callDisposition)
+                disposition.dispose(actualMessage);
             throw new ContainerException("Message " + objectDescription(actualMessage) + " contains no key.");
         }
 
         if(!inbound.doesMessageKeyBelongToNode(messageKey)) {
-            disposition.dispose(actualMessage);
+            if(callDisposition)
+                disposition.dispose(actualMessage);
             if(LOGGER.isDebugEnabled())
                 LOGGER.debug("Message with key " + SafeString.objectDescription(messageKey) + " sent to wrong container. ");
-            statCollector.messageFailed(1);
+            if(Operation.output != op)
+                statCollector.messageFailed(1);
             return;
         }
 
@@ -113,7 +118,7 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
                         boolean alreadyProcessedDispatched = false;
                         do {
                             {
-                                final LinkedList<KeyedMessage> q = getQueue(box); // spin until I get the queue
+                                final LinkedList<KeyedMessageWithOp> q = getQueue(box); // spin until I get the queue
                                 final int queueLen = q.size();
                                 if(queueLen == 0) { // then we're not doing bulk
                                     if(alreadyProcessedDispatched) {
@@ -123,41 +128,63 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
                                         break; // from the do loop.
                                     }
                                     box.queue.lazySet(q); // put the queue back so new messages can begin building
-                                    invokeOperationAndHandleDispose(wrapper.instance, Operation.handle, new KeyedMessage(messageKey, actualMessage));
+                                    invokeOperationAndHandleDispose(wrapper.instance, op, new KeyedMessage(messageKey, actualMessage));
                                     numBeingWorked.getAndDecrement();
                                 } else if(queueLen == 1 && alreadyProcessedDispatched) {
                                     // in this case we have 1 message to dispatch and it's on the queue.
-                                    final KeyedMessage toProcess = q.removeFirst();
+                                    final KeyedMessageWithOp toProcess = q.removeFirst();
                                     // put the empty queue back so new messages can begin building
                                     box.queue.lazySet(q);
-                                    invokeOperationAndHandleDispose(wrapper.instance, Operation.handle, toProcess);
+                                    invokeOperationAndHandleDispose(wrapper.instance, toProcess.op, toProcess);
                                     numBeingWorked.getAndDecrement();
                                 } else { // bulk - we'll have at least 2 messages
                                     // =================================================
                                     // copy the queue into toProcess so we can return the queue.
                                     // =================================================
+
                                     // Set toProcess using the fastest means we can.
-                                    final KeyedMessage[] toProcessArr;
+                                    final KeyedMessageWithOp[] toProcessArr;
+                                    KeyedMessageWithOp nextOutput = null;
                                     if(alreadyProcessedDispatched) { // don't add the currently dispatched to the list
                                                                      // since we already did it
-                                        toProcessArr = new KeyedMessage[queueLen];
-                                        for(int qi = 0; qi < queueLen; qi++)
-                                            toProcessArr[qi] = q.removeFirst();
+                                        toProcessArr = new KeyedMessageWithOp[queueLen];
+                                        for(int qi = 0; qi < queueLen; qi++) {
+                                            final KeyedMessageWithOp cur = q.removeFirst();
+                                            if(cur.op == Operation.output && nextOutput == null)
+                                                nextOutput = cur;
+                                            else
+                                                toProcessArr[qi] = cur;
+                                        }
                                     } else {
-                                        toProcessArr = new KeyedMessage[queueLen + 1];
-                                        for(int qi = 0; qi < queueLen; qi++)
-                                            toProcessArr[qi] = q.removeFirst();
-                                        toProcessArr[queueLen] = new KeyedMessage(messageKey, actualMessage);
+                                        toProcessArr = new KeyedMessageWithOp[queueLen + 1];
+                                        for(int qi = 0; qi < queueLen; qi++) {
+                                            final KeyedMessageWithOp cur = q.removeFirst();
+                                            if(cur.op == Operation.output && nextOutput == null)
+                                                nextOutput = cur;
+                                            else
+                                                toProcessArr[qi] = cur;
+                                        }
+                                        toProcessArr[queueLen] = new KeyedMessageWithOp(messageKey, actualMessage, op);
                                     }
+
+                                    // before we put the queue back, we're going to re-insert the messages if we have an output to do.
+                                    if(nextOutput != null)
+                                        Arrays.stream(toProcessArr).filter(v -> v != null).forEach(v -> q.add(v));
 
                                     // put the empty queue back so new messages can begin building
                                     box.queue.lazySet(q);
 
-                                    final List<KeyedMessage> toProcess = Arrays.asList(toProcessArr);
-                                    // =================================================
+                                    // if we're goint to do any output cycle then we're going to skip the bulk call for now
+                                    if(nextOutput != null) {
+                                        invokeOperationAndHandleDispose(wrapper.instance, nextOutput.op, nextOutput);
+                                        numBeingWorked.getAndDecrement();
+                                    } else {
+                                        final List<KeyedMessage> toProcess = Arrays.asList(toProcessArr);
+                                        // =================================================
 
-                                    invokeBulkHandleAndHandleDispose(wrapper.instance, toProcess);
-                                    numBeingWorked.addAndGet(-toProcess.size());
+                                        invokeBulkHandleAndHandleDispose(wrapper.instance, toProcess);
+                                        numBeingWorked.addAndGet(-toProcess.size());
+                                    }
                                 }
                                 alreadyProcessedDispatched = true;
                             }
@@ -165,7 +192,7 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
                             // managed to accumulate a couple additional messages then we'll
                             // loose them if we clear the mailbox
                             {
-                                final LinkedList<KeyedMessage> q = getQueue(box);
+                                final LinkedList<KeyedMessageWithOp> q = getQueue(box);
                                 if(q.size() == 0) {
                                     // We must leave the queue out in case another thread is interrogating
                                     // the mailbox in order to drop more messages into it. If the queue is
@@ -181,10 +208,10 @@ public class NonLockingAltBulkContainer extends NonLockingAltContainer {
                     } else {
                         // we didn't get exclusive access so let's see if we can add the message to the mailbox
                         // make one try at putting the message in the mailbox.
-                        final LinkedList<KeyedMessage> q = mailbox.queue.getAndSet(null);
+                        final LinkedList<KeyedMessageWithOp> q = mailbox.queue.getAndSet(null);
 
                         if(q != null) { // I got it!
-                            q.add(new KeyedMessage(messageKey, actualMessage));
+                            q.add(new KeyedMessageWithOp(messageKey, actualMessage, op));
                             mailbox.queue.lazySet(q);
                         } else {
                             // see if we're evicted.

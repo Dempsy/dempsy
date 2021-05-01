@@ -25,11 +25,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.Rule;
 import org.junit.Test;
 
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
 import net.dempsy.container.Container;
+import net.dempsy.container.Container.Operation;
 import net.dempsy.container.ContainerException;
 import net.dempsy.container.locking.LockingContainer.InstanceWrapper;
 import net.dempsy.container.mocks.DummyInbound;
@@ -48,7 +50,9 @@ import net.dempsy.messages.MessageResourceManager;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.monitoring.basic.BasicClusterStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
+import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.util.TestInfrastructure;
+import net.dempsy.utils.test.CloseableRule;
 
 public class TestInstanceManager {
 
@@ -240,6 +244,14 @@ public class TestInstanceManager {
     BasicClusterStatsCollector statsCollector;
     BasicNodeStatsCollector nodeStats;
 
+    DefaultThreadingModel tm = null;
+
+    @Rule public CloseableRule t = new CloseableRule(() -> {
+        if(tm != null)
+            tm.close();
+        tm = null;
+    });
+
     @SuppressWarnings("resource")
     public LockingContainer setupContainer(final MessageProcessorLifecycle<?> prototype) throws ContainerException {
         dispatcher = new DummyDispatcher();
@@ -249,7 +261,11 @@ public class TestInstanceManager {
         container = (LockingContainer)new LockingContainer().setMessageProcessor(prototype).setClusterId(new ClusterId("test", "test"));
         container.setDispatcher(dispatcher);
         container.setInbound(new DummyInbound());
-        container.start(new TestInfrastructure(null, null) {
+
+        tm = new DefaultThreadingModel(TestInstanceManager.class.getName());
+        tm.start();
+
+        container.start(new TestInfrastructure(tm) {
 
             @Override
             public BasicClusterStatsCollector getClusterStatsCollector(final ClusterId clusterId) {
@@ -285,7 +301,7 @@ public class TestInstanceManager {
 
             // dispatch the message
             // wrapper.run();
-            manager.dispatch(message, true);
+            manager.dispatch(message, Operation.handle, true);
             assertEquals("instance activated", 1, instance.activationCount);
             assertTrue("real activation time", instance.activationTime > 0);
             assertSame("instance received message", message.message, instance.messages.get(0));
@@ -311,7 +327,7 @@ public class TestInstanceManager {
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
-            manager.dispatch(message1, true);
+            manager.dispatch(message1, Operation.handle, true);
             final CombinedMP instance = (CombinedMP)wrapper1.getInstance();
 
             assertEquals("instance was created", 1, manager.getProcessorCount());
@@ -325,7 +341,7 @@ public class TestInstanceManager {
 
             final KeyedMessageWithType message2 = km(new MessageOne(123));
             final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key, message2.message);
-            manager.dispatch(message2, true);
+            manager.dispatch(message2, Operation.handle, true);
             assertSame("same wrapper returned for second message", wrapper1, wrapper2);
             assertEquals("no other instance was created", 1, manager.getProcessorCount());
 
@@ -348,12 +364,12 @@ public class TestInstanceManager {
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key, message1.message);
-            manager.dispatch(message1, true);
+            manager.dispatch(message1, Operation.handle, true);
             assertEquals("instance was created", 1, manager.getProcessorCount());
             final KeyedMessageWithType message2 = km(new MessageOne(123));
             assertSame("same wrapper returned for second message",
                 wrapper, manager.getInstanceForKey(message2.key, message2.message));
-            manager.dispatch(message2, true);
+            manager.dispatch(message2, Operation.handle, true);
 
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
             assertEquals("no other instance was created", 1, manager.getProcessorCount());
@@ -379,7 +395,7 @@ public class TestInstanceManager {
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key, message1.message);
-            manager.dispatch(message1, true);
+            manager.dispatch(message1, Operation.handle, true);
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
 
             assertEquals("instance was created", 1, manager.getProcessorCount());
@@ -393,7 +409,7 @@ public class TestInstanceManager {
 
             final KeyedMessageWithType message2 = km(new MessageTwo(123));
             assertSame("same wrapper returned for second message", wrapper, manager.getInstanceForKey(message2.key, message2.message));
-            manager.dispatch(message2, true);
+            manager.dispatch(message2, Operation.handle, true);
             assertEquals("no other instance was created", 1, manager.getProcessorCount());
 
             assertEquals("no second activation", 1, instance.activationCount);
@@ -414,12 +430,12 @@ public class TestInstanceManager {
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
-            manager.dispatch(message1, true);
+            manager.dispatch(message1, Operation.handle, true);
             final CombinedMP instance1 = (CombinedMP)wrapper1.getInstance();
 
             final KeyedMessageWithType message2 = km(new MessageOne(456));
             final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key, message2.message);
-            manager.dispatch(message2, true);
+            manager.dispatch(message2, Operation.handle, true);
             final CombinedMP instance2 = (CombinedMP)wrapper2.getInstance();
 
             assertEquals("instances were created", 2, manager.getProcessorCount());
@@ -444,10 +460,10 @@ public class TestInstanceManager {
             // we need to dispatch messages to create MP instances
             final KeyedMessageWithType message1 = km(new MessageOne(1));
             final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
-            manager.dispatch(message1, true);
+            manager.dispatch(message1, Operation.handle, true);
             final KeyedMessageWithType message2 = km(new MessageOne(2));
             final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key, message2.message);
-            manager.dispatch(message2, true);
+            manager.dispatch(message2, Operation.handle, true);
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             manager.outputPass();
@@ -472,8 +488,8 @@ public class TestInstanceManager {
             // we need to dispatch messages to create MP instances
             final KeyedMessageWithType message1 = km(new MessageOne(1));
             final KeyedMessageWithType message2 = km(new MessageOne(2));
-            manager.dispatch(message1, true);
-            manager.dispatch(message2, true);
+            manager.dispatch(message1, Operation.handle, true);
+            manager.dispatch(message2, Operation.handle, true);
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             manager.invokeOutput();
@@ -491,8 +507,8 @@ public class TestInstanceManager {
         // we need to dispatch messages to create MP instances
         final KeyedMessageWithType message1 = km(new MessageOne(1));
         final KeyedMessageWithType message2 = km(new MessageOne(2));
-        manager.dispatch(message1, true);
-        manager.dispatch(message2, true);
+        manager.dispatch(message1, Operation.handle, true);
+        manager.dispatch(message2, Operation.handle, true);
         assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
         manager.invokeOutput();
@@ -510,7 +526,7 @@ public class TestInstanceManager {
 
             final KeyedMessageWithType message = km(new MessageOne(123));
             final InstanceWrapper wrapper = manager.getInstanceForKey(message.key, message.message);
-            manager.dispatch(message, true);
+            manager.dispatch(message, Operation.handle, true);
             assertEquals("instance was created", 1, manager.getProcessorCount());
 
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
@@ -564,7 +580,7 @@ public class TestInstanceManager {
     public void testMpThrows() throws Exception {
         try(final LockingContainer dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
 
-            dispatcher.dispatch(km(new MessageOne(123)), true);
+            dispatcher.dispatch(km(new MessageOne(123)), Operation.handle, true);
 
             assertEquals(1, ((ClusterMetricGetters)statsCollector).getMessageFailedCount());
         }

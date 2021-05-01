@@ -23,8 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -105,10 +103,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     protected ClusterStatsCollector statCollector;
     protected Set<String> messageTypes;
 
-    private ExecutorService outputExecutorService = null;
-    protected int outputConcurrency = -1;
-    private final AtomicLong outputThreadNum = new AtomicLong();
-
     protected AtomicInteger numPending = new AtomicInteger(0);
     protected int maxPendingMessagesPerContainer = Cluster.DEFAULT_MAX_PENDING_MESSAGES_PER_CONTAINER;
 
@@ -121,7 +115,14 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     }
 
     public enum Operation {
-        handle, output, bulk
+        handle(true), output(false), bulk(true);
+
+        public final boolean handlesMessage;
+
+        Operation(final boolean handlesMessage) {
+            this.handlesMessage = handlesMessage;
+        }
+
     }
 
     // ----------------------------------------------------------------------------
@@ -215,9 +216,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
             }
         }
 
-        // the following will close up any output executor that might be running
-        stopOutput();
-
         isRunning.set(false);
         isRunningLazy = false;
     }
@@ -258,10 +256,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         messageTypes = ((MessageProcessorLifecycle<?>)prototype).messagesTypesHandled();
         if(messageTypes == null || messageTypes.size() == 0)
             throw new ContainerException("The cluster " + clusterId + " appears to have a MessageProcessor with no messageTypes defined.");
-
-        if(outputConcurrency > 1)
-            outputExecutorService = Executors.newFixedThreadPool(outputConcurrency,
-                r -> new Thread(r, this.getClass().getSimpleName() + "-Output-" + outputThreadNum.getAndIncrement()));
 
         // check the container support for bulk
         if(prototype.isBulkDeliverySupported() && !containerSupportsBulkProcessing())
@@ -315,10 +309,10 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         return new ContainerSpecificInternal();
     }
 
-    public void dispatch(final KeyedMessage message, final ContainerSpecific cs, final boolean justArrived)
+    public void dispatch(final KeyedMessage message, final Operation op, final ContainerSpecific cs, final boolean justArrived)
         throws IllegalArgumentException, ContainerException {
 
-        if(cs != null) {
+        if(cs != null && Operation.output != op) {
             final int num = numPending.decrementAndGet(); // dec first.
 
             if(num > maxPendingMessagesPerContainer) { // we just vent the message.
@@ -335,19 +329,20 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         if(!isRunningLazy) {
             if(LOGGER.isDebugEnabled())
                 LOGGER.debug("Dispatch called on stopped container");
-            statCollector.messageFailed(1);
-            if(justArrived)
+            if(op.handlesMessage)
+                statCollector.messageFailed(1);
+            if(justArrived && Operation.output != op)
                 disposition.dispose(message.message);
             return;
         }
 
-        dispatch(message, justArrived);
+        dispatch(message, op, justArrived);
     }
 
     // this is called directly from tests but shouldn't be accessed otherwise.
     //
     // implementations MUST handle the disposition
-    public abstract void dispatch(final KeyedMessage message, boolean youOwnMessage) throws IllegalArgumentException, ContainerException;
+    public abstract void dispatch(final KeyedMessage message, Operation op, boolean youOwnMessage) throws IllegalArgumentException, ContainerException;
 
     protected abstract void doevict(EvictCheck check);
 
@@ -375,27 +370,11 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         this.evictionTimeUnit = timeUnit;
     }
 
-    protected ExecutorService getOutputExecutorService() {
-        return outputExecutorService;
-    }
-
-    @Override
-    public void setOutputConcurrency(final int concurrency) {
-        outputConcurrency = concurrency;
-    }
-
     private class ContainerSpecificInternal implements ContainerSpecific {
         @Override
         public void messageBeingDiscarded() {
             numPending.decrementAndGet();
         }
-    }
-
-    private void stopOutput() {
-        if(outputExecutorService != null)
-            outputExecutorService.shutdown();
-
-        outputExecutorService = null;
     }
 
     // =======================================================================================
@@ -717,4 +696,72 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         }
         return result;
     }
+
+    private static final Object dummy = new Object();
+
+    public class OutputMessageJob implements MessageDeliveryJob {
+
+        final Container container;
+        final KeyedMessage message;
+        final AtomicLong counter;
+
+        public OutputMessageJob(final Container container, final Object key, final AtomicLong counter) {
+            this.container = container;
+            this.message = new KeyedMessage(key, dummy);
+            this.counter = counter;
+        }
+
+        @Override
+        public boolean containersCalculated() {
+            return true;
+        }
+
+        @Override
+        public ContainerJobMetadata[] containerData() {
+            return new ContainerJobMetadata[] {new ContainerJobMetadata(container, null)};
+        }
+
+        @Override
+        public void calculateContainers() {}
+
+        @Override
+        public void rejected() {
+            counter.decrementAndGet();
+            LOGGER.error("An output cycle job was rejected but this shouldn't be possible.");
+        }
+
+        @Override
+        public void executeAllContainers() {
+            LOGGER.trace("output executing on {} with key {}", clusterId, message.key);
+            try(QuietCloseable qc = () -> counter.decrementAndGet();) {
+                container.dispatch(message, Operation.output, null, false);
+            }
+        }
+
+        private class CJ implements ContainerJob {
+            @Override
+            public void execute(final ContainerJobMetadata jobData) {
+                LOGGER.trace("output executing on {} with key {}", clusterId, message.key);
+                try(QuietCloseable qc = () -> counter.decrementAndGet();) {
+                    jobData.container.dispatch(message, Operation.output, jobData.containerSpecificData, false);
+                }
+            }
+
+            @Override
+            public void reject(final ContainerJobMetadata jobData) {
+                counter.decrementAndGet();
+                LOGGER.error("An output cycle job was rejected but this shouldn't be possible.");
+            }
+        }
+
+        @Override
+        public List<ContainerJob> individuate() {
+            return List.of(new CJ());
+        }
+
+        @Override
+        public void individuatedJobsComplete() {}
+
+    }
+
 }

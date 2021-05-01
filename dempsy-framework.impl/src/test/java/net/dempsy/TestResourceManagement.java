@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.Serializable;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -50,7 +51,7 @@ public class TestResourceManagement extends DempsyBaseTest {
     public static String readBible() throws IOException {
         final InputStream is = new GZIPInputStream(new BufferedInputStream(WordProducer.class.getClassLoader().getResourceAsStream(wordResource)));
         final StringWriter writer = new StringWriter();
-        IOUtils.copy(is, writer);
+        IOUtils.copy(is, writer, StandardCharsets.UTF_8);
         return writer.toString();
     }
 
@@ -181,7 +182,7 @@ public class TestResourceManagement extends DempsyBaseTest {
                 while(isRunning.get() && !done.get()) {
                     // obtain data from an external source
                     final String wordString = getNextWordFromSoucre();
-                    try (Word word = new Word(wordString);) {
+                    try(Word word = new Word(wordString);) {
                         dispatcher.dispatchAnnotated(word, resourceManager);
                         numDispatched++;
                         if(numDispatched % 10000 == 0)
@@ -190,7 +191,6 @@ public class TestResourceManagement extends DempsyBaseTest {
                         LOGGER.error("Failed to dispatch", e);
                     }
                 }
-                System.out.println();
             } finally {
                 stopped.set(true);
             }
@@ -293,42 +293,50 @@ public class TestResourceManagement extends DempsyBaseTest {
     }
 
     private void executeSimpleWordCountTest(final String[][] ctxs, final String testName) throws Throwable {
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
-            runCombos(testName, ctxs, n -> {
-                clear();
-                try {
-                    final List<NodeManagerWithContext> nodes = n.nodes;
-                    final NodeManager manager1 = nodes.get(0).manager;
+            runCombos(testName, ctxs, new TestToRun() {
+                @Override
+                public void test(final Nodes n) throws Exception {
+                    clear();
+                    try {
+                        final List<NodeManagerWithContext> nodes = n.nodes;
+                        final NodeManager manager1 = nodes.get(0).manager;
 
-                    // wait until I can reach the cluster from the adaptor.
-                    assertTrue(poll(o -> manager1.getRouter().allReachable("test-cluster1").size() == 1));
+                        // wait until I can reach the cluster from the adaptor.
+                        assertTrue(poll(o -> manager1.getRouter().allReachable("test-cluster1").size() == 1));
 
-                    final ClassPathXmlApplicationContext ctx = nodes.get(0).ctx;
+                        final ClassPathXmlApplicationContext ctx = nodes.get(0).ctx;
 
-                    final WordProducer adaptor;
-                    final ClusterMetricGetters stats;
+                        final WordProducer adaptor;
+                        final ClusterMetricGetters stats;
 
-                    WordProducer.latch.countDown();
+                        WordProducer.latch.countDown();
 
-                    adaptor = ctx.getBean(WordProducer.class);
-                    // somtimes there's 1 node, sometimes there's 2
-                    final NodeManager manager2 = nodes.size() > 1 ? nodes.get(1).manager : manager1;
-                    stats = (ClusterMetricGetters)manager2.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
+                        adaptor = ctx.getBean(WordProducer.class);
+                        // somtimes there's 1 node, sometimes there's 2
+                        final NodeManager manager2 = nodes.size() > 1 ? nodes.get(1).manager : manager1;
+                        stats = (ClusterMetricGetters)manager2.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
 
-                    assertTrue(poll(o -> adaptor.done.get()));
-                    assertTrue(poll(o -> {
-                        // System.out.println("" + adaptor.numDispatched + " == " + stats.getProcessedMessageCount());
-                        return adaptor.numDispatched == stats.getProcessedMessageCount() + stats.getMessageDiscardedCount();
-                    }));
+                        assertTrue(poll(o -> adaptor.done.get()));
+                        assertTrue(poll(o -> {
+                            // System.out.println("" + adaptor.numDispatched + " == " + stats.getProcessedMessageCount());
+                            return adaptor.numDispatched == stats.getProcessedMessageCount() + stats.getMessageDiscardedCount();
+                        }));
 
-                    // check that all of the Word instances have been freed
-                    Word.allWords.forEach(w -> assertFalse(w.amIOpen));
-                    Word.allWords.forEach(w -> assertEquals(0, w.refCount()));
-                    WordCount.allWordCounts.forEach(w -> assertFalse(w.amIOpen));
-                    WordCount.allWordCounts.forEach(w -> assertEquals(0, w.refCount()));
-                } finally {
+                        // check that all of the Word instances have been freed
+                        Word.allWords.forEach(w -> assertFalse(w.amIOpen));
+                        Word.allWords.forEach(w -> assertEquals(0, w.refCount()));
+                        WordCount.allWordCounts.forEach(w -> assertFalse(w.amIOpen));
+                        WordCount.allWordCounts.forEach(w -> assertEquals(0, w.refCount()));
+                    } finally {
+                        clear();
+                    }
+                }
+
+                @Override
+                public void postShutdown() throws InterruptedException {
                     clear();
                 }
             });

@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 import net.dempsy.Manager;
 import net.dempsy.ServiceTracker;
 import net.dempsy.config.ClusterId;
+import net.dempsy.container.Container.Operation;
 import net.dempsy.container.altnonlocking.NonLockingAltContainer;
 import net.dempsy.container.locking.LockingContainer;
 import net.dempsy.container.mocks.DummyInbound;
@@ -179,12 +180,12 @@ public class TestContainerLoadHandling {
                 if(numMsg < 0) {
                     while(stillRunning) {
                         final KeyedMessage message = messages[random.nextInt(messages.length)];
-                        mpc.dispatch(message, true);
+                        mpc.dispatch(message, Operation.handle, true);
                     }
                 } else {
                     for(int i = 0; i < numMsg; i++) {
                         final KeyedMessage message = messages[random.nextInt(messages.length)];
-                        mpc.dispatch(message, true);
+                        mpc.dispatch(message, Operation.handle, true);
                     }
                 }
             } catch(final Exception e) {

@@ -4,8 +4,9 @@ import static net.dempsy.config.ConfigLogger.logConfig;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -39,7 +40,8 @@ public class DefaultThreadingModel implements ThreadingModel {
     public static final String CONFIG_KEY_BLOCKING = "blocking";
     public static final String DEFAULT_BLOCKING = "false";
 
-    private ExecutorService executor = null;
+    private ThreadPoolExecutor executor = null;
+    private LinkedBlockingDeque<Runnable> priorityQueue = null;
 
     private final AtomicLong numLimited = new AtomicLong(0);
     private long maxNumWaitingLimitedTasks;
@@ -59,7 +61,7 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     private final Runnable occLogger = OccasionalRunnable.staticOccasionalRunnable(LOG_QUEUE_LEN_MESSAGE_COUNT,
         () -> LOGGER.debug("Total messages pending on " + DefaultThreadingModel.class.getSimpleName() + ": {}",
-            ((ThreadPoolExecutor)executor).getQueue().size()));
+            executor.getQueue().size()));
 
     private DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
         this.nameSupplier = nameSupplier;
@@ -141,6 +143,8 @@ public class DefaultThreadingModel implements ThreadingModel {
         return this;
     }
 
+    public static interface PriorityRunnable extends Runnable {}
+
     @Override
     public synchronized DefaultThreadingModel start() {
         logConfig(LOGGER, "Threading Model", DefaultThreadingModel.class.getName());
@@ -157,7 +161,19 @@ public class DefaultThreadingModel implements ThreadingModel {
                                                                                            // then use the other constructor
             threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
         }
-        executor = Executors.newFixedThreadPool(threadPoolSize, r -> new Thread(r, nameSupplier.get()));
+
+        priorityQueue = new LinkedBlockingDeque<Runnable>() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public boolean offer(final Runnable e) {
+                if(e instanceof PriorityRunnable)
+                    return super.offerFirst(e);
+                return super.offer(e);
+            }
+
+        };
+        executor = new ThreadPoolExecutor(threadPoolSize, threadPoolSize, 0L, TimeUnit.MILLISECONDS, priorityQueue, r -> new Thread(r, nameSupplier.get()));
 
         if(blocking) {
             if(maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
@@ -225,6 +241,17 @@ public class DefaultThreadingModel implements ThreadingModel {
     @Override
     public void submit(final MessageDeliveryJob r) {
         executor.submit(() -> r.executeAllContainers());
+    }
+
+    @Override
+    public void submitPrioity(final MessageDeliveryJob r) {
+        executor.submit(
+            new PriorityRunnable() {
+                @Override
+                public void run() {
+                    r.executeAllContainers();
+                }
+            });
     }
 
     @Override

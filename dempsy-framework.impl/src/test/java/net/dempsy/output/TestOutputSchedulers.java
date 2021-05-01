@@ -5,7 +5,6 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -19,7 +18,6 @@ public class TestOutputSchedulers {
     /** The mp container mock. */
     Container container;
     AtomicBoolean outputInvoked = new AtomicBoolean(false);
-    AtomicInteger concurrencySetTo = new AtomicInteger(-1);
 
     /**
      * Sets the up.
@@ -29,7 +27,6 @@ public class TestOutputSchedulers {
     @Before
     public void setUp() throws Exception {
         outputInvoked.set(false);
-        concurrencySetTo.set(-1);
 
         // initializing
         container = new NonLockingAltContainer() {
@@ -37,11 +34,6 @@ public class TestOutputSchedulers {
             @Override
             public void invokeOutput() {
                 outputInvoked.set(true);
-            }
-
-            @Override
-            public void setOutputConcurrency(final int concurrency) {
-                concurrencySetTo.set(concurrency);
             }
         };
     }
@@ -53,7 +45,7 @@ public class TestOutputSchedulers {
      */
     @Test
     public void testRelativeSchedule() throws Exception {
-        try (final RelativeOutputSchedule relativeOutputSchedule = new RelativeOutputSchedule(1, TimeUnit.SECONDS);) {
+        try(final RelativeOutputSchedule relativeOutputSchedule = new RelativeOutputSchedule(1, TimeUnit.SECONDS);) {
             relativeOutputSchedule.setOutputInvoker(container);
             relativeOutputSchedule.start(new TestInfrastructure(null));
             assertTrue(poll(outputInvoked, oi -> oi.get()));
@@ -67,12 +59,10 @@ public class TestOutputSchedulers {
      */
     @Test
     public void testRelativeScheduleWithConcurrency() throws Exception {
-        try (final RelativeOutputSchedule relativeOutputSchedule = new RelativeOutputSchedule(1, TimeUnit.SECONDS);) {
-            relativeOutputSchedule.setConcurrency(5);
+        try(final RelativeOutputSchedule relativeOutputSchedule = new RelativeOutputSchedule(1, TimeUnit.SECONDS);) {
             relativeOutputSchedule.setOutputInvoker(container);
             relativeOutputSchedule.start(new TestInfrastructure(null));
             assertTrue(poll(outputInvoked, oi -> oi.get()));
-            assertTrue(poll(concurrencySetTo, cs -> cs.get() == 5));
         }
     }
 
@@ -83,7 +73,7 @@ public class TestOutputSchedulers {
      */
     @Test
     public void testCronSchedule() throws Exception {
-        try (final CronOutputSchedule cronOutputSchedule = new CronOutputSchedule("0/1 * * * * ?");) {
+        try(final CronOutputSchedule cronOutputSchedule = new CronOutputSchedule("0/1 * * * * ?");) {
             cronOutputSchedule.setOutputInvoker(container);
             cronOutputSchedule.start(new TestInfrastructure(null));
             assertTrue(poll(outputInvoked, oi -> oi.get()));
@@ -97,13 +87,11 @@ public class TestOutputSchedulers {
      */
     @Test
     public void testCronScheduleWithConcurrencySetting() throws Exception {
-        try (final CronOutputSchedule cronOutputSchedule = new CronOutputSchedule("0/1 * * * * ?");) {
-            cronOutputSchedule.setConcurrency(5);
+        try(final CronOutputSchedule cronOutputSchedule = new CronOutputSchedule("0/1 * * * * ?");) {
             cronOutputSchedule.setOutputInvoker(container);
             cronOutputSchedule.start(new TestInfrastructure(null));
             Thread.sleep(1000);
             assertTrue(poll(outputInvoked, oi -> oi.get()));
-            assertTrue(poll(concurrencySetTo, cs -> cs.get() == 5));
         }
     }
 

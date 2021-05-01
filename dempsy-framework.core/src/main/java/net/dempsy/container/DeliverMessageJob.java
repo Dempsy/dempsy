@@ -2,6 +2,7 @@ package net.dempsy.container;
 
 import java.util.Arrays;
 
+import net.dempsy.container.Container.Operation;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.transport.RoutedMessage;
@@ -48,7 +49,7 @@ public abstract class DeliverMessageJob implements MessageDeliveryJob {
         final KeyedMessage km = new KeyedMessage(message.key, message.message);
 
         Arrays.stream(deliveries)
-            .forEach(d -> d.container.dispatch(km, d.containerSpecificData, justArrived));
+            .forEach(d -> d.container.dispatch(km, Operation.handle, d.containerSpecificData, justArrived));
     }
 
     protected void handleDiscardAllContainer() {

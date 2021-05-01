@@ -20,6 +20,7 @@ public class NioUtils {
     // These classes manage the buffer pool used by the readers and clients
     // =============================================================================
     private static ConcurrentLinkedQueue<ReturnableBufferOutput> bufferPool = new ConcurrentLinkedQueue<>();
+    public static final int MAX_BUFFER_POOL_SIZE = 100;
 
     public static ReturnableBufferOutput getReturnableBufferOutput() {
         ReturnableBufferOutput ret = bufferPool.poll();
@@ -108,7 +109,8 @@ public class NioUtils {
             messageStart = -1;
             bb = null;
             flopped = false;
-            bufferPool.offer(this);
+            if(bufferPool.size() < MAX_BUFFER_POOL_SIZE)
+                bufferPool.offer(this);
         }
 
         @Override
@@ -123,5 +125,4 @@ public class NioUtils {
             }
         }
     }
-
 }

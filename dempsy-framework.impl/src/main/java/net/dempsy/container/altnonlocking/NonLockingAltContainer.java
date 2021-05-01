@@ -16,16 +16,14 @@
 
 package net.dempsy.container.altnonlocking;
 
+import static net.dempsy.util.Functional.ignore;
 import static net.dempsy.util.SafeString.objectDescription;
 
+import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -41,6 +39,7 @@ import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.StatsCollector;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.SafeString;
 
 /**
@@ -74,6 +73,8 @@ public class NonLockingAltContainer extends Container {
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     protected final AtomicInteger numBeingWorked = new AtomicInteger(0);
 
+    protected ThreadingModel dempsyThreadingModel = null;
+
     public NonLockingAltContainer() {
         super(LOGGER);
     }
@@ -102,6 +103,8 @@ public class NonLockingAltContainer extends Container {
                 + " This container type does internal queuing. Please use the locking container.");
 
         super.start(infra);
+
+        dempsyThreadingModel = infra.getThreadingModel();
 
         isReady.set(true);
     }
@@ -142,7 +145,7 @@ public class NonLockingAltContainer extends Container {
     // ----------------------------------------------------------------------------
 
     protected static class WorkingQueueHolder {
-        public final AtomicReference<LinkedList<KeyedMessage>> queue;
+        public final AtomicReference<LinkedList<KeyedMessageWithOp>> queue;
 
         public WorkingQueueHolder(final boolean locked) {
             queue = locked ? new AtomicReference<>(null) : new AtomicReference<>(new LinkedList<>());
@@ -207,7 +210,7 @@ public class NonLockingAltContainer extends Container {
         throw new DempsyException("Not running.");
     }
 
-    protected LinkedList<KeyedMessage> getQueue(final WorkingQueueHolder wp) {
+    protected LinkedList<KeyedMessageWithOp> getQueue(final WorkingQueueHolder wp) {
         return waitFor(() -> wp.queue.getAndSet(null));
     }
 
@@ -218,28 +221,47 @@ public class NonLockingAltContainer extends Container {
         return q.removeFirst();
     }
 
+    protected static class KeyedMessageWithOp extends KeyedMessage {
+        public final Operation op;
+
+        public KeyedMessageWithOp(final Object key, final Object message, final Operation op) {
+            super(key, message);
+            this.op = op;
+        }
+
+    }
+
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
-    public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
+    public void dispatch(final KeyedMessage keyedMessage, final Operation op, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(keyedMessage == null)
             return; // No. We didn't process the null message
 
         if(keyedMessage.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch null message.");
 
-        final Object actualMessage = youOwnMessage ? keyedMessage.message : disposition.replicate(keyedMessage.message);
+        // we only use message disposition if we don't own the message (if the message just arrived,
+        // then we do own the message) the AND we're actually handling a message (as opposed to
+        // running an output cycle or an eviction).
+        final boolean callDisposition = !youOwnMessage && op.handlesMessage;
+
+        final Object actualMessage = callDisposition ? disposition.replicate(keyedMessage.message) : keyedMessage.message;
         final Object messageKey = keyedMessage.key;
 
         if(messageKey == null) {
-            disposition.dispose(actualMessage);
+            if(callDisposition)
+                disposition.dispose(actualMessage);
             throw new ContainerException("Message " + objectDescription(actualMessage) + " contains no key.");
         }
 
         if(!inbound.doesMessageKeyBelongToNode(messageKey)) {
-            disposition.dispose(actualMessage);
+            if(callDisposition)
+                disposition.dispose(actualMessage);
             if(LOGGER.isDebugEnabled())
                 LOGGER.debug("Message with key " + SafeString.objectDescription(messageKey) + " sent to wrong container. ");
-            statCollector.messageFailed(1);
+
+            if(Operation.output != op)
+                statCollector.messageFailed(1);
             return;
         }
 
@@ -263,16 +285,20 @@ public class NonLockingAltContainer extends Container {
                     // if mailbox is null then I got it.
                     if(mailbox == null) {
                         // final WorkingQueueHolder box = mref.ref; // can't be null if I got the mailbox
-                        final LinkedList<KeyedMessage> q = getQueue(box); // spin until I get the queue
-                        KeyedMessage toProcess = pushPop(q, new KeyedMessage(messageKey, actualMessage));
+                        final LinkedList<KeyedMessageWithOp> q = getQueue(box); // spin until I get the queue
+
+                        // if this is an output calculation then assume it's in the front of the queue
+                        KeyedMessageWithOp toProcess = op == Operation.output ? new KeyedMessageWithOp(messageKey, actualMessage, op)
+                            : pushPop(q, new KeyedMessageWithOp(messageKey, actualMessage, op));
+
                         box.queue.lazySet(q); // put the queue back
 
                         while(toProcess != null) {
-                            invokeOperationAndHandleDispose(wrapper.instance, Operation.handle, toProcess);
+                            invokeOperationAndHandleDispose(wrapper.instance, toProcess.op, toProcess);
                             numBeingWorked.getAndDecrement();
 
                             // get the next message
-                            final LinkedList<KeyedMessage> queue = getQueue(box);
+                            final LinkedList<KeyedMessageWithOp> queue = getQueue(box);
                             if(queue.size() == 0)
                                 // we need to leave the queue out or another thread can stuff
                                 // a message into it and we'll loose the message when we reset
@@ -288,10 +314,10 @@ public class NonLockingAltContainer extends Container {
                     } else {
                         // we didn't get exclusive access so let's see if we can add the message to the mailbox
                         // make one try at putting the message in the mailbox.
-                        final LinkedList<KeyedMessage> q = mailbox.queue.getAndSet(null); // doesn't use getQueue because getQueue waits for the queue.
+                        final LinkedList<KeyedMessageWithOp> q = mailbox.queue.getAndSet(null); // doesn't use getQueue because getQueue waits for the queue.
 
                         if(q != null) { // I got it!
-                            q.add(new KeyedMessage(messageKey, actualMessage));
+                            q.add(new KeyedMessageWithOp(messageKey, actualMessage, op));
                             mailbox.queue.lazySet(q);
                         } else {
                             // see if we're evicted.
@@ -307,7 +333,8 @@ public class NonLockingAltContainer extends Container {
                 // if we got here then the activate on the Mp explicitly returned 'false'
                 if(LOGGER.isDebugEnabled())
                     LOGGER.debug("the container for " + clusterId + " failed to activate the Mp for " + SafeString.valueOf(prototype));
-                disposition.dispose(actualMessage);
+                if(callDisposition)
+                    disposition.dispose(actualMessage);
                 // we consider this "processed"
                 break; // leave the do/while loop
             }
@@ -427,7 +454,6 @@ public class NonLockingAltContainer extends Container {
         }
     }
 
-    // TODO: Output concurrency blocks normal message handling. Need a means of managing this better.
     // This method MUST NOT THROW
     @Override
     protected void outputPass() {
@@ -435,113 +461,25 @@ public class NonLockingAltContainer extends Container {
             return;
 
         // take a snapshot of the current container state.
-        final LinkedList<Object> toOutput = new LinkedList<>(instances.keySet());
+        final ArrayList<Object> toOutput = new ArrayList<>(instances.keySet());
+        if(toOutput.size() == 0)
+            return;
 
-        final Executor executorService = getOutputExecutorService();
-        final Semaphore taskLock = (executorService != null) ? new Semaphore(outputConcurrency) : null;
+        if(LOGGER.isDebugEnabled())
+            LOGGER.debug("Output pass for {} on {} MPs", clusterId, toOutput.size());
 
-        // This keeps track of the number of concurrently running
-        // output tasks so that this method can wait until they're
-        // all done to return.
-        //
-        // It's also used as a condition variable signaling on its
-        // own state changes.
-        final AtomicLong numExecutingOutputs = new AtomicLong(0);
-
-        final MutRef<WorkingQueueHolder> mref = new MutRef<>();
-
-        // keep going until all of the outputs have been invoked
-        while(toOutput.size() > 0 && isRunning.get()) {
-            for(final Iterator<Object> iter = toOutput.iterator(); iter.hasNext();) {
-                final Object key = iter.next();
-
-                final InstanceWrapper wrapper = instances.get(key);
-
-                if(wrapper != null) { // if the MP still exists
-                    final WorkingQueueHolder mailbox = setIfAbsent(wrapper.mailbox, () -> mref.set(new WorkingQueueHolder(true)));
-                    if(mailbox == null) { // this means I got it.
-                        // it was created locked so no one else will be able to drop messages in the mailbox.
-                        final Semaphore taskSepaphore = taskLock;
-
-                        // This task will release the wrapper's lock.
-                        final Runnable task = new Runnable() {
-
-                            @Override
-                            public void run() {
-                                try {
-                                    if(isRunning.get())
-                                        invokeOperationAndHandleDispose(wrapper.instance, Operation.output, null);
-                                } finally {
-                                    wrapper.mailbox.set(null); // releases this back to the world
-
-                                    // this signals that we're done.
-                                    synchronized(numExecutingOutputs) {
-                                        numExecutingOutputs.decrementAndGet();
-                                        numExecutingOutputs.notifyAll();
-                                    }
-                                    if(taskSepaphore != null)
-                                        taskSepaphore.release();
-                                }
-                            }
-                        };
-
-                        synchronized(numExecutingOutputs) {
-                            numExecutingOutputs.incrementAndGet();
-                        }
-
-                        if(executorService != null) {
-                            try {
-                                taskSepaphore.acquire();
-                                executorService.execute(task);
-                            } catch(final RejectedExecutionException e) {
-                                wrapper.mailbox.set(null); // we never got into the run so we need to release the lock
-                                // this may happen because of a race condition between the
-                                taskSepaphore.release();
-                            } catch(final InterruptedException e) {
-                                // this can happen while blocked in the semaphore.acquire.
-                                // if we're no longer running we should just get out
-                                // of here.
-                                //
-                                // Not releasing the taskSepaphore assumes the acquire never executed.
-                                // if (since) the acquire never executed we also need to release the
-                                // wrapper lock or that Mp will never be usable again.
-                                wrapper.mailbox.set(null); // we never got into the run so we need to release the lock
-                            }
-                        } else
-                            task.run();
-
-                        iter.remove();
-
-                    } // didn't get the lock
-                } else { // end if mp exists. Otherwise the mp is already gone.
-                    iter.remove();
-                    if(isRunning.get())
-                        LOGGER.warn("There was an attempt to output a non-existent Mp for key " + SafeString.objectDescription(key));
-                    else
-                        break;
-                }
-            } // loop over every mp
-        } // end while there are still Mps that haven't had output invoked.
-
-        // =======================================================
-        // now make sure all of the running tasks have completed
-        synchronized(numExecutingOutputs) {
-            while(numExecutingOutputs.get() > 0) {
-                try {
-                    numExecutingOutputs.wait(300);
-                    // If the executor gets shut down we wont know, so we need to check once in a while
-                    if(!isRunning.get())
-                        break;
-                } catch(final InterruptedException e) {
-                    // if we were interupted for a shutdown then just stop
-                    // waiting for all of the threads to finish
-                    if(!isRunning.get())
-                        break;
-                    // otherwise continue checking.
-                }
+        final AtomicLong numOutputJobs = new AtomicLong(0);
+        for(final Object key: toOutput) {
+            final InstanceWrapper wrapper = instances.get(key);
+            // non-null means it still exists
+            if(wrapper != null) {
+                dempsyThreadingModel.submitPrioity(new OutputMessageJob(this, key, numOutputJobs));
+                numOutputJobs.incrementAndGet();
             }
         }
-        // =======================================================
+
+        while(numOutputJobs.get() > 0 && isRunning.get())
+            ignore(() -> Thread.sleep(1));
     }
 
     // ----------------------------------------------------------------------------

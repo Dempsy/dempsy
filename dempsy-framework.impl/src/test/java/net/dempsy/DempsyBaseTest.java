@@ -134,8 +134,8 @@ public abstract class DempsyBaseTest {
     // forget that there's a separate DefaultThreadingModel for
     // each node.
     // ======================================================
-    public static final double TM_CORES_FACTOR = 0.0;
-    public static final int TM_ADDITIONAL_THREADS = 1;
+    public static final double TM_CORES_FACTOR = 0.2;
+    public static final int TM_ADDITIONAL_THREADS = 2;
     public static final long TM_QUEUE_DEPTH_WHEN_LIMITED = 100000L;
     // ======================================================
 
@@ -182,6 +182,8 @@ public abstract class DempsyBaseTest {
             new String[] {"nio","bq"},
             new String[] {"kryo"},
             new Object[][] {
+                // limited = max len set and blocking = false. That means messages will be thrown away.
+                // This could also be called nonblocking.
                 {"limited",(Function<String, ThreadingModel>)(testName) -> new DefaultThreadingModel(testName)
                     .setAdditionalThreads(TM_ADDITIONAL_THREADS)
                     .setCoresFactor(TM_CORES_FACTOR)
@@ -286,6 +288,8 @@ public abstract class DempsyBaseTest {
     @FunctionalInterface
     public static interface TestToRun {
         public void test(Nodes nodes) throws Exception;
+
+        public default void postShutdown() throws Exception {}
     }
 
     @FunctionalInterface
@@ -385,10 +389,15 @@ public abstract class DempsyBaseTest {
             LocalClusterSessionFactory.completeReset();
             BlockingQueueAddress.completeReset();
             ClassTracker.dumpResults();
-
-            // ignore(() -> Thread.sleep(10000));
-            // NioReceiver.acStatus();
         }
+
+        test.postShutdown();
+        System.gc();
+        System.gc();
+        System.gc();
+        System.gc();
+        System.gc();
+        System.gc();
     }
 
     @SuppressWarnings("resource")

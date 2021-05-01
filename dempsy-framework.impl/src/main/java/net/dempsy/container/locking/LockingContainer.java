@@ -16,17 +16,15 @@
 
 package net.dempsy.container.locking;
 
+import static net.dempsy.util.Functional.ignore;
 import static net.dempsy.util.SafeString.objectDescription;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,6 +39,7 @@ import net.dempsy.container.Container;
 import net.dempsy.container.ContainerException;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.StatsCollector;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.SafeString;
 
@@ -71,6 +70,7 @@ public class LockingContainer extends Container {
 
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     private final AtomicInteger numBeingWorked = new AtomicInteger(0);
+    protected ThreadingModel dempsyThreadingModel = null;
 
     public LockingContainer() {
         super(LOGGER);
@@ -91,6 +91,9 @@ public class LockingContainer extends Container {
     @Override
     public void start(final Infrastructure infra) {
         super.start(infra);
+
+        dempsyThreadingModel = infra.getThreadingModel();
+
         isReady.set(true);
     }
 
@@ -253,26 +256,31 @@ public class LockingContainer extends Container {
 
     // this is called directly from tests but shouldn't be accessed otherwise.
     @Override
-    public void dispatch(final KeyedMessage keyedMessage, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
+    public void dispatch(final KeyedMessage keyedMessage, final Operation op, final boolean youOwnMessage) throws IllegalArgumentException, ContainerException {
         if(keyedMessage == null)
             return; // No. We didn't process the null message
 
         if(keyedMessage.message == null)
             throw new IllegalArgumentException("the container for " + clusterId + " attempted to dispatch a null message.");
 
-        final Object actualMessage = youOwnMessage ? keyedMessage.message : disposition.replicate(keyedMessage.message);
+        final boolean callDisposition = !(youOwnMessage || op == Operation.output);
+
+        final Object actualMessage = callDisposition ? disposition.replicate(keyedMessage.message) : keyedMessage.message;
         final Object messageKey = keyedMessage.key;
 
         if(messageKey == null) {
-            disposition.dispose(actualMessage);
+            if(callDisposition)
+                disposition.dispose(actualMessage);
             throw new ContainerException("Message " + objectDescription(actualMessage) + " contains no key.");
         }
 
         if(!inbound.doesMessageKeyBelongToNode(messageKey)) {
-            disposition.dispose(actualMessage);
+            if(callDisposition)
+                disposition.dispose(actualMessage);
             if(LOGGER.isDebugEnabled())
                 LOGGER.debug("Message with key " + SafeString.objectDescription(messageKey) + " sent to wrong container. ");
-            statCollector.messageFailed(1);
+            if(op != Operation.output)
+                statCollector.messageFailed(1);
             return;
         }
 
@@ -298,20 +306,22 @@ public class LockingContainer extends Container {
                                 Thread.yield();
                                 evictedAndBlocking = true; // we're going to try again.
                             } else {
-                                invokeOperationAndHandleDispose(wrapper.getInstance(), Operation.handle, new KeyedMessage(messageKey, actualMessage));
+                                invokeOperationAndHandleDispose(wrapper.getInstance(), op, new KeyedMessage(messageKey, actualMessage));
                             }
                         }
                     } else { // ... we didn't get the lock
                         if(LOGGER.isTraceEnabled())
                             LOGGER.trace("the container for " + clusterId + " failed to obtain lock on " + SafeString.valueOf(prototype));
                         statCollector.messageCollision(actualMessage);
-                        disposition.dispose(actualMessage);
+                        if(callDisposition)
+                            disposition.dispose(actualMessage);
                     }
                 } else {
                     // if we got here then the activate on the Mp explicitly returned 'false'
                     if(LOGGER.isDebugEnabled())
                         LOGGER.debug("the container for " + clusterId + " failed to activate the Mp for " + SafeString.valueOf(prototype));
-                    disposition.dispose(actualMessage);
+                    if(callDisposition)
+                        disposition.dispose(actualMessage);
                     // we consider this "processed"
                     break; // leave the do/while loop
                 }
@@ -405,112 +415,25 @@ public class LockingContainer extends Container {
             return;
 
         // take a snapshot of the current container state.
-        final LinkedList<InstanceWrapper> toOutput = new LinkedList<>(instances.values());
+        final ArrayList<Object> toOutput = new ArrayList<>(instances.keySet());
+        if(toOutput.size() == 0)
+            return;
 
-        Executor executorService = null;
-        Semaphore taskLock = null;
-        executorService = super.getOutputExecutorService();
-        if(executorService != null)
-            taskLock = new Semaphore(outputConcurrency);
+        if(LOGGER.isDebugEnabled())
+            LOGGER.debug("Output pass for {} on {} MPs", clusterId, toOutput.size());
 
-        // This keeps track of the number of concurrently running
-        // output tasks so that this method can wait until they're
-        // all done to return.
-        //
-        // It's also used as a condition variable signaling on its
-        // own state changes.
-        final AtomicLong numExecutingOutputs = new AtomicLong(0);
-
-        // keep going until all of the outputs have been invoked
-        while(toOutput.size() > 0 && isRunning.get()) {
-            for(final Iterator<InstanceWrapper> iter = toOutput.iterator(); iter.hasNext();) {
-                final InstanceWrapper wrapper = iter.next();
-                boolean gotLock = false;
-
-                gotLock = wrapper.tryLock();
-
-                if(gotLock) {
-                    // If we've been evicted then we're on our way out
-                    // so don't do anything else with this.
-                    if(wrapper.isEvicted()) {
-                        iter.remove();
-                        wrapper.releaseLock();
-                        continue;
-                    }
-
-                    final Object instance = wrapper.getInstance(); // only called while holding the lock
-                    final Semaphore taskSepaphore = taskLock;
-
-                    // This task will release the wrapper's lock.
-                    final Runnable task = new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                if(isRunning.get() && !wrapper.isEvicted())
-                                    invokeOperationAndHandleDispose(instance, Operation.output, null);
-                            } finally {
-                                wrapper.releaseLock();
-
-                                // this signals that we're done.
-                                synchronized(numExecutingOutputs) {
-                                    numExecutingOutputs.decrementAndGet();
-                                    numExecutingOutputs.notifyAll();
-                                }
-                                if(taskSepaphore != null)
-                                    taskSepaphore.release();
-                            }
-                        }
-                    };
-
-                    synchronized(numExecutingOutputs) {
-                        numExecutingOutputs.incrementAndGet();
-                    }
-
-                    if(executorService != null) {
-                        try {
-                            taskSepaphore.acquire();
-                            executorService.execute(task);
-                        } catch(final RejectedExecutionException e) {
-                            // this may happen because of a race condition between the
-                            taskSepaphore.release();
-                            wrapper.releaseLock(); // we never got into the run so we need to release the lock
-                        } catch(final InterruptedException e) {
-                            // this can happen while blocked in the semaphore.acquire.
-                            // if we're no longer running we should just get out
-                            // of here.
-                            //
-                            // Not releasing the taskSepaphore assumes the acquire never executed.
-                            // if (since) the acquire never executed we also need to release the
-                            // wrapper lock or that Mp will never be usable again.
-                            wrapper.releaseLock(); // we never got into the run so we need to release the lock
-                        }
-                    } else
-                        task.run();
-
-                    iter.remove();
-                } // end if we got the lock
-            } // end loop over every Mp
-        } // end while there are still Mps that haven't had output invoked.
-
-        // =======================================================
-        // now make sure all of the running tasks have completed
-        synchronized(numExecutingOutputs) {
-            while(numExecutingOutputs.get() > 0) {
-                try {
-                    numExecutingOutputs.wait(300);
-                    // If the executor gets shut down we wont know, so we need to check once in a while
-                    if(!isRunning.get())
-                        break;
-                } catch(final InterruptedException e) {
-                    // if we were interupted for a shutdown then just stop
-                    // waiting for all of the threads to finish
-                    if(!isRunning.get())
-                        break;
-                    // otherwise continue checking.
-                }
+        final AtomicLong numOutputJobs = new AtomicLong(0);
+        for(final Object key: toOutput) {
+            final InstanceWrapper wrapper = instances.get(key);
+            // non-null means it still exists
+            if(wrapper != null) {
+                dempsyThreadingModel.submitPrioity(new OutputMessageJob(this, key, numOutputJobs));
+                numOutputJobs.incrementAndGet();
             }
         }
-        // =======================================================
+
+        while(numOutputJobs.get() > 0)
+            ignore(() -> Thread.sleep(1));
     }
 
     // ----------------------------------------------------------------------------

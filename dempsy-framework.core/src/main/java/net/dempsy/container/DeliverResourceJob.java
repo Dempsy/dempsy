@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import net.dempsy.container.Container.Operation;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.MessageResourceManager;
 import net.dempsy.monitoring.NodeStatsCollector;
@@ -40,7 +41,7 @@ public class DeliverResourceJob extends DeliverMessageJob {
         public void execute(final ContainerJobMetadata jobData) {
             try {
                 final KeyedMessage km = new KeyedMessage(message.key, message.message);
-                jobData.container.dispatch(km, jobData.containerSpecificData, justArrived);
+                jobData.container.dispatch(km, Operation.handle, jobData.containerSpecificData, justArrived);
             } finally {
                 disposition.dispose(message.message);
             }

@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import net.dempsy.container.Container.Operation;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.transport.RoutedMessage;
@@ -32,7 +33,9 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
     public void executeAllContainers() {
         final KeyedMessage km = new KeyedMessage(message.key, message.message);
         Arrays.stream(message.containers)
-            .forEach(i -> containers[i].dispatch(km, null, justArrived));
+            .forEach(i ->
+
+            containers[i].dispatch(km, Operation.handle, null, justArrived));
     }
 
     @Override
@@ -70,7 +73,7 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
         public void execute(final ContainerJobMetadata jobData) {
             final KeyedMessage km = new KeyedMessage(message.key, message.message);
 
-            jobData.container.dispatch(km, jobData.containerSpecificData, justArrived);
+            jobData.container.dispatch(km, Operation.handle, jobData.containerSpecificData, justArrived);
         }
 
         @Override

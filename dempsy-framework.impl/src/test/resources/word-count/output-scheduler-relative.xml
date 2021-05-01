@@ -11,7 +11,6 @@ xmlns:util="http://www.springframework.org/schema/util"
     <bean id="outputScheduler" class="net.dempsy.output.RelativeOutputSchedule">
         <constructor-arg value="10" />
         <constructor-arg value="MILLISECONDS" />
-        <property name="concurrency" value="2" />
     </bean>
     
 </beans>

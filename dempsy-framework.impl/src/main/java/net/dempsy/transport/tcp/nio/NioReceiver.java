@@ -1,6 +1,7 @@
 package net.dempsy.transport.tcp.nio;
 
 import java.io.IOException;
+import java.net.BindException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -90,8 +91,9 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                         + CONFIG_KEY_RECEIVER_NETWORK_IF_NAME + " for " + NioReceiver.class.getPackage().getName()
                         + ". The property will be ignored.");
             }
+            InetAddress bindAddr = null;
             try {
-                InetAddress bindAddr = useLocalHost ? Inet4Address.getLocalHost()
+                bindAddr = useLocalHost ? Inet4Address.getLocalHost()
                     : (ipToBindToProvider == null ?
 
                     // if someone set the variable for explicitly using a particular interface, then use it.
@@ -107,6 +109,8 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                 internal = new NioAddress(bindAddr, internalPort, serId, binding.recvBufferSize, this.maxMessageSize);
 
                 address = resolver.getExternalAddresses(internal);
+            } catch(final BindException be) {
+                throw new DempsyException("Failed trying to bind to " + (bindAddr == null ? "*" : bindAddr.toString()) + ":" + internalPort, be, false);
             } catch(final IOException e) {
                 throw new DempsyException(e, false);
             }

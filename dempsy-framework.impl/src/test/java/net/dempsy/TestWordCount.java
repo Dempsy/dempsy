@@ -12,12 +12,14 @@ import java.io.InputStream;
 import java.io.Serializable;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -25,10 +27,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.io.IOUtils;
+import org.javatuples.Pair;
+import org.javatuples.Triplet;
+import org.javatuples.Tuple;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -69,7 +73,7 @@ public class TestWordCount extends DempsyBaseTest {
     public static String readBible() throws IOException {
         try(final InputStream is = new GZIPInputStream(new BufferedInputStream(WordProducer.class.getClassLoader().getResourceAsStream(wordResource)));
             final StringWriter writer = new StringWriter();) {
-            IOUtils.copy(is, writer);
+            IOUtils.copy(is, writer, StandardCharsets.UTF_8);
             return writer.toString();
         }
     }
@@ -413,6 +417,47 @@ public class TestWordCount extends DempsyBaseTest {
             return true;
     }
 
+    public boolean waitForAllSent(final WordProducer adaptor) throws InterruptedException {
+        // as long as it's progressing we keep waiting.
+        int previous = -1;
+        int next = adaptor.numDispatched;
+        while(next > previous && !adaptor.done.get()) {
+            if(poll(1000, o -> adaptor.done.get()))
+                break;
+            previous = next;
+            next = adaptor.numDispatched;
+        }
+        return poll(o -> adaptor.done.get());
+    }
+
+    // assumption here is that the adaptor is in a separate node
+    // and every OTHER node contains a node stats collector + a series of
+    // cluster stats collectors all in a Tuple.
+    private int allDiscardedMessagesCount(final NodeMetricGetters adaptorStats, final List<Tuple> nodeStats) {
+        return nodeStats.stream()
+            .mapToLong(s -> ((NodeMetricGetters)s.getValue(0)).getDiscardedMessageCount()
+                + s.toList().subList(1, s.getSize()).stream()
+                    .map(o -> (ClusterMetricGetters)o)
+                    .mapToLong(cm -> cm.getMessageDiscardedCount())
+                    .sum())
+            .mapToInt(l -> (int)l)
+            .sum()
+
+            + Optional.ofNullable(adaptorStats).map(a -> a.getMessagesNotSentCount()).orElse(0L).intValue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private <A, B, C> List<Tuple> castToTupleList3(final List<Triplet<A, B, C>> t) {
+        return (List<Tuple>)(Object)t;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <A, B> List<Tuple> castToTupleList2(final List<Pair<A, B>> t) {
+        return (List<Tuple>)(Object)t;
+    }
+
+    // ========================================================================
+
     @Test
     public void testWordCountNoRank() throws Throwable {
         try(@SuppressWarnings("resource")
@@ -443,6 +488,7 @@ public class TestWordCount extends DempsyBaseTest {
                 stats = (ClusterMetricGetters)manager.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
 
                 assertTrue(poll(o -> adaptor.done.get()));
+
                 assertTrue(poll(o -> {
                     // System.out.println("" + adaptor.numDispatched + " == " + stats.getProcessedMessageCount());
                     return adaptor.numDispatched == (stats.getProcessedMessageCount() + stats.getMessageDiscardedCount());
@@ -471,6 +517,9 @@ public class TestWordCount extends DempsyBaseTest {
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountWithRank", (r, c, s, t, ser) -> isContainerOkay(c), ctxs, n -> {
+                final ClusterId countCId = new ClusterId(currentAppName, "test-cluster1");
+                final ClusterId rankCId = new ClusterId(currentAppName, "test-cluster2");
+
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager manager = nodes.get(0).manager;
 
@@ -480,27 +529,24 @@ public class TestWordCount extends DempsyBaseTest {
                 final ClassPathXmlApplicationContext ctx = nodes.get(0).ctx;
 
                 final WordProducer adaptor;
-                final ClusterMetricGetters stats;
 
                 WordProducer.latch.countDown();
 
                 adaptor = ctx.getBean(WordProducer.class);
-                stats = (ClusterMetricGetters)manager.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
-                final NodeMetricGetters nstat = (NodeMetricGetters)manager.getNodeStatsCollector();
 
                 assertTrue(poll(o -> adaptor.done.get()));
-                assertTrue(
-                    poll(o -> {
-                        // System.out.println("" + adaptor.numDispatched + " ==? " + stats.getProcessedMessageCount() + " + " + stats.getMessageDiscardedCount()
-                        // + " + " + nstat.getDiscardedMessageCount());
-                        return adaptor.numDispatched == stats.getProcessedMessageCount() + stats.getMessageDiscardedCount() + nstat.getDiscardedMessageCount();
-                    }));
+
+                final var statsByNode = Triplet.with((NodeMetricGetters)manager.getNodeStatsCollector(),
+                    (ClusterMetricGetters)manager.getClusterStatsCollector(countCId),
+                    (ClusterMetricGetters)manager.getClusterStatsCollector(rankCId));
 
                 // wait until all of the counts are also passed to WordRank
-                final ClusterMetricGetters wrStats = (ClusterMetricGetters)manager
-                    .getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2"));
-                assertTrue(poll(wrStats,
-                    s -> (adaptor.numDispatched - stats.getMessageDiscardedCount()) == (s.getProcessedMessageCount() + s.getMessageDiscardedCount())));
+                assertTrue(poll(o -> {
+                    final int allDiscardedMessagesCount = allDiscardedMessagesCount(null, castToTupleList3(List.of(statsByNode)));
+                    final ClusterMetricGetters rstat = statsByNode.getValue2();
+
+                    return adaptor.numDispatched == allDiscardedMessagesCount + rstat.getDispatchedMessageCount();
+                }));
 
                 stopSystem();
 
@@ -524,19 +570,6 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    public boolean waitForAllSent(final WordProducer adaptor) throws InterruptedException {
-        // as long as it's progressing we keep waiting.
-        int previous = -1;
-        int next = adaptor.numDispatched;
-        while(next > previous && !adaptor.done.get()) {
-            if(poll(1000, o -> adaptor.done.get()))
-                break;
-            previous = next;
-            next = adaptor.numDispatched;
-        }
-        return poll(o -> adaptor.done.get());
-    }
-
     @Test
     public void testWordCountNoRankMultinode() throws Throwable {
         try(@SuppressWarnings("resource")
@@ -551,6 +584,8 @@ public class TestWordCount extends DempsyBaseTest {
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> isElasticRoutingStrategy(r) && isContainerOkay(c), ctxs, n -> {
+                final ClusterId countCId = new ClusterId(currentAppName, "test-cluster1");
+
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager[] manager = Arrays.asList(nodes.get(0).manager, nodes.get(1).manager).toArray(new NodeManager[2]);
                 final ClassPathXmlApplicationContext[] ctx = Arrays.asList(nodes.get(0).ctx, nodes.get(1).ctx)
@@ -563,19 +598,21 @@ public class TestWordCount extends DempsyBaseTest {
                 WordProducer.latch.countDown();
 
                 final WordProducer adaptor = ctx[0].getBean(WordProducer.class);
-                final ClusterMetricGetters[] stats = Arrays.asList(
-                    (ClusterMetricGetters)manager[0].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")),
-                    (ClusterMetricGetters)manager[1].getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
-                    .toArray(new ClusterMetricGetters[2]);
 
                 assertTrue(waitForAllSent(adaptor));
+                assertTrue(poll(o -> adaptor.done.get()));
+
+                final var statsByNode = Arrays.asList(manager).stream()
+                    .map(nm -> Pair.with((NodeMetricGetters)nm.getNodeStatsCollector(),
+                        (ClusterMetricGetters)nm.getClusterStatsCollector(countCId)))
+                    .collect(Collectors.toList());
+
                 assertTrue(poll(o -> {
-                    // System.out.println("" + adaptor.numDispatched + " ==? " + stats[0].getProcessedMessageCount() +
-                    // ", " + stats[1].getProcessedMessageCount()
-                    // + " == " + (stats[0].getProcessedMessageCount() + stats[1].getProcessedMessageCount()));
-                    return adaptor.numDispatched == Arrays.stream(stats)
-                        .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
-                        .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
+                    final int allDiscardedMessagesCount = allDiscardedMessagesCount(null, castToTupleList2(statsByNode));
+
+                    return adaptor.numDispatched == allDiscardedMessagesCount + statsByNode.stream()
+                        .mapToInt(sc -> (int)sc.getValue1().getDispatchedMessageCount())
+                        .sum();
                 }));
             });
 
@@ -605,6 +642,8 @@ public class TestWordCount extends DempsyBaseTest {
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountNoRankMultinode", (r, c, s, t, ser) -> isElasticRoutingStrategy(r) && isContainerOkay(c), ctxs, n -> {
+                final ClusterId countCId = new ClusterId(currentAppName, "test-cluster1");
+
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager[] managers = nodes.stream().map(nm -> nm.manager).toArray(NodeManager[]::new);
 
@@ -614,19 +653,22 @@ public class TestWordCount extends DempsyBaseTest {
                 WordProducer.latch.countDown();
 
                 final WordProducer adaptor = nodes.get(0).ctx.getBean(WordProducer.class);
-                final List<ClusterMetricGetters> stats = Arrays.asList(managers)
-                    .subList(1, managers.length)
-                    .stream()
-                    .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1")))
-                    .map(sc -> (ClusterMetricGetters)sc)
-                    .collect(Collectors.toList());
 
                 waitForAllSent(adaptor);
                 assertTrue(poll(o -> adaptor.done.get()));
+
+                final var statsByNode = Arrays.asList(managers).subList(1, managers.length).stream()
+                    .map(nm -> Pair.with((NodeMetricGetters)nm.getNodeStatsCollector(),
+                        (ClusterMetricGetters)nm.getClusterStatsCollector(countCId)))
+                    .collect(Collectors.toList());
+                final NodeMetricGetters adaptorStats = (NodeMetricGetters)managers[0].getNodeStatsCollector();
+
                 assertTrue(poll(o -> {
-                    return adaptor.numDispatched == stats.stream()
-                        .flatMap(c -> Stream.of(c.getProcessedMessageCount(), c.getMessageDiscardedCount()))
-                        .reduce((c1, c2) -> c1.longValue() + c2.longValue()).get().longValue();
+                    final int allDiscardedMessagesCount = allDiscardedMessagesCount(adaptorStats, castToTupleList2(statsByNode));
+
+                    return adaptor.numDispatched == allDiscardedMessagesCount + statsByNode.stream()
+                        .mapToInt(sc -> (int)sc.getValue1().getDispatchedMessageCount())
+                        .sum();
                 }));
             });
 
@@ -660,6 +702,9 @@ public class TestWordCount extends DempsyBaseTest {
 
             WordProducer.latch = new CountDownLatch(1); // need to make it wait.
             runCombos("testWordCountHomogeneousProcessing", (r, c, s, t, ser) -> isElasticRoutingStrategy(r) && isContainerOkay(c), ctxs, n -> {
+                final ClusterId countCId = new ClusterId(currentAppName, "test-cluster1");
+                final ClusterId rankCId = new ClusterId(currentAppName, "test-cluster2");
+
                 final List<NodeManagerWithContext> nodes = n.nodes;
                 final NodeManager[] managers = nodes.stream().map(nm -> nm.manager).toArray(NodeManager[]::new);
 
@@ -668,27 +713,33 @@ public class TestWordCount extends DempsyBaseTest {
                 assertTrue(poll(o -> managers[0].getRouter().allReachable("test-cluster2").size() == NUM_WC));
 
                 WordProducer.latch.countDown();
+
                 final WordProducer adaptor = nodes.get(0).ctx.getBean(WordProducer.class);
                 waitForAllSent(adaptor);
 
-                // get all of the stats collectors for the ranks.
-                final List<ClusterMetricGetters> rankStats = Arrays.asList(managers)
+                // get all of the stats collectors.
+                final List<Triplet<NodeMetricGetters, ClusterMetricGetters, ClusterMetricGetters>> statsByNode = Arrays.asList(managers)
                     .subList(1, managers.length)
                     .stream()
-                    .map(nm -> nm.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster2")))
-                    .map(sc -> (ClusterMetricGetters)sc)
+                    .map(nm -> Triplet.with((NodeMetricGetters)nm.getNodeStatsCollector(),
+                        (ClusterMetricGetters)nm.getClusterStatsCollector(countCId),
+                        (ClusterMetricGetters)nm.getClusterStatsCollector(rankCId)))
                     .collect(Collectors.toList());
+                final NodeMetricGetters adaptorStats = (NodeMetricGetters)managers[0].getNodeStatsCollector();
 
                 final int totalSent = adaptor.numDispatched;
                 // now wait for the sum of all messages received by the ranking to be the number sent
                 assertTrue(poll(o -> {
                     // System.out.println("" + adaptor.numDispatched + " ==? ");
-                    final int totalRanked = rankStats.stream()
-                        // .peek(sc -> System.out.println(sc.getProcessedMessageCount() +
-                        // ", " + stats[1].getProcessedMessageCount()
-                        // + " == " + (stats[0].getProcessedMessageCount() + stats[1].getProcessedMessageCount())))
-                        .map(sc -> Integer.valueOf((int)sc.getDispatchedMessageCount() + (int)sc.getMessageDiscardedCount()))
-                        .reduce(Integer.valueOf(0), (i1, i2) -> Integer.valueOf(i1.intValue() + i2.intValue())).intValue();
+                    final int allDiscardedMessagesCount = allDiscardedMessagesCount(adaptorStats, castToTupleList3(statsByNode));
+                    final int totalRanked = allDiscardedMessagesCount + statsByNode.stream()
+                        // .peek(sc -> System.out.print("[" +
+                        // adaptorStats.getMessagesNotSentCount() + "," + sc.getValue0().getDiscardedMessageCount() +
+                        // ",c:(" + sc.getValue1().getDispatchedMessageCount() + ", " + sc.getValue1().getMessageDiscardedCount() + ")" +
+                        // ",r:(" + sc.getValue2().getDispatchedMessageCount() + ", " + sc.getValue2().getMessageDiscardedCount() + ")] "))
+                        .mapToInt(sc -> (int)sc.getValue2().getDispatchedMessageCount())
+                        .sum();
+                    System.out.println(": " + totalRanked + " == " + totalSent);
                     return totalRanked == totalSent;
                 }));
 
@@ -788,6 +839,5 @@ public class TestWordCount extends DempsyBaseTest {
                 }
             });
         }
-
     }
 }

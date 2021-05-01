@@ -28,6 +28,8 @@ public interface ThreadingModel extends AutoCloseable {
      */
     public void submitLimited(MessageDeliveryJob r);
 
+    public void submitPrioity(MessageDeliveryJob r);
+
     /**
      * start a daemon process using this ThreadingModel. This defaults to using the
      * newThread call with the runnable and name and starting it. Note, this does NOT

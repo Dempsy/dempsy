@@ -50,17 +50,6 @@ public class RelativeOutputSchedule implements OutputScheduler {
     /** The scheduler. */
     private Scheduler scheduler = null;
 
-    /** Contains the number of threads to set on the {@link OutputInvoker} */
-    private int concurrency = -1;
-
-    public int getConcurrency() {
-        return concurrency;
-    }
-
-    public void setConcurrency(final int concurrency) {
-        this.concurrency = concurrency;
-    }
-
     /**
      * Instantiates a new relative output schedule.
      *
@@ -86,9 +75,6 @@ public class RelativeOutputSchedule implements OutputScheduler {
                 + ". Do you have the same instance of the " + RelativeOutputSchedule.class.getSimpleName() + " being used in more than one container?");
         }
         this.outputInvoker = outputInvoker;
-
-        if(concurrency > 1)
-            outputInvoker.setOutputConcurrency(concurrency);
     }
 
     /**

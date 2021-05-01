@@ -56,6 +56,7 @@ import net.dempsy.NodeManager;
 import net.dempsy.cluster.local.LocalClusterSessionFactory;
 import net.dempsy.config.ClusterId;
 import net.dempsy.config.Node;
+import net.dempsy.container.Container.Operation;
 import net.dempsy.container.altnonlocking.NonLockingAltContainer;
 import net.dempsy.container.locking.LockingContainer;
 import net.dempsy.container.mocks.ContainerTestMessage;
@@ -357,7 +358,7 @@ public class TestContainer {
     public void testWrongTypeMessage() throws Exception {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(new KeyedMessage(kmwt.key, new Object()), true);
+        container.dispatch(new KeyedMessage(kmwt.key, new Object()), Operation.handle, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
     }
 
@@ -367,7 +368,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         throwMeInActivation = new RuntimeException("JustThrowMeDAMMIT!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true);
+        container.dispatch(kmwt, Operation.handle, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
 
@@ -379,7 +380,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new DempsyException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true);
+        container.dispatch(kmwt, Operation.handle, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
@@ -390,7 +391,7 @@ public class TestContainer {
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new RuntimeException("JustThrowMe!");
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
-        container.dispatch(kmwt, true);
+        container.dispatch(kmwt, Operation.handle, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
@@ -513,9 +514,6 @@ public class TestContainer {
     public void testMtInvokeOutput() throws Exception {
         outputMessages = Collections.newSetFromMap(new ConcurrentHashMap<>());
         final int numInstances = 20;
-        final int concurrency = 5;
-
-        container.setOutputConcurrency(concurrency);
 
         final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
         assertNotNull(adaptor.dispatcher);

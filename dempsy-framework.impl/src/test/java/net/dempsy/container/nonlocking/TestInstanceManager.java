@@ -22,11 +22,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.Rule;
 import org.junit.Test;
 
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
 import net.dempsy.container.Container;
+import net.dempsy.container.Container.Operation;
 import net.dempsy.container.ContainerException;
 import net.dempsy.container.altnonlocking.NonLockingAltContainer;
 import net.dempsy.container.mocks.DummyInbound;
@@ -46,7 +48,9 @@ import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.monitoring.basic.BasicClusterStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
+import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.util.TestInfrastructure;
+import net.dempsy.utils.test.CloseableRule;
 
 public class TestInstanceManager {
 
@@ -236,6 +240,12 @@ public class TestInstanceManager {
 
     DummyDispatcher dispatcher;
     BasicClusterStatsCollector statsCollector;
+    DefaultThreadingModel tm = null;
+
+    @Rule public CloseableRule t = new CloseableRule(() -> {
+        if(tm != null)
+            tm.close();
+    });
 
     @SuppressWarnings("resource")
     public Container setupContainer(final MessageProcessorLifecycle<?> prototype) throws ContainerException {
@@ -245,7 +255,11 @@ public class TestInstanceManager {
         manager = new NonLockingAltContainer().setMessageProcessor(prototype).setClusterId(new ClusterId("test", "test"));
         manager.setDispatcher(dispatcher);
         manager.setInbound(new DummyInbound());
-        manager.start(new TestInfrastructure(null, null) {
+
+        tm = new DefaultThreadingModel(TestInstanceManager.class.getName());
+        tm.start();
+
+        manager.start(new TestInfrastructure(tm) {
             BasicNodeStatsCollector nStats = new BasicNodeStatsCollector();
 
             @Override
@@ -271,8 +285,8 @@ public class TestInstanceManager {
             // we need to dispatch messages to create MP instances
             final KeyedMessageWithType message1 = km(new MessageOne(1));
             final KeyedMessageWithType message2 = km(new MessageOne(2));
-            manager.dispatch(message1, true);
-            manager.dispatch(message2, true);
+            manager.dispatch(message1, Operation.handle, true);
+            manager.dispatch(message2, Operation.handle, true);
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             manager.invokeOutput();
@@ -290,8 +304,8 @@ public class TestInstanceManager {
         // we need to dispatch messages to create MP instances
         final KeyedMessageWithType message1 = km(new MessageOne(1));
         final KeyedMessageWithType message2 = km(new MessageOne(2));
-        manager.dispatch(message1, true);
-        manager.dispatch(message2, true);
+        manager.dispatch(message1, Operation.handle, true);
+        manager.dispatch(message2, Operation.handle, true);
         assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
         manager.invokeOutput();
@@ -317,7 +331,7 @@ public class TestInstanceManager {
     public void testMpThrows() throws Exception {
         try(final Container dispatcher = setupContainer(new MessageProcessor<ThrowMe>(new ThrowMe()));) {
 
-            dispatcher.dispatch(km(new MessageOne(123)), true);
+            dispatcher.dispatch(km(new MessageOne(123)), Operation.handle, true);
 
             assertEquals(1, ((ClusterMetricGetters)statsCollector).getMessageFailedCount());
         }

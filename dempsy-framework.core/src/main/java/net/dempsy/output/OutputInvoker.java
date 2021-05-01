@@ -16,10 +16,6 @@
 
 package net.dempsy.output;
 
-import java.util.concurrent.Executor;
-
-import net.dempsy.lifecycle.annotation.Output;
-
 /**
  * This is a server side interface to invoke the @Output methods of MPs.
  * Dempsy will provide an implementation of this interface. During startup,
@@ -37,18 +33,5 @@ public interface OutputInvoker {
      *
      */
     public void invokeOutput();
-
-    /**
-     * If the {@link OutputScheduler} wants the container to run the {@link Output} pass in
-     * a multithreaded manner, then calling this method and setting the <code>concurrency</code>
-     * to greater than <code>1</code> will do that. This method will usually be called
-     * once, at initialization. Each time it's called the {@link Executor} used by the
-     * container will be recreated with all of its attending threads so this method
-     * should <b>not</b> be called with each invokeOutput call.
-     * 
-     * @param concurrency is the number of threads to allow {@link Output} to be run
-     *     simultaneously.
-     */
-    public void setOutputConcurrency(int concurrency);
 
 }

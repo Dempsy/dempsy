@@ -11,9 +11,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -28,6 +30,8 @@ import net.dempsy.container.ContainerJob;
 import net.dempsy.container.ContainerJobMetadata;
 import net.dempsy.container.MessageDeliveryJob;
 
+// TODO: While this handles the maxPendingMessagesPerContainer correctly
+// the maxNumWaitingLimitedTasks is effectively ignored.
 public class OrderedPerContainerThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(OrderedPerContainerThreadingModel.class);
 
@@ -48,7 +52,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     private ExecutorService calcContainersWork = null;
 
-    private final BlockingQueue<MessageDeliveryJobHolder> inqueue = new LinkedBlockingQueue<>();
+    private final BlockingDeque<MessageDeliveryJobHolder> inqueue = new LinkedBlockingDeque<>();
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
     private Thread shuttleThread = null;
 
@@ -231,6 +235,8 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 // and we need to make sure we mark the job as rejected at the container level.
                 final int queueSize = queue.size();
                 if(queueSize > maxPendingMessagesPerContainerX2) {
+                    // TODO: this can reject non-limited. The should be handled using maxNumWaitingLimitedTasks
+                    // and stalling the Shuttle threads
                     final ContainerJobHolder rejectedOld = queue.poll();
                     if(rejectedOld != null) {
                         rejectedOld.reject(container);
@@ -243,7 +249,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
         @Override
         public void run() {
-            int tryCount = 0;
+            long tryCount = 0;
             while(!isStopped.get()) {
                 try {
                     final ContainerJobHolder job = queue.poll();
@@ -431,6 +437,23 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     public void submit(final MessageDeliveryJob job) {
         final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, false, numLimitedX, maxNumWaitingLimitedTasks);
         if(!inqueue.offer(jobh)) {
+            jobh.reject();
+            LOGGER.error("Failed to queue message destined for {}",
+                Optional.ofNullable(job.containerData())
+                    .map(v -> Arrays.stream(v)
+                        .map(c -> c.container)
+                        .filter(c -> c != null)
+                        .map(c -> c.getClusterId())
+                        .map(cid -> cid.toString())
+                        .collect(Collectors.toList()))
+                    .orElse(List.of("null")));
+        }
+    }
+
+    @Override
+    public void submitPrioity(final MessageDeliveryJob job) {
+        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, true, numLimitedX, maxNumWaitingLimitedTasks);
+        if(!inqueue.offerFirst(jobh)) {
             jobh.reject();
             LOGGER.error("Failed to queue message destined for {}",
                 Optional.ofNullable(job.containerData())
