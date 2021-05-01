@@ -452,7 +452,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     @Override
     public void submitPrioity(final MessageDeliveryJob job) {
-        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, true, numLimitedX, maxNumWaitingLimitedTasks);
+        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, false, numLimitedX, maxNumWaitingLimitedTasks);
         if(!inqueue.offerFirst(jobh)) {
             jobh.reject();
             LOGGER.error("Failed to queue message destined for {}",
