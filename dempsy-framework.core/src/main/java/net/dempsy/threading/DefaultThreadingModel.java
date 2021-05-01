@@ -286,6 +286,7 @@ public class DefaultThreadingModel implements ThreadingModel {
 
             if(curCount > twiceMaxNumWaitingLimitedTasks) {
                 LOGGER.warn("We're at twice the number of acceptable pending messages. The system appears to be thread starved. Rejecting new message.");
+                numLimited.decrementAndGet();
                 r.rejected();
             } else {
                 executor.submit(() -> {
