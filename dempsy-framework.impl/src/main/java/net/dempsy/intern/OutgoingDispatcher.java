@@ -83,7 +83,7 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
     }
 
     @Override
-    public void dispatch(final KeyedMessageWithType messageParam, final MessageResourceManager disposer) {
+    public void dispatch(final KeyedMessageWithType messageParam, final MessageResourceManager disposer) throws InterruptedException {
         final boolean traceEnabled = LOGGER.isTraceEnabled();
         if(messageParam == null)
             throw new NullPointerException("Attempt to dispatch a null message.");

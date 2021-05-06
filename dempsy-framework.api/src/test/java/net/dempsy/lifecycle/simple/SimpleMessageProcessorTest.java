@@ -28,7 +28,7 @@ import net.dempsy.messages.KeyedMessageWithType;
 public class SimpleMessageProcessorTest {
     @Test
     public void testMethodHandleWithParameters() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMp(), false);
+        final MessageProcessor helper = new MessageProcessor(MpFactory.make(() -> new TestMp()));
         final TestMp mp = (TestMp)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate", new Object());
@@ -40,7 +40,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleWithNoParameters() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpEmptyActivate(), true);
+        final MessageProcessor helper = new MessageProcessor(MpFactory.make(() -> new TestMpEmptyActivate()));
         final TestMpEmptyActivate mp = (TestMpEmptyActivate)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate", new Object());
@@ -52,7 +52,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleWithOnlyKey() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpOnlyKey(), false);
+        final MessageProcessor helper = new MessageProcessor(MpFactory.make(() -> new TestMpOnlyKey()));
         final TestMpOnlyKey mp = (TestMpOnlyKey)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate", new Object());
@@ -64,7 +64,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleExtraParameters() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParameters(), false);
+        final MessageProcessor helper = new MessageProcessor(MpFactory.make(() -> new TestMpExtraParameters()));
         final TestMpExtraParameters mp = (TestMpExtraParameters)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate", new Object());
@@ -76,7 +76,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleOrderChanged() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpExtraParametersChangedOrder(), false);
+        final MessageProcessor helper = new MessageProcessor(MpFactory.make(() -> new TestMpExtraParametersChangedOrder()));
         final TestMpExtraParametersChangedOrder mp = (TestMpExtraParametersChangedOrder)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate", new Object());
@@ -88,7 +88,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleNoActivation() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoActivation(), false);
+        final MessageProcessor helper = new MessageProcessor(MpFactory.make(() -> new TestMpNoActivation()));
         final TestMpNoActivation mp = (TestMpNoActivation)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate", new Object());
@@ -100,7 +100,7 @@ public class SimpleMessageProcessorTest {
 
     @Test
     public void testMethodHandleNoKey() throws Throwable {
-        final MessageProcessor helper = new MessageProcessor(() -> new TestMpNoKey(), true);
+        final MessageProcessor helper = new MessageProcessor(MpFactory.make(() -> new TestMpNoKey()));
         final TestMpNoKey mp = (TestMpNoKey)helper.newInstance();
         assertFalse(mp.isActivated());
         helper.activate(mp, "activate", new Object());

@@ -1,5 +1,6 @@
 package net.dempsy;
 
+import static net.dempsy.util.Functional.ignore;
 import static net.dempsy.util.Functional.reverseRange;
 import static net.dempsy.util.Functional.uncheck;
 import static net.dempsy.utils.test.ConditionPoll.poll;
@@ -33,6 +34,9 @@ import net.dempsy.util.SystemPropertyManager;
 
 @RunWith(Parameterized.class)
 public abstract class DempsyBaseTest {
+
+    public static final long TEN_SECONDS = 10000;
+
     /**
      * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
      * every runCombos call. This can make tests run for a loooooong time.
@@ -398,6 +402,14 @@ public abstract class DempsyBaseTest {
         System.gc();
         System.gc();
         System.gc();
+
+        for(final long endTime = System.currentTimeMillis() + TEN_SECONDS; Thread.activeCount() > 3;) {
+            ignore(() -> Thread.sleep(10));
+            if(Thread.activeCount() > 3 && (System.currentTimeMillis() > endTime)) {
+                LOGGER.error("There appears to be an incomplete shutdown! There are {} threads running after stop.", Thread.activeCount());
+                break;
+            }
+        }
     }
 
     @SuppressWarnings("resource")

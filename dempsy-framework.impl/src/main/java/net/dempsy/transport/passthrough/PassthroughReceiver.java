@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import net.dempsy.Infrastructure;
+import net.dempsy.NodeReceiver;
 import net.dempsy.transport.Listener;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.NodeAddress;
@@ -15,10 +16,10 @@ public class PassthroughReceiver implements Receiver {
     private final static AtomicLong destinationIdSequence = new AtomicLong(0);
 
     private final PassthroughAddress destination = new PassthroughAddress(destinationIdSequence.getAndIncrement());
-    Listener<Object> listener = null;
+    NodeReceiver listener = null;
 
     public PassthroughReceiver() {
-        synchronized (receivers) {
+        synchronized(receivers) {
             receivers.put(destination.destinationId, this);
         }
     }
@@ -31,15 +32,14 @@ public class PassthroughReceiver implements Receiver {
     /**
      * A receiver is started with a Listener and a threading model.
      */
-    @SuppressWarnings("unchecked")
     @Override
     public void start(final Listener<?> listener, final Infrastructure infra) throws MessageTransportException {
-        this.listener = (Listener<Object>) listener;
+        this.listener = (NodeReceiver)listener;
     }
 
     @Override
     public void close() throws Exception {
-        synchronized (receivers) {
+        synchronized(receivers) {
             receivers.remove(destination.destinationId);
         }
     }

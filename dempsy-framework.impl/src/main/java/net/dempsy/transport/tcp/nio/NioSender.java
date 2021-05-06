@@ -55,15 +55,15 @@ public final class NioSender implements Sender {
     }
 
     @Override
-    public void send(final Object message) throws MessageTransportException {
+    public void send(final Object message) throws MessageTransportException, InterruptedException {
         boolean done = false;
         while(running && !done) {
             if(running) {
-                try {
-                    // let's not try forever in case we're locked up and shutting down.
-                    done = messages.offer(message, 1, TimeUnit.SECONDS);
-                } catch(final InterruptedException ie) {}
+                // let's not try forever in case we're locked up and shutting down.
+                done = messages.offer(message, 1, TimeUnit.SECONDS);
             }
+            // if(!done && Thread.interrupted())
+            // throw new InterruptedException();
         }
     }
 

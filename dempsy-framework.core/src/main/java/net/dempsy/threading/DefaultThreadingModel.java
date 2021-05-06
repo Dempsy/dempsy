@@ -2,11 +2,9 @@ package net.dempsy.threading;
 
 import static net.dempsy.config.ConfigLogger.logConfig;
 
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -15,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import net.dempsy.container.MessageDeliveryJob;
 import net.dempsy.util.OccasionalRunnable;
+import net.dempsy.util.SimpleExecutor;
 
 public class DefaultThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(DefaultThreadingModel.class);
@@ -40,8 +39,8 @@ public class DefaultThreadingModel implements ThreadingModel {
     public static final String CONFIG_KEY_BLOCKING = "blocking";
     public static final String DEFAULT_BLOCKING = "false";
 
-    private ThreadPoolExecutor executor = null;
-    private LinkedBlockingDeque<Runnable> priorityQueue = null;
+    private SimpleExecutor executor = null;
+    // private LinkedBlockingDeque<Runnable> priorityQueue = null;
 
     private final AtomicLong numLimited = new AtomicLong(0);
     private long maxNumWaitingLimitedTasks;
@@ -56,37 +55,28 @@ public class DefaultThreadingModel implements ThreadingModel {
     private boolean blocking = Boolean.parseBoolean(DEFAULT_BLOCKING);
     private SubmitLimited submitter = null;
 
-    private final static AtomicLong threadNum = new AtomicLong();
+    private final AtomicLong threadNum = new AtomicLong(0L);
+    private final static AtomicLong poolNum = new AtomicLong(0L);
+
     private boolean started = false;
+    private final AtomicBoolean stopping = new AtomicBoolean(false);
 
     private final Runnable occLogger = OccasionalRunnable.staticOccasionalRunnable(LOG_QUEUE_LEN_MESSAGE_COUNT,
         () -> LOGGER.debug("Total messages pending on " + DefaultThreadingModel.class.getSimpleName() + ": {}",
             executor.getQueue().size()));
 
-    private DefaultThreadingModel(final Supplier<String> nameSupplier, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
-        this.nameSupplier = nameSupplier;
-        this.threadPoolSize = threadPoolSize;
-        this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
-    }
-
-    private DefaultThreadingModel(final Supplier<String> nameSupplier) {
-        this(nameSupplier, -1, Integer.parseInt(DEFAULT_MAX_PENDING));
-    }
-
-    private static Supplier<String> bakedDefaultName(final String threadNameBase) {
-        final long curTmNum = threadNum.getAndIncrement();
-        return () -> threadNameBase + "-" + curTmNum;
-    }
-
     public DefaultThreadingModel(final String threadNameBase) {
-        this(bakedDefaultName(threadNameBase));
+        this(threadNameBase, -1, Integer.parseInt(DEFAULT_MAX_PENDING));
     }
 
     /**
      * Create a DefaultDempsyExecutor with a fixed number of threads while setting the maximum number of limited tasks.
      */
     public DefaultThreadingModel(final String threadNameBase, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
-        this(bakedDefaultName(threadNameBase), threadPoolSize, maxNumWaitingLimitedTasks);
+        final long curPoolNum = poolNum.getAndIncrement();
+        this.nameSupplier = () -> threadNameBase + "-" + curPoolNum + "-" + threadNum.getAndIncrement();
+        this.threadPoolSize = threadPoolSize;
+        this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
     }
 
     /**
@@ -143,8 +133,6 @@ public class DefaultThreadingModel implements ThreadingModel {
         return this;
     }
 
-    public static interface PriorityRunnable extends Runnable {}
-
     @Override
     public synchronized DefaultThreadingModel start() {
         logConfig(LOGGER, "Threading Model", DefaultThreadingModel.class.getName());
@@ -162,32 +150,33 @@ public class DefaultThreadingModel implements ThreadingModel {
             threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
         }
 
-        priorityQueue = new LinkedBlockingDeque<Runnable>() {
-            private static final long serialVersionUID = 1L;
-
-            @Override
-            public boolean offer(final Runnable e) {
-                if(e instanceof PriorityRunnable)
-                    return super.offerFirst(e);
-                return super.offer(e);
-            }
-
-        };
-        executor = new ThreadPoolExecutor(threadPoolSize, threadPoolSize, 0L, TimeUnit.MILLISECONDS, priorityQueue, r -> new Thread(r, nameSupplier.get()));
+        // priorityQueue = new LinkedBlockingDeque<Runnable>() {
+        // private static final long serialVersionUID = 1L;
+        //
+        // @Override
+        // public boolean offer(final Runnable e) {
+        // if(e instanceof PriorityRunnable)
+        // return super.offerFirst(e);
+        // return super.offer(e);
+        // }
+        //
+        // };
+        // executor = new ThreadPoolExecutor(threadPoolSize, threadPoolSize, 0L, TimeUnit.MILLISECONDS, priorityQueue, r -> new Thread(r, nameSupplier.get()));
+        executor = new SimpleExecutor(threadPoolSize, r -> new Thread(r, nameSupplier.get()));
 
         if(blocking) {
             if(maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
-                submitter = new BlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks);
+                submitter = new BlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks, stopping);
             else {
                 LOGGER.warn("You cannot configure \"" + CONFIG_KEY_BLOCKING + "\" and set \"" + CONFIG_KEY_MAX_PENDING
                     + "\" to unbounded at the same time. The queue will be unbounded.");
-                submitter = new NonBlockingUnlimited(executor);
+                submitter = new NonBlockingUnlimited(executor, stopping);
             }
         } else {
             if(maxNumWaitingLimitedTasks > 0) // maxNumWaitingLimitedTasks <= 0 means unlimited
-                submitter = new NonBlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks);
+                submitter = new NonBlockingLimited(numLimited, executor, maxNumWaitingLimitedTasks, stopping);
             else
-                submitter = new NonBlockingUnlimited(executor);
+                submitter = new NonBlockingUnlimited(executor, stopping);
         }
 
         started = true;
@@ -219,9 +208,13 @@ public class DefaultThreadingModel implements ThreadingModel {
 
     @Override
     public void close() {
+        synchronized(this) {
+            stopping.set(true);
+        }
         if(hardShutdown) {
-            if(executor != null)
-                executor.shutdownNow();
+            if(executor != null) {
+                submitter.skipping(executor.shutdownNow());
+            }
         } else {
             if(executor != null)
                 executor.shutdown();
@@ -233,25 +226,22 @@ public class DefaultThreadingModel implements ThreadingModel {
         return numLimited.intValue();
     }
 
-    public boolean isRunning() {
-        return (executor != null) &&
-            !(executor.isShutdown() || executor.isTerminated());
-    }
-
     @Override
     public void submit(final MessageDeliveryJob r) {
-        executor.submit(() -> r.executeAllContainers());
+        final var rejectable = new DefaultRejectable(r, stopping);
+        if(!executor.submit(rejectable)) {
+            LOGGER.warn("Regular job submission failed!");
+            rejectable.reject();
+        }
     }
 
     @Override
     public void submitPrioity(final MessageDeliveryJob r) {
-        executor.submit(
-            new PriorityRunnable() {
-                @Override
-                public void run() {
-                    r.executeAllContainers();
-                }
-            });
+        final var rejectable = new DefaultRejectable(r, stopping);
+        if(!executor.submitFirst(rejectable)) {
+            LOGGER.warn("Priority job submission failed!");
+            rejectable.reject();
+        }
     }
 
     @Override
@@ -267,17 +257,77 @@ public class DefaultThreadingModel implements ThreadingModel {
         r.executeAllContainers();
     }
 
+    private static interface Rejectable extends Runnable {
+        public void reject();
+    }
+
+    private static class DefaultRejectable implements Rejectable {
+        final MessageDeliveryJob r;
+        final AtomicBoolean stopping;
+
+        public DefaultRejectable(final MessageDeliveryJob r, final AtomicBoolean stopping) {
+            this.r = r;
+            this.stopping = stopping;
+        }
+
+        @Override
+        public void run() {
+            doCall(r);
+        }
+
+        @Override
+        public void reject() {
+            r.rejected(stopping.get());
+        }
+    }
+
+    private static class NonBlockingRejectable implements Rejectable {
+        final MessageDeliveryJob r;
+        final AtomicLong numLimited;
+        final AtomicBoolean stopping;
+        final long maxNumWaitingLimitedTasks;
+
+        public NonBlockingRejectable(final MessageDeliveryJob r, final AtomicLong numLimited, final AtomicBoolean stopping,
+            final long maxNumWaitingLimitedTasks) {
+            this.r = r;
+            this.numLimited = numLimited;
+            this.stopping = stopping;
+            this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+        }
+
+        @Override
+        public void run() {
+            final long num = numLimited.decrementAndGet();
+            if(num <= maxNumWaitingLimitedTasks)
+                doCall(r);
+            else
+                r.rejected(stopping.get());
+        }
+
+        @Override
+        public void reject() {
+            numLimited.decrementAndGet();
+            try {
+                r.rejected(stopping.get());
+            } catch(final RuntimeException rte) {
+                LOGGER.warn("Rejecting a job resulted in an exception", rte);
+            }
+        }
+    }
+
     private static class NonBlockingLimited implements SubmitLimited {
         private final AtomicLong numLimited;
-        private final ExecutorService executor;
+        private final SimpleExecutor executor;
         private final long maxNumWaitingLimitedTasks;
         private final long twiceMaxNumWaitingLimitedTasks;
+        private final AtomicBoolean stopping;;
 
-        NonBlockingLimited(final AtomicLong numLimited, final ExecutorService executor, final long maxNumWaitingLimitedTasks) {
+        NonBlockingLimited(final AtomicLong numLimited, final SimpleExecutor executor, final long maxNumWaitingLimitedTasks, final AtomicBoolean stopping) {
             this.numLimited = numLimited;
             this.executor = executor;
             this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
             this.twiceMaxNumWaitingLimitedTasks = 2 * maxNumWaitingLimitedTasks;
+            this.stopping = stopping;
         }
 
         @Override
@@ -285,30 +335,79 @@ public class DefaultThreadingModel implements ThreadingModel {
             final long curCount = numLimited.incrementAndGet();
 
             if(curCount > twiceMaxNumWaitingLimitedTasks) {
-                LOGGER.warn("We're at twice the number of acceptable pending messages. The system appears to be thread starved. Rejecting new message.");
+                LOGGER.warn("We're at twice the number of acceptable pending messages {}(:{}). The system appears to be thread starved. Rejecting new message.",
+                    curCount, executor.getQueue().size());
                 numLimited.decrementAndGet();
-                r.rejected();
+                r.rejected(stopping.get());
             } else {
-                executor.submit(() -> {
-                    final long num = numLimited.decrementAndGet();
-                    if(num <= maxNumWaitingLimitedTasks)
-                        doCall(r);
-                    else
-                        r.rejected();
-                });
+                final boolean submitOk;
+                try {
+                    submitOk = executor.submit(new NonBlockingRejectable(r, numLimited, stopping, maxNumWaitingLimitedTasks));
+                } catch(final RuntimeException rte) {
+                    LOGGER.warn("Limited job submission failed!", rte);
+                    numLimited.decrementAndGet();
+                    try {
+                        r.rejected(stopping.get());
+                    } catch(final RuntimeException rte2) {
+                        LOGGER.warn("Failed rejecting job!", rte2);
+                    }
+                    throw rte;
+                }
+
+                if(!submitOk) {
+                    numLimited.decrementAndGet();
+                    LOGGER.warn("Limited job submission failed!");
+                    try {
+                        r.rejected(stopping.get());
+                    } catch(final RuntimeException rte) {
+                        LOGGER.warn("Failed rejecting job!", rte);
+                        throw rte;
+                    }
+                }
             }
         }
     }
 
+    private static class BlockingRejectable implements Rejectable {
+        final MessageDeliveryJob r;
+        final AtomicLong numLimited;
+        final AtomicBoolean stopping;
+
+        public BlockingRejectable(final MessageDeliveryJob r, final AtomicLong numLimited, final AtomicBoolean stopping) {
+            this.r = r;
+            this.numLimited = numLimited;
+            this.stopping = stopping;
+        }
+
+        @Override
+        public void run() {
+            numLimited.decrementAndGet();
+            doCall(r);
+        }
+
+        @Override
+        public void reject() {
+            numLimited.decrementAndGet();
+            try {
+                r.rejected(stopping.get());
+            } catch(final RuntimeException rte) {
+                LOGGER.warn("Rejecting a job resulted in an exception", rte);
+            }
+        }
+
+    }
+
     private static class BlockingLimited implements SubmitLimited {
         private final AtomicLong numLimited;
-        private final ExecutorService executor;
+        private final SimpleExecutor executor;
         private final long maxNumWaitingLimitedTasks;
+        private final AtomicBoolean stopping;;
 
-        BlockingLimited(final AtomicLong numLimited, final ExecutorService executor, final long maxNumWaitingLimitedTasks) {
+        BlockingLimited(final AtomicLong numLimited, final SimpleExecutor executor, final long maxNumWaitingLimitedTasks, final AtomicBoolean stopping) {
             this.numLimited = numLimited;
             this.executor = executor;
             this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+            this.stopping = stopping;
         }
 
         @Override
@@ -332,28 +431,40 @@ public class DefaultThreadingModel implements ThreadingModel {
                 }
             }
 
-            executor.submit(() -> {
+            if(!executor.submit(new BlockingRejectable(r, numLimited, stopping))) {
                 numLimited.decrementAndGet();
-                doCall(r);
-            });
+                LOGGER.warn("Limited job submission failed!");
+                r.rejected(stopping.get());
+            }
         }
     }
 
     private static class NonBlockingUnlimited implements SubmitLimited {
-        private final ExecutorService executor;
+        private final SimpleExecutor executor;
+        private final AtomicBoolean stopping;
 
-        NonBlockingUnlimited(final ExecutorService executor) {
+        NonBlockingUnlimited(final SimpleExecutor executor, final AtomicBoolean stopping) {
             this.executor = executor;
+            this.stopping = stopping;
         }
 
         @Override
         public void submitLimited(final MessageDeliveryJob r) {
-            executor.submit(() -> doCall(r));
+            final var rejectable = new DefaultRejectable(r, stopping);
+            if(!executor.submit(rejectable)) {
+                LOGGER.warn("Limited job submission failed!");
+                rejectable.reject();
+            }
         }
     }
 
-    @FunctionalInterface
     private static interface SubmitLimited {
         public void submitLimited(final MessageDeliveryJob r);
+
+        public default void skipping(final List<Runnable> skipping) {
+            skipping.stream()
+                .map(r -> (Rejectable)r)
+                .forEach(r -> r.reject());
+        }
     }
 }

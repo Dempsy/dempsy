@@ -216,7 +216,8 @@ public class Cluster {
      * Set the list of explicit destination that outgoing messages should be limited to.
      */
     public void setDestinations(final ClusterId... destinations) {
-        destination(destinations);
+        throw new UnsupportedOperationException("Setting explicit destinations is currently broken");
+        // destination(destinations);
     }
 
     public String getRoutingStrategyId() {

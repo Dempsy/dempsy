@@ -22,7 +22,7 @@ public class DefaultDeliverMessageJob extends DeliverMessageJob {
     }
 
     @Override
-    public void rejected() {
+    public void rejected(final boolean stopping) {
         statsCollector.messageDiscarded(message);
         handleDiscardAllContainer();
     }

@@ -42,33 +42,32 @@ public abstract class Dispatcher {
      * a {@link Mp} somewhere in the Dempsy application that the
      * {@link Adaptor} is part of.
      */
-    public abstract void dispatch(KeyedMessageWithType message, MessageResourceManager dispose) throws DempsyException;
+    public abstract void dispatch(KeyedMessageWithType message, MessageResourceManager dispose) throws DempsyException, InterruptedException;
 
-    public void dispatch(final KeyedMessageWithType message) {
+    public void dispatch(final KeyedMessageWithType message) throws InterruptedException {
         dispatch(message, null);
     }
 
     public void dispatchAnnotated(final Object message, final MessageResourceManager dispose)
-        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InterruptedException {
 
         dispatch(extractor.extract(message), dispose);
     }
 
-    public void dispatchAnnotated(final Object message) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+    public void dispatchAnnotated(final Object message)
+        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InterruptedException {
         dispatchAnnotated(message, null);
     }
 
-    public void dispatch(final List<KeyedMessageWithType> messages, final MessageResourceManager dispose) {
+    public void dispatch(final List<KeyedMessageWithType> messages, final MessageResourceManager dispose) throws InterruptedException {
         if(messages == null)
             throw new NullPointerException("Cannot dispatch a null message list.");
-        messages.forEach(v ->
-
-        dispatch(v, dispose)
-
-        );
+        for(final var cur: messages) {
+            dispatch(cur, dispose);
+        }
     }
 
-    public void dispatch(final List<KeyedMessageWithType> messages) {
+    public void dispatch(final List<KeyedMessageWithType> messages) throws InterruptedException {
         dispatch(messages, null);
     }
 }

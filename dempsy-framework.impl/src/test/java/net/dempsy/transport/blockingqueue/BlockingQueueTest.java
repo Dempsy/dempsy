@@ -49,7 +49,7 @@ public class BlockingQueueTest {
     public void testBlockingQueue() throws Exception {
         final AtomicReference<String> message = new AtomicReference<String>(null);
         final ArrayBlockingQueue<Object> input = new ArrayBlockingQueue<>(16);
-        try (final Receiver r = new BlockingQueueReceiver(input);
+        try(final Receiver r = new BlockingQueueReceiver(input);
             final TestInfrastructure infra = new TestInfrastructure(new DefaultThreadingModel("BQTest-testBlockingQueue-"));
             final TransportManager tranMan = chain(new TransportManager(), c -> c.start(infra));
             SenderFactory sf = tranMan.getAssociatedInstance(transportTypeId);) {
@@ -74,7 +74,7 @@ public class BlockingQueueTest {
     public void testBlockingQueueOverflow() throws Throwable {
         final AtomicReference<String> message = new AtomicReference<String>(null);
         final ArrayBlockingQueue<Object> input = new ArrayBlockingQueue<>(1);
-        try (@SuppressWarnings("resource")
+        try(@SuppressWarnings("resource")
         // test only works when the blocking queue blocks
         SystemPropertyManager props = new SystemPropertyManager()
             .set(BlockingQueueSenderFactory.class.getPackageName() + "." + BlockingQueueSenderFactory.BLOCKING_KEY, "true");
@@ -93,7 +93,7 @@ public class BlockingQueueTest {
             final Thread t = new Thread(() -> {
                 try {
                     sender.send("Hello again");
-                } catch(final MessageTransportException e) {
+                } catch(final MessageTransportException | InterruptedException e) {
                     throw new RuntimeException(e);
                 }
                 finallySent.set(true);

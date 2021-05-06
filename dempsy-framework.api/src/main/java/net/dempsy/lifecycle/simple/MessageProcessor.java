@@ -1,7 +1,6 @@
 package net.dempsy.lifecycle.simple;
 
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -13,7 +12,7 @@ import net.dempsy.config.Node;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.MessageProcessorLifecycle;
-import net.dempsy.messages.MessageResourceManager;
+import net.dempsy.messages.ResourceManager;
 
 /**
  * <p>
@@ -30,38 +29,12 @@ import net.dempsy.messages.MessageResourceManager;
 public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
     private static final KeyedMessageWithType[] EMPTY_KEYED_MESSAGE_WITH_TYPE = new KeyedMessageWithType[0];
 
-    private final Supplier<? extends Mp> newMp;
-    private final Set<String> messageTypes;
-    private boolean isEvictable = false;
-    private boolean hasOutput = false;
-    private final boolean handlesBulk;
+    private final MpFactory<? extends Mp> newMp;
 
-    public MessageProcessor(final Supplier<? extends Mp> newMp, final boolean handlesBulk, final String... messageTypes) {
+    public MessageProcessor(final MpFactory<? extends Mp> newMp) {
         if(newMp == null)
             throw new IllegalArgumentException("You must provide a Supplier that creates new " + Mp.class.getSimpleName() + "s.");
         this.newMp = newMp;
-        this.handlesBulk = handlesBulk;
-        this.messageTypes = new HashSet<>(Arrays.asList(messageTypes));
-    }
-
-    /**
-     * The default setting for isEvictable is <code>false</code>. If your {@link Mp} implementation actually
-     * implements {@link Mp#shouldBeEvicted()} then you should set this to <code>true</code> or Dempsy
-     * will never call {@link Mp#shouldBeEvicted()}.
-     */
-    public MessageProcessor setEvictable(final boolean isEvictable) {
-        this.isEvictable = isEvictable;
-        return this;
-    }
-
-    /**
-     * The default setting for hasOutput is <code>false</code>. If your {@link Mp} implementation actually
-     * implements {@link Mp#output()} method then you should set this to <code>true</code> or Dempsy
-     * will never call {@link Mp#output()}.
-     */
-    public MessageProcessor setOutput(final boolean hasOutputCapability) {
-        this.hasOutput = hasOutputCapability;
-        return this;
     }
 
     /**
@@ -133,7 +106,7 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
 
     @Override
     public boolean isBulkDeliverySupported() {
-        return handlesBulk;
+        return false;
     }
 
     /**
@@ -164,30 +137,43 @@ public class MessageProcessor implements MessageProcessorLifecycle<Mp> {
         }
     }
 
+    /**
+     * The default setting for isEvictable is <code>false</code>. If your {@link Mp} implementation actually
+     * implements {@link Mp#shouldBeEvicted()} then you should override {@link MpFactory#isEvictionSupported}
+     * method to return <code>true</code> or Dempsy will never call {@link Mp#shouldBeEvicted()}.
+     */
     @Override
     public boolean isEvictionSupported() {
-        return isEvictable;
+        return newMp.isEvictionSupported();
     }
 
+    /**
+     * The default setting for hasOutput is <code>false</code>. If your {@link Mp} implementation actually
+     * implements {@link Mp#output()} method then you should override {@link MpFactory#isOutputSupported()}
+     * method to return <code>true</code> or Dempsy will never call {@link Mp#output()}.
+     */
     @Override
     public boolean isOutputSupported() {
-        return hasOutput;
+        return newMp.isOutputSupported();
     }
 
     @Override
     public Set<String> messagesTypesHandled() {
-        return messageTypes;
+        return newMp.messageTypesHandled();
     }
 
     @Override
-    public void validate() throws IllegalStateException {}
-
-    @Override
-    public void start(final ClusterId myCluster) {}
-
-    @Override
-    public MessageResourceManager manager() {
-        return null;
+    public void validate() throws IllegalStateException {
+        newMp.validate();
     }
 
+    @Override
+    public void start(final ClusterId myCluster) {
+        newMp.start();
+    }
+
+    @Override
+    public ResourceManager manager() {
+        return new ResourceManager();
+    }
 }

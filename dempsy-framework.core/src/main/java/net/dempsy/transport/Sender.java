@@ -31,7 +31,7 @@ public interface Sender {
      * @throws MessageTransportException
      *     indicates that the message wasn't sent.
      */
-    public void send(Object message) throws MessageTransportException;
+    public void send(Object message) throws MessageTransportException, InterruptedException;
 
     public void stop(); // this should manage everything related to the SenderFactory
 

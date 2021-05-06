@@ -5,11 +5,14 @@ import static org.junit.Assert.assertTrue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.dempsy.cluster.local.LocalClusterSessionFactory;
 import net.dempsy.config.Node;
 import net.dempsy.lifecycle.simple.MessageProcessor;
 import net.dempsy.lifecycle.simple.Mp;
+import net.dempsy.lifecycle.simple.MpFactory;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.KeyedMessage;
@@ -22,6 +25,7 @@ import net.dempsy.transport.Receiver;
 import net.dempsy.utils.test.ConditionPoll;
 
 public class TestSimple {
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestSimple.class);
 
     public static class Dummy implements Receiver {
         NodeAddress dummy = new NodeAddress() {
@@ -44,8 +48,8 @@ public class TestSimple {
     public void testSimple() throws Exception {
         final AtomicLong count = new AtomicLong(0L);
 
-        try (final NodeManager nm = new NodeManager();
-            DefaultThreadingModel tm = new DefaultThreadingModel("TB", -1, 1)) {
+        try(final NodeManager nm = new NodeManager();
+            final DefaultThreadingModel tm = new DefaultThreadingModel("TB", -1, 1)) {
             final Node n = new Node.Builder("test-app")
                 .defaultRoutingStrategyId("net.dempsy.router.simple")
                 .receiver(new Dummy())
@@ -61,11 +65,16 @@ public class TestSimple {
 
                     @Override
                     public void start() {
-                        while(!done) {
-                            disp.dispatch(new KeyedMessageWithType(Integer.valueOf(1), "Hello", "string"));
-                            // This is here for when the Container has a max pending and it gets starved for CPU cycles
-                            // in this particular test.
-                            Thread.yield();
+                        try {
+                            while(!done) {
+                                disp.dispatch(new KeyedMessageWithType(Integer.valueOf(1), "Hello", "string"));
+                                // This is here for when the Container has a max pending and it gets starved for CPU cycles
+                                // in this particular test.
+                                Thread.yield();
+                            }
+                        } catch(final InterruptedException ie) {
+                            if(!done)
+                                LOGGER.error("Interrupted but not stopping.");
                         }
                     }
 
@@ -75,13 +84,13 @@ public class TestSimple {
                     }
                 })
                 .cluster("mp")
-                .mp(new MessageProcessor(() -> new Mp() {
+                .mp(new MessageProcessor(MpFactory.make(() -> new Mp() {
                     @Override
                     public KeyedMessageWithType[] handle(final KeyedMessage message) {
                         count.incrementAndGet();
                         return null;
                     }
-                }, false, "string"))
+                }, "string")))
                 .build();
 
             nm.node(n)

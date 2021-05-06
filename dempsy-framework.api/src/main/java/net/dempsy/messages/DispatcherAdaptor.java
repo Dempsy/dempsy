@@ -40,7 +40,8 @@ public class DispatcherAdaptor implements Adaptor {
         return dispatcher;
     }
 
-    public void dispatchAnnotated(final Object message) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+    public void dispatchAnnotated(final Object message)
+        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InterruptedException {
         if(running.get())
             dispatcher.dispatchAnnotated(message);
         else
@@ -48,7 +49,7 @@ public class DispatcherAdaptor implements Adaptor {
     }
 
     public void dispatchAnnotated(final Object message, final MessageResourceManager dispose)
-        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+        throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InterruptedException {
         if(running.get())
             dispatcher.dispatchAnnotated(message, dispose);
         else

@@ -170,14 +170,17 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         private final AtomicLong unfinishedContainerJobs = new AtomicLong(0);
         // *******************************************************************
 
-        public MessageDeliveryJobHolder(final MessageDeliveryJob job, final boolean limited, final AtomicLong numLimited) {
+        private final AtomicBoolean stopping;
+
+        public MessageDeliveryJobHolder(final MessageDeliveryJob job, final boolean limited, final AtomicLong numLimited, final AtomicBoolean stopping) {
             this.job = job;
             this.limited = limited;
             this.numLimited = numLimited;
+            this.stopping = stopping;
         }
 
         public final void reject() {
-            job.rejected();
+            job.rejected(stopping.get());
         }
 
         public final boolean areContainersCalculated() {
@@ -488,6 +491,16 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         ignore(() -> shuttleThread.join(10000));
         if(shuttleThread.isAlive())
             LOGGER.warn("Couldn't stop the dequeing thread.");
+        if(calcContainersWork != null)
+            calcContainersWork.shutdown();
+
+        for(final long endTime = System.currentTimeMillis() + 5000; System.currentTimeMillis() < endTime;) {
+            if(calcContainersWork.isTerminated())
+                break;
+            ignore(() -> Thread.sleep(100));
+        }
+        if(!calcContainersWork.isTerminated())
+            calcContainersWork.shutdownNow();
     }
 
     @Override
@@ -497,7 +510,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     @Override
     public void submit(final MessageDeliveryJob job) {
-        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, false, numLimited);
+        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, false, numLimited, isStopped);
         if(!inqueue.offer(jobh)) {
             jobh.reject();
             LOGGER.error("Failed to queue message destined for {}",
@@ -514,7 +527,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     @Override
     public void submitPrioity(final MessageDeliveryJob job) {
-        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, false, numLimited);
+        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, false, numLimited, isStopped);
         if(!inqueue.offerFirst(jobh)) {
             jobh.reject();
             LOGGER.error("Failed to queue message destined for {}",
@@ -531,7 +544,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     @Override
     public void submitLimited(final MessageDeliveryJob job) {
-        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, true, numLimited);
+        final MessageDeliveryJobHolder jobh = new MessageDeliveryJobHolder(job, true, numLimited, isStopped);
         if(!inqueue.offer(jobh)) {
             jobh.reject();// undo, since we failed. Though this should be impossible
             LOGGER.error("Failed to queue message destined for {}",

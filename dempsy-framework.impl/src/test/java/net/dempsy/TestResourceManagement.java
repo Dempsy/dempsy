@@ -36,10 +36,10 @@ import net.dempsy.lifecycle.annotation.MessageHandler;
 import net.dempsy.lifecycle.annotation.MessageKey;
 import net.dempsy.lifecycle.annotation.MessageType;
 import net.dempsy.lifecycle.annotation.Mp;
-import net.dempsy.lifecycle.annotation.ResourceManager;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
+import net.dempsy.messages.ResourceManager;
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.SystemPropertyManager;
 
@@ -191,6 +191,9 @@ public class TestResourceManagement extends DempsyBaseTest {
                         LOGGER.error("Failed to dispatch", e);
                     }
                 }
+            } catch(final InterruptedException ie) {
+                if(isRunning.get())
+                    LOGGER.error("Interrupted but not stopping.");
             } finally {
                 stopped.set(true);
             }

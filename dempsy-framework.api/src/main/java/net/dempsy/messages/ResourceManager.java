@@ -1,6 +1,6 @@
-package net.dempsy.lifecycle.annotation;
+package net.dempsy.messages;
 
-import net.dempsy.messages.MessageResourceManager;
+import net.dempsy.lifecycle.annotation.Resource;
 
 public class ResourceManager implements MessageResourceManager {
 

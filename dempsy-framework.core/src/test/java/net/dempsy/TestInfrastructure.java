@@ -21,6 +21,7 @@ public class TestInfrastructure implements Infrastructure, AutoCloseable {
     final NodeStatsCollector nodeStats;
     final String application;
     final ThreadingModel threading;
+    final ThePlug thePlug = () -> {};
 
     public TestInfrastructure(final String testName, final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched,
         final ThreadingModel threading) {
@@ -127,6 +128,11 @@ public class TestInfrastructure implements Infrastructure, AutoCloseable {
     @Override
     public Node getNode() {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ThePlug getThePlug() {
+        return thePlug;
     }
 
     @Override

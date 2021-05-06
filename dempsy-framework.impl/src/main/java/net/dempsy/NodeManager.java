@@ -1,5 +1,7 @@
 package net.dempsy;
 
+import static net.dempsy.util.Functional.ignore;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -7,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -62,6 +65,7 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     // created in start(). Stopped in stop()
     private final List<PerContainer> containers = new ArrayList<>();
     private final Map<ClusterId, Adaptor> adaptors = new HashMap<>();
+    private final AtomicBoolean ptaskReady = new AtomicBoolean(false);
 
     // non-final fields.
     private Receiver receiver = null;
@@ -74,7 +78,6 @@ public class NodeManager implements Infrastructure, AutoCloseable {
     private TransportManager tManager = null;
     private NodeAddress nodeAddress = null;
     private String nodeId = null;
-    AtomicBoolean ptaskReady = new AtomicBoolean(false);
 
     public NodeManager() {}
 
@@ -335,6 +338,33 @@ public class NodeManager implements Infrastructure, AutoCloseable {
         isRunning.set(false);
 
         tr.stopAll();
+    }
+
+    @Override
+    public ThePlug getThePlug() {
+        return () -> {
+            try {
+                // we are going to go down no matter what!
+                final var scheduler = new AutoDisposeSingleThreadScheduler("shutdown-timer");
+                scheduler.schedule(() -> {
+                    try {
+                        LOGGER.error("Shutdown timer triggered. Hard exiting!");
+                        ignore(() -> Thread.sleep(200));
+                    } finally {
+                        System.exit(1);
+                    }
+                }, 30, TimeUnit.SECONDS);
+
+                stop();
+            } catch(final Throwable th) {
+                try {
+                    LOGGER.error("Failed shutting down!", th);
+                    ignore(() -> Thread.sleep(200));
+                } finally {
+                    System.exit(1);
+                }
+            }
+        };
     }
 
     public boolean isReady() {

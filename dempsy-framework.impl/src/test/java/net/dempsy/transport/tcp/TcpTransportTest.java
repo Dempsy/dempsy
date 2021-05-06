@@ -239,8 +239,13 @@ public class TcpTransportTest {
                     final Sender sender = sf.getSender(addr);
                     while(!letMeGo.get())
                         Thread.yield();
-                    for(int i = 0; i < numMessagePerThread; i++)
-                        sender.send(new RoutedMessage(new int[] {0}, "Hello", message));
+
+                    try {
+                        for(int i = 0; i < numMessagePerThread; i++)
+                            sender.send(new RoutedMessage(new int[] {0}, "Hello", message));
+                    } catch(final InterruptedException ie) {
+                        LOGGER.error("Interrupted in send.");
+                    }
 
                     // we need to keep the sender factory going until all messages were accounted for
 
@@ -321,9 +326,14 @@ public class TcpTransportTest {
                 final AtomicBoolean stop = new AtomicBoolean(false);
                 final RoutedMessage resetMessage = new RoutedMessage(new int[] {0}, "RESET", "RESET");
                 final Thread senderThread = new Thread(() -> {
-                    while(!stop.get()) {
-                        sender.send(resetMessage);
-                        dontInterrupt(() -> Thread.sleep(100));
+                    try {
+                        while(!stop.get()) {
+                            sender.send(resetMessage);
+                            dontInterrupt(() -> Thread.sleep(100));
+                        }
+                    } catch(final InterruptedException ie) {
+                        if(!stop.get())
+                            LOGGER.error("Interrupted send");
                     }
                 }, "testConnectionRecovery-sender");
                 senderThread.start();

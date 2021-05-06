@@ -8,9 +8,18 @@ xmlns:util="http://www.springframework.org/schema/util"
     http://www.springframework.org/schema/util
     http://www.springframework.org/schema/util/spring-util.xsd" >
 
-    <bean id="outputScheduler" class="net.dempsy.output.RelativeOutputSchedule">
-        <constructor-arg value="1" />
-        <constructor-arg value="SECONDS" />
+    <bean id="adaptor" class="net.dempsy.config.Cluster">
+        <constructor-arg value="adaptor" />
+        <property name="adaptor" ref="adaptor0" />
+        <property name="destinations">
+           <bean class="net.dempsy.config.ClusterId">
+            <constructor-arg><null /></constructor-arg>
+            <constructor-arg value="mp1-cluster" />
+           </bean>
+        </property>
+        
     </bean>
+    
+    <bean id="adaptor0" class="net.dempsy.TestExplicitDestinations$ONeeGenerator" />
     
 </beans>

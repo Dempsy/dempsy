@@ -591,11 +591,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
             if(hasDisposition)
                 toFree.forEach(v -> disposition.dispose(v.message));
         }
-
-        public void clear() {
-            toFree.clear();
-        }
-
     }
 
     /**
@@ -725,9 +720,10 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         public void calculateContainers() {}
 
         @Override
-        public void rejected() {
+        public void rejected(final boolean stopping) {
             counter.decrementAndGet();
-            LOGGER.error("An output cycle job was rejected but this shouldn't be possible.");
+            if(!stopping)
+                LOGGER.error("An output cycle job was rejected but this shouldn't be possible.");
         }
 
         @Override

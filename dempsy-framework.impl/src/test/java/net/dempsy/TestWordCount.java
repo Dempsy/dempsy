@@ -194,6 +194,9 @@ public class TestWordCount extends DempsyBaseTest {
                     }
                 }
                 System.out.println();
+            } catch(final InterruptedException ie) {
+                if(isRunning.get())
+                    LOGGER.error("Interrupted but not stopping.");
             } finally {
                 stopped.set(true);
             }
@@ -739,7 +742,7 @@ public class TestWordCount extends DempsyBaseTest {
                         // ",r:(" + sc.getValue2().getDispatchedMessageCount() + ", " + sc.getValue2().getMessageDiscardedCount() + ")] "))
                         .mapToInt(sc -> (int)sc.getValue2().getDispatchedMessageCount())
                         .sum();
-                    System.out.println(": " + totalRanked + " == " + totalSent);
+                    // System.out.println(": " + totalRanked + " == " + totalSent);
                     return totalRanked == totalSent;
                 }));
 

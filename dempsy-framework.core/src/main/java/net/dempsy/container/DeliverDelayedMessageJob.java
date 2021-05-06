@@ -39,7 +39,7 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
     }
 
     @Override
-    public void rejected() {
+    public void rejected(final boolean stopping) {
         statsCollector.messageDiscarded(messageSupplier);
     }
 

@@ -21,9 +21,10 @@ public class TestInfrastructure implements Infrastructure, AutoCloseable {
     final BasicNodeStatsCollector nodeStats;
     final String application;
     final ThreadingModel threading;
+    final ThePlug thePlug = () -> {};
 
     public TestInfrastructure(final String testName, final ClusterInfoSession session, final AutoDisposeSingleThreadScheduler sched,
-            final ThreadingModel threading) {
+        final ThreadingModel threading) {
         this.session = session;
         this.sched = sched;
         statsFact = new BasicStatsCollectorFactory();
@@ -94,8 +95,13 @@ public class TestInfrastructure implements Infrastructure, AutoCloseable {
     }
 
     @Override
+    public ThePlug getThePlug() {
+        return thePlug;
+    }
+
+    @Override
     public void close() {
-        if (threading != null)
+        if(threading != null)
             threading.close();
     }
 }

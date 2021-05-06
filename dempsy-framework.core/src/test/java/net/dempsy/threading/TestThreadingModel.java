@@ -63,7 +63,7 @@ public class TestThreadingModel {
             // long seq = sequence.getAndIncrement();
 
             @Override
-            public void rejected() {
+            public void rejected(final boolean stopping) {
                 numRejected.incrementAndGet();
                 numCompleted.incrementAndGet();
             }

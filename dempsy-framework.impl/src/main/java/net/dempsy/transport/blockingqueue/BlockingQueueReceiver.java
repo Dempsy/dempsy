@@ -16,6 +16,7 @@
 
 package net.dempsy.transport.blockingqueue;
 
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,8 +25,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.dempsy.Infrastructure;
+import net.dempsy.Infrastructure.ThePlug;
 import net.dempsy.transport.Listener;
-import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.NodeAddress;
 import net.dempsy.transport.Receiver;
 import net.dempsy.util.SafeString;
@@ -56,6 +57,7 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread currentThread = null;
     private boolean shutdown;
+    private ThePlug thePlug;
 
     private final static AtomicLong guidGenerator = new AtomicLong(0);
 
@@ -82,22 +84,29 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
         final Listener<Object> curListener = listener;
 
         // This check is cheap but unlocked
-        while(!shutdown) {
-            try {
-                final Object val = queue.take();
-                curListener.onMessage(val);
-            } catch(final InterruptedException ie) {
-                synchronized(this) {
-                    // if we were interrupted we're probably stopping.
-                    if(!shutdown)
-                        LOGGER.warn("Superfluous interrupt.", ie);
+        try {
+            while(!shutdown) {
+                try {
+                    final Object val = queue.take();
+                    curListener.onMessage(val);
+                } catch(final InterruptedException ie) {
+                    synchronized(this) {
+                        // if we were interrupted we're probably stopping.
+                        if(!shutdown)
+                            LOGGER.warn("Superfluous interrupt.", ie);
+                    }
+                } catch(final RuntimeException err) {
+                    LOGGER.error("Exception while handling message.", err);
                 }
-            } catch(final MessageTransportException err) {
-                LOGGER.error("Exception while handling message.", err);
             }
+        } catch(final Error err) {
+            // attempt to log the error.
+            LOGGER.error("CRITICAL FAILURE IN REAED THREAD!", err);
+            Optional.ofNullable(thePlug).ifPresent(p -> p.pull());
+            throw err;
+        } finally {
+            running.set(false);
         }
-
-        running.set(false);
     }
 
     /**
@@ -111,6 +120,7 @@ public class BlockingQueueReceiver implements Runnable, Receiver {
     public synchronized void start(final Listener listener, final Infrastructure infra) {
         if(listener == null)
             throw new IllegalArgumentException("Cannot pass null to " + BlockingQueueReceiver.class.getSimpleName() + ".setListener");
+        thePlug = infra.getThePlug();
         if(this.listener != null)
             throw new IllegalStateException(
                 "Cannot set a new Listener (" + SafeString.objectDescription(listener) + ") on a " + BlockingQueueReceiver.class.getSimpleName()

@@ -26,7 +26,7 @@ public class DeliverResourceJob extends DeliverMessageJob {
     }
 
     @Override
-    public void rejected() {
+    public void rejected(final boolean stopping) {
         disposition.dispose(message.message);
         statsCollector.messageDiscarded(message);
         handleDiscardAllContainer();

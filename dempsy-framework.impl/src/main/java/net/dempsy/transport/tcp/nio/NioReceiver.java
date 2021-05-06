@@ -15,6 +15,7 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import net.dempsy.DempsyException;
 import net.dempsy.Infrastructure;
+import net.dempsy.Infrastructure.ThePlug;
 import net.dempsy.serialization.Serializer;
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.DisruptableRecevier;
@@ -49,6 +51,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
     private NioAddress address = null;
     private Binding binding = null;
     private Acceptor acceptor = null;
+    private ThePlug thePlug = null;
 
     @SuppressWarnings("unchecked") private Reader<T>[] readers = new Reader[2];
 
@@ -124,13 +127,15 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         if(!isRunning.get())
             throw new IllegalStateException("Cannot restart an " + NioReceiver.class.getSimpleName());
 
+        thePlug = infra.getThePlug();
+
         if(binding == null)
             getAddress(infra); // sets binding via side affect.
 
         // before starting the acceptor, make sure we have Readers created.
         try {
             for(int i = 0; i < readers.length; i++)
-                readers[i] = new Reader<T>(isRunning, address, (Listener<T>)listener, serializer, maxMessageSize);
+                readers[i] = new Reader<T>(isRunning, address, (Listener<T>)listener, serializer, maxMessageSize, thePlug);
         } catch(final IOException ioe) {
             LOGGER.error(address.toString() + " failed to start up readers", ioe);
             throw new MessageTransportException(address.toString() + " failed to start up readers", ioe);
@@ -142,7 +147,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             threadingModel.runDaemon(readers[i], "nio-reader-" + i + "-" + address);
 
         // start the acceptor
-        threadingModel.runDaemon(acceptor = new Acceptor(binding, isRunning, readers, address), "nio-acceptor-" + address);
+        threadingModel.runDaemon(acceptor = new Acceptor(binding, isRunning, readers, address, thePlug), "nio-acceptor-" + address);
     }
 
     @Override
@@ -214,13 +219,15 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         final AtomicLong messageNum = new AtomicLong(0);
         final AtomicBoolean done = new AtomicBoolean(false);
         final NioAddress thisNode;
+        final ThePlug thePlug;
 
-        private Acceptor(final Binding binding, final AtomicBoolean isRunning, final Reader<?>[] readers, final NioAddress thisNode) {
+        private Acceptor(final Binding binding, final AtomicBoolean isRunning, final Reader<?>[] readers, final NioAddress thisNode, final ThePlug thePlug) {
             this.binding = binding;
             this.isRunning = isRunning;
             this.readers = readers;
             this.numReaders = readers.length;
             this.thisNode = thisNode;
+            this.thePlug = thePlug;
         }
 
         @Override
@@ -255,8 +262,15 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                         }
                     } catch(final IOException ioe) {
                         LOGGER.error("Failed during accept loop.", ioe);
+                    } catch(final RuntimeException rte) {
+                        LOGGER.error("Unexpected exception! Not exiting accept loop.", rte);
                     }
                 }
+            } catch(final Error err) {
+                // attempt to log the error.
+                LOGGER.error("CRITICAL FAILURE IN REAED THREAD!", err);
+                Optional.ofNullable(thePlug).ifPresent(p -> p.pull());
+                throw err;
             } finally {
                 NioUtils.closeQuietly(serverChannel, LOGGER, "Failed to close the server Channel from the Acceptor");
                 done.set(true);
@@ -356,7 +370,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             key.cancel();
         }
 
-        public void read(final SelectionKey key) throws IOException {
+        private void read(final SelectionKey key) throws IOException {
             final SocketChannel channel = (SocketChannel)key.channel();
             final ReturnableBufferOutput buf;
             if(partialRead == null) {
@@ -434,15 +448,17 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         private final int maxMessageSize;
         private final AtomicBoolean done = new AtomicBoolean(false);
         private final AtomicReference<CloseCommand> clientToClose = new AtomicReference<CloseCommand>(null);
+        private final ThePlug thePlug;
 
         public Reader(final AtomicBoolean isRunning, final NioAddress thisNode, final Listener<T> typedListener, final Serializer serializer,
-            final int maxMessageSize) throws IOException {
+            final int maxMessageSize, final ThePlug thePlug) throws IOException {
             selector = Selector.open();
             this.isRunning = isRunning;
             this.thisNode = thisNode;
             this.typedListener = typedListener;
             this.serializer = serializer;
             this.maxMessageSize = maxMessageSize;
+            this.thePlug = thePlug;
         }
 
         @Override
@@ -500,8 +516,15 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                         }
                     } catch(final IOException ioe) {
                         LOGGER.error("Failed during reader loop.", ioe);
+                    } catch(final RuntimeException rte) {
+                        LOGGER.error("Unexpected exception! Not exiting read loop.", rte);
                     }
                 }
+            } catch(final Error err) {
+                // attempt to log the error.
+                LOGGER.error("CRITICAL FAILURE IN REAED THREAD!", err);
+                Optional.ofNullable(thePlug).ifPresent(p -> p.pull());
+                throw err;
             } finally {
                 if(selector != null)
                     NioUtils.closeQuietly(selector, LOGGER, "Failed to close selector on reader thread.");

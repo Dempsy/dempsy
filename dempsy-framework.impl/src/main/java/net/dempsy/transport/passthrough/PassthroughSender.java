@@ -1,10 +1,16 @@
 package net.dempsy.transport.passthrough;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.transport.MessageTransportException;
+import net.dempsy.transport.RoutedMessage;
 import net.dempsy.transport.Sender;
 
 public class PassthroughSender implements Sender {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PassthroughSender.class);
+
     private final NodeStatsCollector statsCollector;
     private final PassthroughSenderFactory owner;
     private boolean isRunning = true;
@@ -24,7 +30,13 @@ public class PassthroughSender implements Sender {
             throw new MessageTransportException("send called on stopped PassthroughSender");
         }
 
-        reciever.listener.onMessage(message);
+        try {
+            reciever.listener.propogateMessageToNode((RoutedMessage)message, false, null);
+        } catch(final RuntimeException rte) {
+            LOGGER.error("Unexpected excpetion!", rte);
+            throw rte;
+        }
+
         if(statsCollector != null)
             statsCollector.messageSent(message);
     }

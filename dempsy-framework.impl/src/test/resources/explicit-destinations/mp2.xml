@@ -8,9 +8,14 @@ xmlns:util="http://www.springframework.org/schema/util"
     http://www.springframework.org/schema/util
     http://www.springframework.org/schema/util/spring-util.xsd" >
 
-    <bean id="outputScheduler" class="net.dempsy.output.RelativeOutputSchedule">
-        <constructor-arg value="1" />
-        <constructor-arg value="SECONDS" />
+    <bean id="mp2" class="net.dempsy.config.Cluster">
+        <constructor-arg value="mp2-cluster" />
+        <property name="messageProcessor">
+            <bean class="net.dempsy.lifecycle.annotation.MessageProcessor">
+                <constructor-arg>
+                    <bean class="net.dempsy.TestExplicitDestinations$Mp2" />
+                </constructor-arg>
+            </bean>
+        </property>
     </bean>
-    
 </beans>

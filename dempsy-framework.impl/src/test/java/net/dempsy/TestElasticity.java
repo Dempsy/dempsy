@@ -391,11 +391,16 @@ public class TestElasticity extends DempsyBaseTest {
                     // send a few numbers. There are 20 shards so in order to cover all
                     // shards we can send in 20 messages. It just so happens that the hashCode
                     // for an integer is the integer itself so we can get every shard by sending
-                    while(keepGoing.get()) {
-                        for(int num = 0; num < 20; num++) {
-                            final int number = num;
-                            dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
+                    try {
+                        while(keepGoing.get()) {
+                            for(int num = 0; num < 20; num++) {
+                                final int number = num;
+                                dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
+                            }
                         }
+                    } catch(final InterruptedException ie) {
+                        if(keepGoing.get())
+                            LOGGER.info("send message thread interrupted but still running.");
                     }
                 };
 
@@ -455,11 +460,16 @@ public class TestElasticity extends DempsyBaseTest {
                     // send a few numbers. There are 20 shards so in order to cover all
                     // shards we can send in 20 messages. It just so happens that the hashCode
                     // for an integer is the integer itself so we can get every shard by sending
-                    while(keepGoing.get()) {
-                        for(int num = 0; num < 20; num++) {
-                            final int number = num;
-                            dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
+                    try {
+                        while(keepGoing.get()) {
+                            for(int num = 0; num < 20; num++) {
+                                final int number = num;
+                                dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
+                            }
                         }
+                    } catch(final InterruptedException ie) {
+                        if(keepGoing.get())
+                            LOGGER.info("send message thread interrupted but still running.");
                     }
                 };
 
@@ -520,11 +530,16 @@ public class TestElasticity extends DempsyBaseTest {
                     // send a few numbers. There are 20 shards so in order to cover all
                     // shards we can send in 20 messages. It just so happens that the hashCode
                     // for an integer is the integer itself so we can get every shard by sending
-                    while(keepGoing.get()) {
-                        for(int num = 0; num < 20; num++) {
-                            final int number = num;
-                            dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
+                    try {
+                        while(keepGoing.get()) {
+                            for(int num = 0; num < 20; num++) {
+                                final int number = num;
+                                dispatcher.dispatch(uncheck(() -> ke.extract(new Number(number, rankIndexToSend.get()))));
+                            }
                         }
+                    } catch(final InterruptedException ie) {
+                        if(keepGoing.get())
+                            LOGGER.info("send message thread interrupted but still running.");
                     }
                 };
 

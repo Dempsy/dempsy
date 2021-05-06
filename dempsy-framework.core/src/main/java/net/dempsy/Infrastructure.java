@@ -19,30 +19,37 @@ public interface Infrastructure {
      */
     ClusterInfoSession getCollaborator();
 
+    @FunctionalInterface
+    public static interface ThePlug {
+        public void pull();
+    }
+
+    ThePlug getThePlug();
+
     /**
      * A node-centric {@link AutoDisposeSingleThreadScheduler}
      */
     AutoDisposeSingleThreadScheduler getScheduler();
 
     /**
-     * The {@link ClusterInfoSession} paths for the application this node is part of. 
+     * The {@link ClusterInfoSession} paths for the application this node is part of.
      */
     RootPaths getRootPaths();
 
     /**
-     * The Infrastructure will supply a {@link ClusterStatsCollector} using the node's 
+     * The Infrastructure will supply a {@link ClusterStatsCollector} using the node's
      * configured {@link ClusterStatsCollectorFactory} supplying the given {@link ClusterId}.
      */
     ClusterStatsCollector getClusterStatsCollector(ClusterId clusterId);
 
     /**
-     * This method will retreive the single instance of a {@link NodeStatsCollector} for 
+     * This method will retreive the single instance of a {@link NodeStatsCollector} for
      * this node.
      */
     NodeStatsCollector getNodeStatsCollector();
 
     /**
-     * User configuration for the node is accessible from this method. 
+     * User configuration for the node is accessible from this method.
      */
     public default Map<String, String> getConfiguration() {
         return getNode().getConfiguration();
@@ -60,8 +67,8 @@ public interface Infrastructure {
     ThreadingModel getThreadingModel();
 
     /**
-     * A helper method to retrieve a specific piece of configuration for the given 
-     * class. 
+     * A helper method to retrieve a specific piece of configuration for the given
+     * class.
      */
     public default String getConfigValue(final Class<?> clazz, final String key, final String defaultValue) {
         final Map<String, String> conf = getConfiguration();
@@ -72,7 +79,7 @@ public interface Infrastructure {
     public Node getNode();
 
     /**
-     * The {@link ClusterInfoSession} paths for the application this node is part of. 
+     * The {@link ClusterInfoSession} paths for the application this node is part of.
      */
     public static class RootPaths {
         /**
