@@ -1,6 +1,8 @@
 package net.dempsy.lifecycle.annotation;
 
-public interface Resource extends AutoCloseable {
+import net.dempsy.util.QuietCloseable;
+
+public interface Resource extends QuietCloseable {
 
     /**
      * When an additional reference is made to this instance, this method will be called.
