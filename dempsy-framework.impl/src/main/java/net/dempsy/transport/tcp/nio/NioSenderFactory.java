@@ -8,7 +8,6 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -276,6 +275,7 @@ public class NioSenderFactory implements SenderFactory {
         // called from a single thread so we're going to avoid temporary object creation
         // and just create the list once.
         private final ArrayList<NioSender> cfnsCurSenders = new ArrayList<>(256);
+        private NioSender[] cfnsNewSenders = new NioSender[256];
 
         private boolean checkForNewSenders() throws IOException {
             if(idleSenders.size() == 0)
@@ -283,38 +283,47 @@ public class NioSenderFactory implements SenderFactory {
             boolean didSomething = false;
             cfnsCurSenders.clear();
             cfnsCurSenders.addAll(idleSenders.keySet());
-            final Set<NioSender> newSenders = new HashSet<>();
 
+            if(cfnsNewSenders.length < cfnsCurSenders.size()) {
+                cfnsNewSenders = new NioSender[cfnsCurSenders.size() + 10];
+            }
+
+            int pos = 0;
             try { // if we fail here we need to put the senders back or we'll loose them forever.
-
-                // move any NioSenders with data from working and onto newSenders
+                  // move any NioSenders with data from working and onto newSenders
                 for(final NioSender s: cfnsCurSenders) {
                     if(s.messages.peek() != null) {
                         // try to get it
-                        final NioSender cur = idleSenders.remove(s);
-                        // removing them means putting them on the newSenders set so we can track them
-                        if(cur != null)
-                            newSenders.add(cur);
+                        cfnsNewSenders[pos++] = idleSenders.remove(s);
+                        // removing them means putting them on the newSenders set so we can track them.
+                        // idleSenders.remove can return null if another thread picked it up already.
                     }
                 }
                 cfnsCurSenders.clear();
-                // newSenders are now mine since they've been removed from working.
+                // non-null newSenders are now mine since they've been removed from working.
 
                 // go through each new sender ...
-                for(final Iterator<NioSender> iter = newSenders.iterator(); iter.hasNext();) {
-                    final NioSender cur = iter.next();
-
-                    // ... if the new sender has messages ...
-                    if(cur.messages.peek() != null) {
-                        // ... register the channel for writing and attach the SenderHolder
-                        new SenderHolder(cur, LOGGER).register(selector);
-                        iter.remove();
-                        didSomething = true; // we did something.
+                for(int i = 0; i < pos; i++) {
+                    final NioSender cur = cfnsNewSenders[i];
+                    if(cur != null) {
+                        // ... if the new sender has messages ...
+                        if(cur.messages.peek() != null) {
+                            // ... register the channel for writing and attach the SenderHolder
+                            new SenderHolder(cur, LOGGER).register(selector);
+                            cfnsNewSenders[i] = null; // clear it out, anything not cleared out will be readded to idleSenders
+                            didSomething = true; // we did something.
+                        }
                     }
                 }
             } finally {
                 // any still on toWork need to be returned to working
-                newSenders.forEach(s -> idleSenders.putIfAbsent(s, s));
+                for(int i = 0; i < pos; i++) {
+                    if(cfnsNewSenders[i] != null) {
+                        final NioSender s = cfnsNewSenders[i];
+                        idleSenders.putIfAbsent(s, s);
+                        cfnsNewSenders[i] = null;
+                    }
+                }
             }
 
             return didSomething;

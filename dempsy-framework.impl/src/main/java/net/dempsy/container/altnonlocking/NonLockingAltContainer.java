@@ -41,6 +41,7 @@ import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.SafeString;
+import net.dempsy.util.StupidHashMap;
 
 /**
  * <p>
@@ -68,7 +69,8 @@ public class NonLockingAltContainer extends Container {
 
     // message key -> instance that handles messages with this key
     // changes to this map will be synchronized; read-only may be concurrent
-    private final ConcurrentHashMap<Object, InstanceWrapper> instances = new ConcurrentHashMap<>();
+    // private final ConcurrentHashMap<Object, InstanceWrapper> instances = new ConcurrentHashMap<>();
+    private final StupidHashMap<Object, InstanceWrapper> instances = new StupidHashMap<>();
 
     private final AtomicBoolean isReady = new AtomicBoolean(false);
     protected final AtomicInteger numBeingWorked = new AtomicInteger(0);
