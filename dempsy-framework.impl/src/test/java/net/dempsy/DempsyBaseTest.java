@@ -180,20 +180,30 @@ public abstract class DempsyBaseTest {
 
     public static Combos production() {
         return new Combos(
-            new String[] {"managed","group"},
-            new String[] {"altnonlockingbulk","locking"},
+            // new String[] {"managed","group"},
+            // new String[] {"altnonlockingbulk","locking"},
+            // new String[] {"zookeeper"},
+            // new String[] {"nio","bq"},
+            // new String[] {"kryo"},
+            // new Object[][] {
+            // // limited = max len set and blocking = false. That means messages will be thrown away.
+            // // This could also be called nonblocking.
+            // {"limited",(Function<String, ThreadingModel>)(testName) -> new DefaultThreadingModel(testName)
+            // .setAdditionalThreads(TM_ADDITIONAL_THREADS)
+            // .setCoresFactor(TM_CORES_FACTOR)
+            // .setBlocking(false)
+            // .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
+            // },
+            // {"ordered",(Function<String, ThreadingModel>)(testName) -> new OrderedPerContainerThreadingModel(testName)
+            // .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
+            // },
+            // });
+            new String[] {"group"},
+            new String[] {"locking"},
             new String[] {"zookeeper"},
-            new String[] {"nio","bq"},
+            new String[] {"bq"},
             new String[] {"kryo"},
             new Object[][] {
-                // limited = max len set and blocking = false. That means messages will be thrown away.
-                // This could also be called nonblocking.
-                {"limited",(Function<String, ThreadingModel>)(testName) -> new DefaultThreadingModel(testName)
-                    .setAdditionalThreads(TM_ADDITIONAL_THREADS)
-                    .setCoresFactor(TM_CORES_FACTOR)
-                    .setBlocking(false)
-                    .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
-                },
                 {"ordered",(Function<String, ThreadingModel>)(testName) -> new OrderedPerContainerThreadingModel(testName)
                     .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
                 },

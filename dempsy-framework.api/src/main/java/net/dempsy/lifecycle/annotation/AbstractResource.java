@@ -16,9 +16,13 @@ import org.slf4j.LoggerFactory;
 
 import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.SafeString;
+import net.dempsy.util.io.DUtils;
 
 public abstract class AbstractResource implements Resource {
     private static Logger LOGGER = LoggerFactory.getLogger(AbstractResource.class);
+
+    // belt, suspenders with iron maiden locks
+    public static final String DEFAULT_LEAK_TRACKING_OUTPUT_FILE = new File(DUtils.systemTempDir(LOGGER), "track.out").getAbsolutePath();
 
     private final transient AtomicLong refCount = new AtomicLong(1);
 
@@ -34,7 +38,7 @@ public abstract class AbstractResource implements Resource {
         TRACK_RESOURCE_LIFECYCLE = track;
     }
 
-    private static final transient File trackFile = TRACK_RESOURCE_LIFECYCLE ? new File("/tmp/track.out") : null;
+    private static final transient File trackFile = TRACK_RESOURCE_LIFECYCLE ? new File(DEFAULT_LEAK_TRACKING_OUTPUT_FILE) : null;
 
     static {
         if(TRACK_RESOURCE_LIFECYCLE)

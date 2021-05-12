@@ -273,23 +273,31 @@ public class NioSenderFactory implements SenderFactory {
             }
         }
 
+        // called from a single thread so we're going to avoid temporary object creation
+        // and just create the list once.
+        private final ArrayList<NioSender> cfnsCurSenders = new ArrayList<>(256);
+
         private boolean checkForNewSenders() throws IOException {
+            if(idleSenders.size() == 0)
+                return false;
             boolean didSomething = false;
-            final Set<NioSender> curSenders = idleSenders.keySet();
+            cfnsCurSenders.clear();
+            cfnsCurSenders.addAll(idleSenders.keySet());
             final Set<NioSender> newSenders = new HashSet<>();
 
             try { // if we fail here we need to put the senders back or we'll loose them forever.
 
                 // move any NioSenders with data from working and onto newSenders
-                curSenders.stream()
-                    .filter(s -> s.messages.peek() != null)
-                    .forEach(s -> {
+                for(final NioSender s: cfnsCurSenders) {
+                    if(s.messages.peek() != null) {
+                        // try to get it
                         final NioSender cur = idleSenders.remove(s);
                         // removing them means putting them on the newSenders set so we can track them
                         if(cur != null)
                             newSenders.add(cur);
-                    });
-
+                    }
+                }
+                cfnsCurSenders.clear();
                 // newSenders are now mine since they've been removed from working.
 
                 // go through each new sender ...
