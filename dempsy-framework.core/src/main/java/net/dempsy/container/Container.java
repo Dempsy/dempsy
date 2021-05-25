@@ -122,7 +122,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         Operation(final boolean handlesMessage) {
             this.handlesMessage = handlesMessage;
         }
-
     }
 
     // ----------------------------------------------------------------------------
@@ -269,6 +268,11 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         try(final StatsCollector.TimerContext tctx = statCollector.outputInvokeStarted()) {
             outputPass();
         }
+    }
+
+    @Override
+    public String toString() {
+        return "[Container (" + this.getClass().getSimpleName() + ") for cluser " + clusterId;
     }
 
     // ----------------------------------------------------------------------------

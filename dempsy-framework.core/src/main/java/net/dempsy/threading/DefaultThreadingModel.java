@@ -134,8 +134,8 @@ public class DefaultThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public synchronized DefaultThreadingModel start() {
-        logConfig(LOGGER, "Threading Model", DefaultThreadingModel.class.getName());
+    public synchronized DefaultThreadingModel start(final String nodeid) {
+        logConfig(LOGGER, "Threading Model {} for node: {}", DefaultThreadingModel.class.getName(), nodeid);
         logConfig(LOGGER, configKey(CONFIG_KEY_CORES_FACTOR), m, DEFAULT_CORES_FACTOR);
         logConfig(LOGGER, configKey(CONFIG_KEY_ADDITIONAL_THREADS), additionalThreads, DEFAULT_ADDITIONAL_THREADS);
         logConfig(LOGGER, configKey(CONFIG_KEY_MAX_PENDING), getMaxNumberOfQueuedLimitedTasks(), DEFAULT_MAX_PENDING);

@@ -424,7 +424,7 @@ public abstract class DempsyBaseTest {
             .track(new ClassPathXmlApplicationContext(fullCtx.toArray(new String[fullCtx.size()])));
 
         final ThreadingModel threading;
-        currentlyTracking.track(threading = threadingModelSource.apply(currentAppName)).start();
+        currentlyTracking.track(threading = threadingModelSource.apply(currentAppName)).start("nodeid");
 
         return currentlyTracking.track(new NodeManagerWithContext(new NodeManager()
             .node(ctx.getBean(Node.class))

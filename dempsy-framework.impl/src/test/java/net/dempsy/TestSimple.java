@@ -95,7 +95,7 @@ public class TestSimple {
 
             nm.node(n)
                 .collaborator(new LocalClusterSessionFactory().createSession())
-                .threadingModel(tm.start());
+                .threadingModel(tm.start("nodeid"));
 
             nm.start();
 

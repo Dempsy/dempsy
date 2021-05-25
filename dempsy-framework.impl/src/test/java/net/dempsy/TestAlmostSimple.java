@@ -212,7 +212,7 @@ public class TestAlmostSimple {
 
             nm.node(n)
                 .collaborator(new LocalClusterSessionFactory().createSession())
-                .threadingModel(tm.start());
+                .threadingModel(tm.start(n.application));
 
             nm.start();
 

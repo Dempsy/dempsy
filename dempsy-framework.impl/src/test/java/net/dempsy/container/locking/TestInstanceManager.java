@@ -263,7 +263,7 @@ public class TestInstanceManager {
         container.setInbound(new DummyInbound());
 
         tm = new DefaultThreadingModel(TestInstanceManager.class.getName());
-        tm.start();
+        tm.start(TestInstanceManager.class.getName());
 
         container.start(new TestInfrastructure(tm) {
 

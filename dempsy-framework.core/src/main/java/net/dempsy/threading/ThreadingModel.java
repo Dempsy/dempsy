@@ -54,9 +54,9 @@ public interface ThreadingModel extends AutoCloseable {
     public int getNumberLimitedPending();
 
     /**
-     * Start up the executor
+     * Start up the executor.
      */
-    public ThreadingModel start();
+    public ThreadingModel start(String nodeId);
 
     /**
      * Perform a clean shutdown of the executor

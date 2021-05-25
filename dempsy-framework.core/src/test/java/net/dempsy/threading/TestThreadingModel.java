@@ -33,12 +33,12 @@ public class TestThreadingModel {
 
         final String threadNameBase = TestThreadingModel.class.getSimpleName() + "-";
         final DefaultThreadingModel dtm = chain(new DefaultThreadingModel(threadNameBase, NUM_THREADS, MAX_PENDING),
-            tm -> tm.start());
+            tm -> tm.start("nodeid"));
 
         // threading model, num threads,
         return new Object[][] {
             {dtm,NUM_THREADS,MAX_PENDING},
-            {chain(new OrderedPerContainerThreadingModel(threadNameBase, MAX_PENDING), tm -> tm.start()),1,MAX_PENDING}
+            {chain(new OrderedPerContainerThreadingModel(threadNameBase, MAX_PENDING), tm -> tm.start("nodeid")),1,MAX_PENDING}
         };
 
     }

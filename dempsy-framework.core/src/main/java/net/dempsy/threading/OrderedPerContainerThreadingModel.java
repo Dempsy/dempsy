@@ -454,8 +454,8 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public OrderedPerContainerThreadingModel start() {
-        logConfig(LOGGER, "Threading Model", OrderedPerContainerThreadingModel.class.getName());
+    public OrderedPerContainerThreadingModel start(final String nodeid) {
+        logConfig(LOGGER, "Threading Model {} for node: {}", OrderedPerContainerThreadingModel.class.getSimpleName(), nodeid);
         logConfig(LOGGER, configKey(CONFIG_KEY_MAX_PENDING), getMaxNumberOfQueuedLimitedTasks(), DEFAULT_MAX_PENDING);
         logConfig(LOGGER, configKey(CONFIG_KEY_DESERIALIZATION_THREADS), deserializationThreadCount, DEFAULT_DESERIALIZATION_THREADS);
 

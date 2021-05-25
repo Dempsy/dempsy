@@ -61,6 +61,7 @@ public class CronOutputSchedule implements OutputScheduler {
      */
     @Override
     public void start(final Infrastructure infra) {
+        LOGGER.info("Starting cron output scheduler for " + outputInvoker);
         // There seems to be a bug in Quartz where getting the default scheduler causes a failure
         // when done in parallel.
         synchronized(StdSchedulerFactory.class) {
@@ -71,6 +72,7 @@ public class CronOutputSchedule implements OutputScheduler {
                 scheduler = StdSchedulerFactory.getDefaultScheduler();
                 scheduler.scheduleJob(jobDetail, trigger);
                 scheduler.start();
+                LOGGER.info("Started cron output scheduler for " + outputInvoker);
             } catch(final SchedulerException se) {
                 LOGGER.error("Error occurred while starting the cron scheduler : " + se.getMessage(), se);
             }

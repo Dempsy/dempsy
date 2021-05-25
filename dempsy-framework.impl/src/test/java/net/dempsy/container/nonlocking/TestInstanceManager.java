@@ -257,7 +257,7 @@ public class TestInstanceManager {
         manager.setInbound(new DummyInbound());
 
         tm = new DefaultThreadingModel(TestInstanceManager.class.getName());
-        tm.start();
+        tm.start(TestInstanceManager.class.getName());
 
         manager.start(new TestInfrastructure(tm) {
             BasicNodeStatsCollector nStats = new BasicNodeStatsCollector();

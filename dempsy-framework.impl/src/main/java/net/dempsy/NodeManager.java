@@ -207,9 +207,9 @@ public class NodeManager implements Infrastructure, AutoCloseable {
 
                 new DefaultThreadingModel(nodeId)
 
-            ).configure(node.getConfiguration()).start();
+            ).configure(node.getConfiguration()).start(nodeId);
         else if(!threading.isStarted())
-            threading.start();
+            threading.start(nodeId);
 
         nodeStatsCollector.setMessagesPendingGauge(() -> threading.getNumberLimitedPending());
 
