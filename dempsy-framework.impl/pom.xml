@@ -34,7 +34,7 @@
      <dependency> <!-- Required if the output scheduler is going to be used. -->
        <groupId>org.quartz-scheduler</groupId>
        <artifactId>quartz</artifactId>
-       <optional>true</optional>
+       <!-- <optional>true</optional>  decided to include this by default. -->
      </dependency> 
      
      <!-- Test dependencies -->
