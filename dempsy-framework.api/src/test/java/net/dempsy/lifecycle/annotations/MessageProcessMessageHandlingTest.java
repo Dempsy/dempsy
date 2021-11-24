@@ -2,13 +2,12 @@ package net.dempsy.lifecycle.annotations;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 import net.dempsy.lifecycle.annotation.MessageProcessor;
 import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
@@ -19,7 +18,6 @@ import net.dempsy.lifecycle.annotations.TestMps.TestMpWithReturn;
 import net.dempsy.messages.KeyedMessageWithType;
 
 public class MessageProcessMessageHandlingTest {
-    @Rule public ExpectedException exception = ExpectedException.none();
 
     private static KeyedMessageWithType km(final Object message) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         return new KeyExtractor().extract(message).get(0);
@@ -37,8 +35,7 @@ public class MessageProcessMessageHandlingTest {
 
     @Test
     public void testMpMessageTypeInfo() throws Exception {
-        exception.expect(IllegalStateException.class);
-        new MessageProcessor<TestMpMessageTypeClass>(new TestMpMessageTypeClass());
+        assertThrows(IllegalStateException.class, () -> new MessageProcessor<TestMpMessageTypeClass>(new TestMpMessageTypeClass()));
     }
 
     @Test

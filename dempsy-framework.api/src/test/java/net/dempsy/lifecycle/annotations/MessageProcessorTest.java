@@ -18,11 +18,10 @@ package net.dempsy.lifecycle.annotations;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 import net.dempsy.DempsyException;
 import net.dempsy.lifecycle.annotation.MessageProcessor;
@@ -40,7 +39,6 @@ import net.dempsy.lifecycle.annotations.TestMps.TestMpNoKey;
 import net.dempsy.lifecycle.annotations.TestMps.TestMpOnlyKey;
 
 public class MessageProcessorTest {
-    @Rule public ExpectedException exception = ExpectedException.none();
 
     @Test
     public void testMethodHandleWithParameters() throws Throwable {
@@ -83,16 +81,17 @@ public class MessageProcessorTest {
 
     @Test
     public void testMethodHandleExtraParameters() throws Throwable {
-        exception.expect(DempsyException.class);
-        final MessageProcessor<TestMpExtraParameters> helper = new MessageProcessor<TestMpExtraParameters>(new TestMpExtraParameters());
-        helper.validate();
-        final TestMpExtraParameters mp = helper.newInstance();
-        assertFalse(mp.activated);
-        helper.activate(mp, "activate", new Object());
-        assertTrue(mp.activated);
-        assertFalse(mp.passivateCalled);
-        helper.passivate(mp);
-        assertTrue(mp.passivateCalled);
+        assertThrows(DempsyException.class, () -> {
+            final MessageProcessor<TestMpExtraParameters> helper = new MessageProcessor<TestMpExtraParameters>(new TestMpExtraParameters());
+            helper.validate();
+            final TestMpExtraParameters mp = helper.newInstance();
+            assertFalse(mp.activated);
+            helper.activate(mp, "activate", new Object());
+            assertTrue(mp.activated);
+            assertFalse(mp.passivateCalled);
+            helper.passivate(mp);
+            assertTrue(mp.passivateCalled);
+        });
     }
 
     @Test
@@ -181,7 +180,6 @@ public class MessageProcessorTest {
 
     @Test
     public void testEvictionNoReturn() {
-        exception.expect(DempsyException.class);
-        new MessageProcessor<TestMpEvictionNoReturn>(new TestMpEvictionNoReturn());
+        assertThrows(DempsyException.class, () -> new MessageProcessor<TestMpEvictionNoReturn>(new TestMpEvictionNoReturn()));
     }
 }

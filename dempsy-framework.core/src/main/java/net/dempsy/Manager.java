@@ -1,6 +1,7 @@
 package net.dempsy;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -53,9 +54,9 @@ public class Manager<T> {
                 final Class<T> factoryClass = (Class<T>)Class.forName(typeId + ".Factory");
                 if(Locator.class.isAssignableFrom(factoryClass)) {
                     try {
-                        final Locator factory = (Locator)factoryClass.newInstance();
+                        final Locator factory = (Locator)factoryClass.getConstructor().newInstance();
                         ret = factory.locate(clazz);
-                    } catch(final InstantiationException | IllegalAccessException e) {
+                    } catch(final InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
                         LOGGER.warn("Failed trying to instantiate the Locator {} using a no-arg contructor:", factoryClass.getName(), e);
                     }
                 }
@@ -81,8 +82,8 @@ public class Manager<T> {
                         try {
                             @SuppressWarnings("unchecked")
                             final Class<T> classToInstantiate = (Class<T>)Class.forName(classToInstantiateStr);
-                            ret = classToInstantiate.newInstance();
-                        } catch(final InstantiationException | IllegalAccessException e) {
+                            ret = classToInstantiate.getConstructor().newInstance();
+                        } catch(final InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
                             LOGGER.warn("Failed trying to instantiate the implementation class {} using a no-arg contructor:", classToInstantiateStr, e);
                         } catch(final ClassNotFoundException cnfe) {
                             LOGGER.warn(

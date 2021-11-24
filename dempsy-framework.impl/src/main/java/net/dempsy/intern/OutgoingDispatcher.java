@@ -66,12 +66,10 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
 
     private static class ResourceManagerClosable implements QuietCloseable {
         public final MessageResourceManager disposer;
-        public final KeyedMessageWithType message;
         public final KeyedMessageWithType toUse;
 
         public ResourceManagerClosable(final MessageResourceManager disposer, final KeyedMessageWithType message) {
             this.disposer = disposer;
-            this.message = message;
             toUse = disposer != null ? new KeyedMessageWithType(message.key, disposer.replicate(message.message), message.messageTypes) : message;
         }
 
