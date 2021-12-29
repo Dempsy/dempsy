@@ -16,7 +16,6 @@
 
 package net.dempsy.config;
 
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import net.dempsy.messages.Adaptor;
@@ -43,7 +42,6 @@ public class Cluster {
     private MessageProcessorLifecycle<?> mp = null;
     private Adaptor adaptor = null;
     private String routingStrategyId;
-    private ClusterId[] destinations = {};
     private int maxPendingMessagesPerContainer = DEFAULT_MAX_PENDING_MESSAGES_PER_CONTAINER;
     private String containerTypeId = null;
 
@@ -78,22 +76,6 @@ public class Cluster {
     // ============================================================================
     // Builder functionality.
     // ============================================================================
-    /**
-     * Set the list of explicit destination that outgoing messages should be limited to.
-     */
-    public Cluster destination(final String... destinations) {
-        final String applicationName = clusterId.applicationName;
-        return destination(Arrays.stream(destinations).map(d -> new ClusterId(applicationName, d)).toArray(ClusterId[]::new));
-    }
-
-    /**
-     * Set the list of explicit destination that outgoing messages should be limited to.
-     */
-    public Cluster destination(final ClusterId... destinations) {
-        this.destinations = destinations;
-        return this;
-    }
-
     public Cluster mp(final MessageProcessorLifecycle<?> messageProcessor) throws IllegalStateException {
         if(this.mp != null)
             throw new IllegalStateException("MessageProcessorLifecycle already set on cluster " + clusterId);
@@ -206,13 +188,6 @@ public class Cluster {
     }
 
     /**
-     * If this {@link Cluster} identifies specific destination for outgoing messages, this will return the list of ids of those destination clusters.
-     */
-    public ClusterId[] getDestinations() {
-        return destinations;
-    }
-
-    /**
      * Set the list of explicit destination that outgoing messages should be limited to.
      */
     public void setDestinations(final ClusterId... destinations) {
@@ -244,15 +219,6 @@ public class Cluster {
         return adaptor;
     }
     // ============================================================================
-
-    /**
-     * Returns true if there are any explicitly defined destinations.
-     *
-     * @see #setDestinations
-     */
-    public boolean hasExplicitDestinations() {
-        return this.destinations != null && this.destinations.length > 0;
-    }
 
     public boolean isAdaptor() {
         return(adaptor != null);

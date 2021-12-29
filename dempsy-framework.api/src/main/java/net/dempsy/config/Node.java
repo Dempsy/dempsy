@@ -115,24 +115,6 @@ public class Node {
             return this;
         }
 
-        /**
-         * On the current cluster, set the list of explicit destination that outgoing messages should be limited to.
-         */
-        public Builder destination(final String... destinations) {
-            check("destination");
-            curCluster.destination(destinations);
-            return this;
-        }
-
-        /**
-         * Set the list of explicit destination that outgoing messages should be limited to.
-         */
-        public Builder destination(final ClusterId... destinations) {
-            check("destination");
-            curCluster.destination(destinations);
-            return this;
-        }
-
         public Builder mp(final MessageProcessorLifecycle<?> messageProcessor) throws IllegalStateException {
             check("mp");
             curCluster.mp(messageProcessor);
