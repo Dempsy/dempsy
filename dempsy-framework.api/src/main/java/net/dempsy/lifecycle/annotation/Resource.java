@@ -11,11 +11,11 @@ public interface Resource extends QuietCloseable {
     public void reference();
 
     /**
-     * This method, contrary to what might seem obvious, is balanced with init/reference
+     * This method, contrary to what might seem obvious, is balanced with construct/reference
      * and NOT to be used to free resource UNLESS the reference count has dropped to zero.
      *
      * Close is NOT idempotent on a Resource. It will be called the same number of times
-     * object constuct + init() + reference() are called and should simply close only when
+     * object construct + reference() are called and should simply close only when
      * the count drops to zero.
      */
     @Override
