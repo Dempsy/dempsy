@@ -103,7 +103,7 @@ public class TcpTransportTest {
         final NetworkInterface nif = (ifs.size() > 1) ? ifs.get(1) : ((ifs.size() == 1) ? ifs.get(0) : null);
 
         if(nif != null) { // otherwise we can do no testing.
-            final String ifname = nif.getDisplayName();
+            final String ifname = nif.getName();
             if(Collections.list(nif.getInetAddresses()).size() > 0) { // otherwise, we still can't really do anything without a lot of work
 
                 final AtomicBoolean resolverCalled = new AtomicBoolean(false);
