@@ -30,7 +30,7 @@
 
   <properties>
     <dempsy-commons-bom.version>2.3.4-SNAPSHOT</dempsy-commons-bom.version>
-    <spring.version>5.1.3.RELEASE</spring.version>
+    <spring.version>5.3.20</spring.version>
     <metrics.version>4.1.1</metrics.version>
     <metrics-ganglia.version>3.2.6</metrics-ganglia.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
