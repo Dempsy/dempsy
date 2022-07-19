@@ -12,8 +12,7 @@ public abstract class DeliverMessageJob implements MessageDeliveryJob {
     protected final NodeStatsCollector statsCollector;
     protected final RoutedMessage message;
 
-    private Container[] deliveries;
-    private boolean executeCalled = false;
+    private final Container[] deliveries;
     protected Container[] allContainers;
 
     protected DeliverMessageJob(final Container[] allContainers, final NodeStatsCollector statsCollector, final RoutedMessage message,

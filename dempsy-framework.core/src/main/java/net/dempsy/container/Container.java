@@ -58,7 +58,6 @@ import net.dempsy.monitoring.StatsCollector;
 import net.dempsy.output.OutputInvoker;
 import net.dempsy.router.RoutingStrategy.Inbound;
 import net.dempsy.threading.QuartzHelper;
-import net.dempsy.transport.RoutedMessage;
 import net.dempsy.util.OccasionalRunnable;
 import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.SafeString;
@@ -282,20 +281,19 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // ----------------------------------------------------------------------------
     // Internals
     // ----------------------------------------------------------------------------
-    
-    public static interface ContainerSpecific {
-    }
-    
+
+    public static interface ContainerSpecific {}
+
     private static class CS implements ContainerSpecific {
-    	final boolean managingPending;
-    	
-    	CS(boolean managingPending) {
-    		this.managingPending = managingPending;
-    	}
+        final boolean managingPending;
+
+        CS(final boolean managingPending) {
+            this.managingPending = managingPending;
+        }
     }
 
     // This will be called by the threading model to tell the container that it will be internally
-    // queuing this message for later dispatching to it. This gives the container the opportunity to 
+    // queuing this message for later dispatching to it. This gives the container the opportunity to
     // consider it a pending message. The message will either be delivered or the container will
     // eventually be told that it was rejected.
     public ContainerSpecific messageBeingEnqueudExternally(final KeyedMessage km, final boolean justArrived) {
@@ -307,48 +305,48 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
             LOGGER.trace("messageBeingEnqueudExternally: Pending messages on {} container is: {}", clusterId, numPending);
         return new CS(true);
     }
-    
-    public void messageBeingRejectedExternally(final KeyedMessage km, final boolean justArrived, ContainerSpecific pcs) {
-    	if (pcs == null) { // then this can only be an output op.
-    		LOGGER.warn("messageBeingRejectedExternally was applied to a queued output operation");
-    		return;
-    	}
 
-    	if(justArrived)
+    public void messageBeingRejectedExternally(final KeyedMessage km, final boolean justArrived, final ContainerSpecific pcs) {
+        if(pcs == null) { // then this can only be an output op.
+            LOGGER.warn("messageBeingRejectedExternally was applied to a queued output operation");
+            return;
+        }
+
+        if(justArrived)
             disposition.dispose(km.message);
 
-    	CS cs = (CS)pcs;
-    	if (cs.managingPending)
-    		numPending.decrementAndGet();
-    	
-    	statCollector.messageDiscarded(null);
+        final CS cs = (CS)pcs;
+        if(cs.managingPending)
+            numPending.decrementAndGet();
+
+        statCollector.messageDiscarded(null);
     }
 
-//    // Called before being submitted to the ThreadingModel. It allows independent management
-//    // of the portion of the ThreadingModel queue that's dedicated to queuing messages internally
-//    // to a container. Messages that are coming in from the outside of the node will have 'justArrived'
-//    // and therefore don't count against the maxPendingMessagesPerContainer. They count against
-//    // the nodes' queue.
-//    public ContainerSpecific prepareMessage(final RoutedMessage km, final boolean justArrived) {
-//        if(maxPendingMessagesPerContainer < 0)
-//            return null;
-//        if(justArrived)
-//            return null; // there's no bookeeping if the message just arrived.
-//
-//        numPending.incrementAndGet();
-//        if(traceEnabled)
-//            LOGGER.trace("prepareMessages: Pending messages on {} container is: ", clusterId, numPending);
-//
-//        return new ContainerSpecificInternal();
-//    }
+    // // Called before being submitted to the ThreadingModel. It allows independent management
+    // // of the portion of the ThreadingModel queue that's dedicated to queuing messages internally
+    // // to a container. Messages that are coming in from the outside of the node will have 'justArrived'
+    // // and therefore don't count against the maxPendingMessagesPerContainer. They count against
+    // // the nodes' queue.
+    // public ContainerSpecific prepareMessage(final RoutedMessage km, final boolean justArrived) {
+    // if(maxPendingMessagesPerContainer < 0)
+    // return null;
+    // if(justArrived)
+    // return null; // there's no bookeeping if the message just arrived.
+    //
+    // numPending.incrementAndGet();
+    // if(traceEnabled)
+    // LOGGER.trace("prepareMessages: Pending messages on {} container is: ", clusterId, numPending);
+    //
+    // return new ContainerSpecificInternal();
+    // }
 
     public void dispatch(final KeyedMessage message, final Operation op, final ContainerSpecific cs, final boolean justArrived)
         throws IllegalArgumentException, ContainerException {
-    	
-    	if (cs == null && Operation.output != op) {
-    		LOGGER.error("A message is being dispatch after being individuated but it was never enqueued and isn't an output message");
-    		throw new DempsyException("A message is being dispatch after being individuated but it was never enqueued and isn't an output message");
-    	}
+
+        if(cs == null && Operation.output != op) {
+            LOGGER.error("A message is being dispatch after being individuated but it was never enqueued and isn't an output message");
+            throw new DempsyException("A message is being dispatch after being individuated but it was never enqueued and isn't an output message");
+        }
 
         if(cs != null) {
             final int num = numPending.decrementAndGet(); // dec first.
@@ -768,7 +766,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         }
 
         private class CJ extends ContainerJob {
-        	
+
             @Override
             public void execute(final Container container) {
                 LOGGER.trace("output executing on {} with key {}", clusterId, message.key);

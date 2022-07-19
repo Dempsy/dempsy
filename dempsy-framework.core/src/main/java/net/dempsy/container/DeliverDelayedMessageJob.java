@@ -68,10 +68,10 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
     }
 
     private class CJ extends ContainerJob {
-    	CJ(ContainerSpecific cs) {
-    		super(cs);
-    	}
-    	
+        CJ(final ContainerSpecific cs) {
+            super(cs);
+        }
+
         @Override
         public void execute(final Container container) {
             dispatch(container, new KeyedMessage(message.key, message.message), Operation.handle, justArrived);
@@ -79,16 +79,16 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
 
         @Override
         public void reject(final Container container) {
-        	reject(container, new KeyedMessage(message.key, message.message), justArrived);
+            reject(container, new KeyedMessage(message.key, message.message), justArrived);
         }
     }
 
     @Override
     public List<ContainerJob> individuate() {
-    	return Arrays.stream(deliveries)
-    			.map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
-    			.map(i -> new CJ(i))
-    			.collect(Collectors.toList());
+        return Arrays.stream(deliveries)
+            .map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
+            .map(i -> new CJ(i))
+            .collect(Collectors.toList());
     }
 
     @Override

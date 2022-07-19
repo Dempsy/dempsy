@@ -33,8 +33,8 @@ public class DeliverResourceJob extends DeliverMessageJob {
     }
 
     private class CJ extends ContainerJob {
-        public CJ(ContainerSpecific cs) {
-        	super(cs);
+        public CJ(final ContainerSpecific cs) {
+            super(cs);
             disposition.replicate(message.message);
         }
 
@@ -57,10 +57,10 @@ public class DeliverResourceJob extends DeliverMessageJob {
 
     @Override
     public List<ContainerJob> individuate() {
-    	return Arrays.stream(containerData())
-    			.map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
-    			.map(i -> new CJ(i))
-    			.collect(Collectors.toList());
+        return Arrays.stream(containerData())
+            .map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
+            .map(i -> new CJ(i))
+            .collect(Collectors.toList());
     }
 
     @Override

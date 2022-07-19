@@ -733,17 +733,17 @@ public class TestWordCount extends DempsyBaseTest {
                 final int totalSent = adaptor.numDispatched;
                 // now wait for the sum of all messages received by the ranking to be the number sent
                 assertTrue(poll(o -> {
-//                	System.out.println("" + adaptor.numDispatched + " ==? ");
-                	final int allDiscardedMessagesCount = allDiscardedMessagesCount(adaptorStats, castToTupleList3(statsByNode));
-                	final int totalRanked = allDiscardedMessagesCount + statsByNode.stream()
-                	.peek(sc -> System.out.print("[" +
-                			adaptorStats.getMessagesNotSentCount() + "," + sc.getValue0().getDiscardedMessageCount() +
-                			",c:(" + sc.getValue1().getDispatchedMessageCount() + ", " + sc.getValue1().getMessageDiscardedCount() + ")" +
-                			",r:(" + sc.getValue2().getDispatchedMessageCount() + ", " + sc.getValue2().getMessageDiscardedCount() + ")] "))
-                	.mapToInt(sc -> (int)sc.getValue2().getDispatchedMessageCount())
-                	.sum();
-                	System.out.println(": " + totalRanked + " == " + totalSent + " (" + allDiscardedMessagesCount + ")");
-                	return totalRanked == totalSent;
+                    // System.out.println("" + adaptor.numDispatched + " ==? ");
+                    final int allDiscardedMessagesCount = allDiscardedMessagesCount(adaptorStats, castToTupleList3(statsByNode));
+                    final int totalRanked = allDiscardedMessagesCount + statsByNode.stream()
+                        .peek(sc -> System.out.print("[" +
+                            adaptorStats.getMessagesNotSentCount() + "," + sc.getValue0().getDiscardedMessageCount() +
+                            ",c:(" + sc.getValue1().getDispatchedMessageCount() + ", " + sc.getValue1().getMessageDiscardedCount() + ")" +
+                            ",r:(" + sc.getValue2().getDispatchedMessageCount() + ", " + sc.getValue2().getMessageDiscardedCount() + ")] "))
+                        .mapToInt(sc -> (int)sc.getValue2().getDispatchedMessageCount())
+                        .sum();
+                    System.out.println(": " + totalRanked + " == " + totalSent + " (" + allDiscardedMessagesCount + ")");
+                    return totalRanked == totalSent;
                 }));
 
                 // no nodes (except the adaptor node) should have sent any messages.

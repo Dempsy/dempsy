@@ -3,7 +3,6 @@ package net.dempsy.container;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import net.dempsy.container.Container.ContainerSpecific;
 import net.dempsy.container.Container.Operation;
@@ -25,13 +24,14 @@ public class DefaultDeliverMessageJob extends DeliverMessageJob {
 
     @Override
     public void rejected(final boolean stopping) {
-   		statsCollector.messageDiscarded(message);
+        statsCollector.messageDiscarded(message);
     }
 
     private class CJ extends ContainerJob {
-    	CJ(ContainerSpecific cs) {
-    		super(cs);
-    	}
+        CJ(final ContainerSpecific cs) {
+            super(cs);
+        }
+
         @Override
         public void execute(final Container container) {
             dispatch(container, new KeyedMessage(message.key, message.message), Operation.handle, justArrived);
@@ -39,15 +39,15 @@ public class DefaultDeliverMessageJob extends DeliverMessageJob {
 
         @Override
         public void reject(final Container container) {
-        	reject(container, new KeyedMessage(message.key, message.message), justArrived);
+            reject(container, new KeyedMessage(message.key, message.message), justArrived);
         }
     }
 
     @Override
     public List<ContainerJob> individuate() {
-    	return Arrays.stream(containerData())
-    			.map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
-    			.map(i -> new CJ(i))
-    			.collect(Collectors.toList());
+        return Arrays.stream(containerData())
+            .map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
+            .map(i -> new CJ(i))
+            .collect(Collectors.toList());
     }
 }

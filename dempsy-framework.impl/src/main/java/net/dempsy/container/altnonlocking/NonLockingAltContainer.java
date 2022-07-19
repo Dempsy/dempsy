@@ -208,10 +208,10 @@ public class NonLockingAltContainer extends Container {
                 counter--;
             else
                 Thread.yield();
-        } while (true);
+        } while(true);
         // we CANNOT throw an exception from here, nor can we return null.
-//        while(isRunning.get());
-//        throw new DempsyException("Not running.");
+        // while(isRunning.get());
+        // throw new DempsyException("Not running.");
     }
 
     protected LinkedList<KeyedMessageWithOp> getQueue(final WorkingQueueHolder wp) {

@@ -40,7 +40,7 @@ import java.util.List;
  * job the opportunity to determine which containers the job is destined for. Often this is
  * where deserialization should happen. That is the expectation of the threading model.</li>
  * <li>{@link individuate} - the job needs to be split up into a task per container the
- * message is destined for. A call to {@code #individuate()} means the messages are considered 
+ * message is destined for. A call to {@code #individuate()} means the messages are considered
  * queued to the container. Any rejection or success after that point will be a container/cluster
  * statistic and not a node statistic.</li>
  * <li>For each individuated {@link ContainerJob} on of the following will be called:</li>

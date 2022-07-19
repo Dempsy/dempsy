@@ -323,15 +323,19 @@ public class TestResourceManagement extends DempsyBaseTest {
                         final NodeManager manager2 = nodes.size() > 1 ? nodes.get(1).manager : manager1;
                         stats = (ClusterMetricGetters)manager2.getClusterStatsCollector(new ClusterId(currentAppName, "test-cluster1"));
 
-                        var outnstats = (NodeMetricGetters) manager1.getNodeStatsCollector();
-                        var innstats = (NodeMetricGetters) manager2.getNodeStatsCollector();
+                        final var outnstats = (NodeMetricGetters)manager1.getNodeStatsCollector();
+                        final var innstats = (NodeMetricGetters)manager2.getNodeStatsCollector();
 
                         assertTrue(poll(o -> adaptor.done.get()));
                         assertTrue(poll(o -> {
-                        	LOGGER.debug("sent:{}, not sent:{}, discarded:{}, pending:{}", outnstats.getMessagesSentCount(), outnstats.getMessagesNotSentCount(), outnstats.getDiscardedMessageCount(), outnstats.getMessagesOutPending());
-                        	LOGGER.debug("received:{}, discarded:{}", innstats.getMessagesReceivedCount(), innstats.getDiscardedMessageCount());
-                        	LOGGER.debug("does num dispatched = num processed + num discarded? {} = {} + {} ({})", adaptor.numDispatched, stats.getProcessedMessageCount(), stats.getMessageDiscardedCount(), (stats.getProcessedMessageCount() + stats.getMessageDiscardedCount()));
-                        	LOGGER.debug("dispatched in container:{}, collisions:{}, failed:{}",  stats.getDispatchedMessageCount(), stats.getMessageCollisionCount(), stats.getMessageFailedCount() );
+                            LOGGER.debug("sent:{}, not sent:{}, discarded:{}, pending:{}", outnstats.getMessagesSentCount(),
+                                outnstats.getMessagesNotSentCount(), outnstats.getDiscardedMessageCount(), outnstats.getMessagesOutPending());
+                            LOGGER.debug("received:{}, discarded:{}", innstats.getMessagesReceivedCount(), innstats.getDiscardedMessageCount());
+                            LOGGER.debug("does num dispatched = num processed + num discarded? {} = {} + {} ({})", adaptor.numDispatched,
+                                stats.getProcessedMessageCount(), stats.getMessageDiscardedCount(),
+                                (stats.getProcessedMessageCount() + stats.getMessageDiscardedCount()));
+                            LOGGER.debug("dispatched in container:{}, collisions:{}, failed:{}", stats.getDispatchedMessageCount(),
+                                stats.getMessageCollisionCount(), stats.getMessageFailedCount());
                             return adaptor.numDispatched == stats.getProcessedMessageCount() + stats.getMessageDiscardedCount();
                         }));
 
