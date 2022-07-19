@@ -4,8 +4,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
+import net.dempsy.container.Container.ContainerSpecific;
 import net.dempsy.container.Container.Operation;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.monitoring.NodeStatsCollector;
@@ -15,10 +15,10 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
     private final Supplier<RoutedMessage> messageSupplier;
     protected final boolean justArrived;
     protected final NodeStatsCollector statsCollector;
-    final Container[] containers;
+    final Container[] allContainers;
 
     private RoutedMessage message = null;
-    private ContainerJobMetadata[] deliveries = null;
+    private Container[] deliveries = null;
     private boolean containersCalculated = false;
 
     public DeliverDelayedMessageJob(final Container[] containers, final NodeStatsCollector statsCollector, final Supplier<RoutedMessage> messageSupplier,
@@ -26,7 +26,7 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
         this.messageSupplier = messageSupplier;
         this.justArrived = justArrived;
         this.statsCollector = statsCollector;
-        this.containers = containers;
+        this.allContainers = containers;
     }
 
     @Override
@@ -35,7 +35,7 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
         Arrays.stream(message.containers)
             .forEach(i ->
 
-            containers[i].dispatch(km, Operation.handle, null, justArrived));
+            allContainers[i].dispatch(km, Operation.handle, justArrived));
     }
 
     @Override
@@ -49,7 +49,7 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
     }
 
     @Override
-    public ContainerJobMetadata[] containerData() {
+    public Container[] containerData() {
         return deliveries;
     }
 
@@ -58,9 +58,8 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
         try {
             message = messageSupplier.get();
             this.deliveries = Arrays.stream(message.containers)
-                .mapToObj(ci -> containers[ci])
-                .map(c -> new ContainerJobMetadata(c, c.prepareMessage(message, justArrived)))
-                .toArray(ContainerJobMetadata[]::new);
+                .mapToObj(ci -> allContainers[ci])
+                .toArray(Container[]::new);
         } finally { // no matter what, if calculateContainers was called, then this must be set.
             synchronized(this) {
                 containersCalculated = true;
@@ -68,27 +67,28 @@ public class DeliverDelayedMessageJob implements MessageDeliveryJob {
         }
     }
 
-    private class CJ implements ContainerJob {
+    private class CJ extends ContainerJob {
+    	CJ(ContainerSpecific cs) {
+    		super(cs);
+    	}
+    	
         @Override
-        public void execute(final ContainerJobMetadata jobData) {
-            final KeyedMessage km = new KeyedMessage(message.key, message.message);
-
-            jobData.container.dispatch(km, Operation.handle, jobData.containerSpecificData, justArrived);
+        public void execute(final Container container) {
+            dispatch(container, new KeyedMessage(message.key, message.message), Operation.handle, justArrived);
         }
 
         @Override
-        public void reject(final ContainerJobMetadata jobData) {
-            if(jobData.containerSpecificData != null)
-                jobData.containerSpecificData.messageBeingDiscarded();
+        public void reject(final Container container) {
+        	reject(container, new KeyedMessage(message.key, message.message), justArrived);
         }
-
     }
 
     @Override
     public List<ContainerJob> individuate() {
-        return IntStream.range(0, deliveries.length)
-            .mapToObj(i -> new CJ())
-            .collect(Collectors.toList());
+    	return Arrays.stream(deliveries)
+    			.map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
+    			.map(i -> new CJ(i))
+    			.collect(Collectors.toList());
     }
 
     @Override

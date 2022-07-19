@@ -282,45 +282,81 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     // ----------------------------------------------------------------------------
     // Internals
     // ----------------------------------------------------------------------------
-
-    // The Container message processing happens in 2 phases.
-    // Phase 1) Generate the payload from a newly arrived (or fed-backed) message. This will then be queued with the
-    // ThreadManager.
-    //
-    // Phase 2) When the payload is delivered in the working thread it can be dispatched to the container.
-    //
-    // The details of the ContainerPayload will be specific to the container implementation but will likely
-    // do things like throw away messages when the number pending to that container is too large.
+    
     public static interface ContainerSpecific {
-        void messageBeingDiscarded();
+    }
+    
+    private static class CS implements ContainerSpecific {
+    	final boolean managingPending;
+    	
+    	CS(boolean managingPending) {
+    		this.managingPending = managingPending;
+    	}
     }
 
-    // Called before being submitted to the ThreadingModel. It allows independent management
-    // of the portion of the ThreadingModel queue that's dedicated to queuing messages internally
-    // to a container. Messages that are coming in from the outside of the node will have 'justArrived'
-    // and therefore don't count against the maxPendingMessagesPerContainer. They count against
-    // the nodes' queue.
-    public ContainerSpecific prepareMessage(final RoutedMessage km, final boolean justArrived) {
-        if(maxPendingMessagesPerContainer < 0)
-            return null;
-        if(justArrived)
-            return null; // there's no bookeeping if the message just arrived.
+    // This will be called by the threading model to tell the container that it will be internally
+    // queuing this message for later dispatching to it. This gives the container the opportunity to 
+    // consider it a pending message. The message will either be delivered or the container will
+    // eventually be told that it was rejected.
+    public ContainerSpecific messageBeingEnqueudExternally(final KeyedMessage km, final boolean justArrived) {
+        if(maxPendingMessagesPerContainer < 0 || justArrived)
+            return new CS(false); // there's no bookeeping if the message just arrived.
 
         numPending.incrementAndGet();
         if(traceEnabled)
-            LOGGER.trace("prepareMessages: Pending messages on {} container is: ", clusterId, numPending);
-
-        return new ContainerSpecificInternal();
+            LOGGER.trace("messageBeingEnqueudExternally: Pending messages on {} container is: {}", clusterId, numPending);
+        return new CS(true);
     }
+    
+    public void messageBeingRejectedExternally(final KeyedMessage km, final boolean justArrived, ContainerSpecific pcs) {
+    	if (pcs == null) { // then this can only be an output op.
+    		LOGGER.warn("messageBeingRejectedExternally was applied to a queued output operation");
+    		return;
+    	}
+
+    	if(justArrived)
+            disposition.dispose(km.message);
+
+    	CS cs = (CS)pcs;
+    	if (cs.managingPending)
+    		numPending.decrementAndGet();
+    	
+    	statCollector.messageDiscarded(null);
+    }
+
+//    // Called before being submitted to the ThreadingModel. It allows independent management
+//    // of the portion of the ThreadingModel queue that's dedicated to queuing messages internally
+//    // to a container. Messages that are coming in from the outside of the node will have 'justArrived'
+//    // and therefore don't count against the maxPendingMessagesPerContainer. They count against
+//    // the nodes' queue.
+//    public ContainerSpecific prepareMessage(final RoutedMessage km, final boolean justArrived) {
+//        if(maxPendingMessagesPerContainer < 0)
+//            return null;
+//        if(justArrived)
+//            return null; // there's no bookeeping if the message just arrived.
+//
+//        numPending.incrementAndGet();
+//        if(traceEnabled)
+//            LOGGER.trace("prepareMessages: Pending messages on {} container is: ", clusterId, numPending);
+//
+//        return new ContainerSpecificInternal();
+//    }
 
     public void dispatch(final KeyedMessage message, final Operation op, final ContainerSpecific cs, final boolean justArrived)
         throws IllegalArgumentException, ContainerException {
+    	
+    	if (cs == null && Operation.output != op) {
+    		LOGGER.error("A message is being dispatch after being individuated but it was never enqueued and isn't an output message");
+    		throw new DempsyException("A message is being dispatch after being individuated but it was never enqueued and isn't an output message");
+    	}
 
-        if(cs != null && Operation.output != op) {
+        if(cs != null) {
             final int num = numPending.decrementAndGet(); // dec first.
 
             if(num > maxPendingMessagesPerContainer) { // we just vent the message.
                 statCollector.messageDiscarded(message);
+                if(!justArrived && Operation.output != op)
+                    disposition.dispose(message.message);
                 return;
             }
         }
@@ -372,13 +408,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
     public void setEvictionCycle(final long evictionCycleTime, final TimeUnit timeUnit) {
         this.evictionCycleTime = evictionCycleTime;
         this.evictionTimeUnit = timeUnit;
-    }
-
-    private class ContainerSpecificInternal implements ContainerSpecific {
-        @Override
-        public void messageBeingDiscarded() {
-            numPending.decrementAndGet();
-        }
     }
 
     // =======================================================================================
@@ -716,8 +745,8 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         }
 
         @Override
-        public ContainerJobMetadata[] containerData() {
-            return new ContainerJobMetadata[] {new ContainerJobMetadata(container, null)};
+        public Container[] containerData() {
+            return new Container[] {container};
         }
 
         @Override
@@ -727,28 +756,29 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         public void rejected(final boolean stopping) {
             counter.decrementAndGet();
             if(!stopping)
-                LOGGER.error("An output cycle job was rejected but this shouldn't be possible.");
+                LOGGER.error("An output cycle job was rejected but this shouldn't be possible unless we're stopping.");
         }
 
         @Override
         public void executeAllContainers() {
             LOGGER.trace("output executing on {} with key {}", clusterId, message.key);
             try(QuietCloseable qc = () -> counter.decrementAndGet();) {
-                container.dispatch(message, Operation.output, null, false);
+                container.dispatch(message, Operation.output, false);
             }
         }
 
-        private class CJ implements ContainerJob {
+        private class CJ extends ContainerJob {
+        	
             @Override
-            public void execute(final ContainerJobMetadata jobData) {
+            public void execute(final Container container) {
                 LOGGER.trace("output executing on {} with key {}", clusterId, message.key);
                 try(QuietCloseable qc = () -> counter.decrementAndGet();) {
-                    jobData.container.dispatch(message, Operation.output, jobData.containerSpecificData, false);
+                    dispatch(container, message, Operation.output, false);
                 }
             }
 
             @Override
-            public void reject(final ContainerJobMetadata jobData) {
+            public void reject(final Container jobData) {
                 counter.decrementAndGet();
                 LOGGER.error("An output cycle job was rejected but this shouldn't be possible.");
             }
@@ -756,7 +786,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
         @Override
         public List<ContainerJob> individuate() {
-            return List.of(new CJ());
+            return List.of(new CJ()); // these will NEVER be considered enqueued to the container
         }
 
         @Override

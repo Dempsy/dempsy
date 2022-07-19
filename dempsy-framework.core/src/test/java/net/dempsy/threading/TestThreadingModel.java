@@ -16,7 +16,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerJob;
-import net.dempsy.container.ContainerJobMetadata;
 import net.dempsy.container.DummyContainer;
 import net.dempsy.container.MessageDeliveryJob;
 
@@ -76,13 +75,13 @@ public class TestThreadingModel {
                 return List.of(new ContainerJob() {
 
                     @Override
-                    public void reject(final ContainerJobMetadata container) {
+                    public void reject(final Container container) {
                         numRejected.incrementAndGet();
                         numCompleted.incrementAndGet();
                     }
 
                     @Override
-                    public void execute(final ContainerJobMetadata container) {
+                    public void execute(final Container container) {
                         numPending.incrementAndGet();
                         synchronized(waitOnMe) {
                             if(waitOnSignal)
@@ -115,9 +114,9 @@ public class TestThreadingModel {
             }
 
             @Override
-            public ContainerJobMetadata[] containerData() {
-                return new ContainerJobMetadata[] {
-                    new ContainerJobMetadata(container, null)
+            public Container[] containerData() {
+                return new Container[] {
+                    container
                 };
             }
 

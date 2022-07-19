@@ -1,9 +1,10 @@
 package net.dempsy.container;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
+import net.dempsy.container.Container.ContainerSpecific;
 import net.dempsy.container.Container.Operation;
 import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.MessageResourceManager;
@@ -29,38 +30,37 @@ public class DeliverResourceJob extends DeliverMessageJob {
     public void rejected(final boolean stopping) {
         disposition.dispose(message.message);
         statsCollector.messageDiscarded(message);
-        handleDiscardAllContainer();
     }
 
-    private class CJ implements ContainerJob {
-        public CJ() {
+    private class CJ extends ContainerJob {
+        public CJ(ContainerSpecific cs) {
+        	super(cs);
             disposition.replicate(message.message);
         }
 
         @Override
-        public void execute(final ContainerJobMetadata jobData) {
+        public void execute(final Container container) {
             try {
-                final KeyedMessage km = new KeyedMessage(message.key, message.message);
-                jobData.container.dispatch(km, Operation.handle, jobData.containerSpecificData, justArrived);
+                dispatch(container, new KeyedMessage(message.key, message.message), Operation.handle, justArrived);
             } finally {
                 disposition.dispose(message.message);
             }
         }
 
         @Override
-        public void reject(final ContainerJobMetadata jobData) {
+        public void reject(final Container container) {
             disposition.dispose(message.message);
-            if(jobData.containerSpecificData != null)
-                jobData.containerSpecificData.messageBeingDiscarded();
+            reject(container, new KeyedMessage(message.key, message.message), justArrived);
         }
 
     }
 
     @Override
     public List<ContainerJob> individuate() {
-        return IntStream.range(0, deliveries.length)
-            .mapToObj(i -> new CJ())
-            .collect(Collectors.toList());
+    	return Arrays.stream(containerData())
+    			.map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
+    			.map(i -> new CJ(i))
+    			.collect(Collectors.toList());
     }
 
     @Override

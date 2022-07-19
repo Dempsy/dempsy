@@ -27,7 +27,6 @@ import org.slf4j.LoggerFactory;
 
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerJob;
-import net.dempsy.container.ContainerJobMetadata;
 import net.dempsy.container.MessageDeliveryJob;
 
 // TODO: While this handles the maxPendingMessagesPerContainer correctly
@@ -122,7 +121,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             wholeJob.preEnqueuedTrackContainerJob();
         }
 
-        public void process(final ContainerJobMetadata jobData) {
+        public void process(final Container jobData) {
             wholeJob.preWorkTrackContainerJob();
             try {
                 job.execute(jobData);
@@ -131,7 +130,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             }
         }
 
-        public void reject(final ContainerJobMetadata jobData) {
+        public void reject(final Container jobData) {
             wholeJob.preWorkTrackContainerJob();
             try {
                 job.reject(jobData);
@@ -221,13 +220,13 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
      */
     private class ContainerWorker implements Runnable {
         public final LinkedBlockingDeque<ContainerJobHolder> queue;
-        public final ContainerJobMetadata container;
+        public final Container container;
         public final int maxPendingMessagesPerContainerX2;
         public final boolean shedMode;
 
-        public ContainerWorker(final ContainerJobMetadata container) {
+        public ContainerWorker(final Container container) {
             this.container = container;
-            final Container c = container.container;
+            final Container c = container;
             if(c.containerInternallyQueuesMessages())
                 throw new IllegalArgumentException(
                     "Cannot use an " + OrderedPerContainerThreadingModel.class.getSimpleName() + " with a " + c.getClass().getSimpleName()
@@ -248,7 +247,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 // this used to use the nameSupplier but the name is too long in `htop`
                 // to understand what's going on so it's been switched to simple "c-"
                 // (for "container") and the name of the cluster.
-                new Thread(this, "c-" + container.container.getClusterId().clusterName),
+                new Thread(this, "c-" + container.getClusterId().clusterName),
                 t -> t.start());
         }
 
@@ -256,9 +255,9 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
          * Because the OrderedPerContainerThreadingModel uses a dedicated thread per container,
          * the message processor can block that thread through IO or some long running calculation.
          * In that case the Shuttle thread will perpetually enqueue messages resulting in a
-         * potential to run out of memory. This method will dequeue the oldest messages in the
+         * potential to run out of memory. <strike>This method will dequeue the oldest messages in the
          * queue IFF the size of the queue grows to TWICE the maxPendingMessagesPerContainer
-         * set on the container.
+         * set on the container.</strike>
          */
         public void handleEnqueuing(final ContainerJobHolder curJobHolder) {
             // we can't really conditionally reject the oldest without disrupting the ordering guarantees
@@ -272,7 +271,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
                 // ... otherwise we need to make sure we mark the job as rejected at the container level.
                 curJobHolder.reject(container);
                 LOGGER.trace("Failed to be queued to container {}. The queue has {} messages in it",
-                    container.container.getClusterId(), queue.size());
+                    container.getClusterId(), queue.size());
             }
         }
 
@@ -323,7 +322,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
         private void handleCalculatedContainerMessage(final MessageDeliveryJobHolder message) {
             // the message should have containers ...
-            final ContainerJobMetadata[] deliveries = message.job.containerData();
+            final Container[] deliveries = message.job.containerData();
 
             // ... but just to double check.
             if(deliveries != null && deliveries.length > 0) {
@@ -342,12 +341,9 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
                 int i = 0;
                 for(final ContainerJobHolder curJobHolder: cjholders) {
-                    final ContainerJobMetadata jobData = deliveries[i];
-
-                    // container
-                    final Container curContainer = jobData.container;
+                    final Container container = deliveries[i];
                     // this is a single thread so this should be safe. The Function<> is NOT side effect free. It starts a thread.
-                    final ContainerWorker curWorker = containerWorkers.computeIfAbsent(curContainer, x -> new ContainerWorker(jobData));
+                    final ContainerWorker curWorker = containerWorkers.computeIfAbsent(container, x -> new ContainerWorker(container));
 
                     curWorker.handleEnqueuing(curJobHolder);
 
@@ -516,7 +512,6 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             LOGGER.error("Failed to queue message destined for {}",
                 Optional.ofNullable(job.containerData())
                     .map(v -> Arrays.stream(v)
-                        .map(c -> c.container)
                         .filter(c -> c != null)
                         .map(c -> c.getClusterId())
                         .map(cid -> cid.toString())
@@ -533,7 +528,6 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             LOGGER.error("Failed to queue message destined for {}",
                 Optional.ofNullable(job.containerData())
                     .map(v -> Arrays.stream(v)
-                        .map(c -> c.container)
                         .filter(c -> c != null)
                         .map(c -> c.getClusterId())
                         .map(cid -> cid.toString())
@@ -550,7 +544,6 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             LOGGER.error("Failed to queue message destined for {}",
                 Optional.ofNullable(job.containerData())
                     .map(v -> Arrays.stream(v)
-                        .map(c -> c.container)
                         .filter(c -> c != null)
                         .map(c -> c.getClusterId())
                         .map(cid -> cid.toString())

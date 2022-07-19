@@ -12,8 +12,9 @@ public abstract class DeliverMessageJob implements MessageDeliveryJob {
     protected final NodeStatsCollector statsCollector;
     protected final RoutedMessage message;
 
-    protected final ContainerJobMetadata[] deliveries;
-    protected boolean executeCalled = false;
+    private Container[] deliveries;
+    private boolean executeCalled = false;
+    protected Container[] allContainers;
 
     protected DeliverMessageJob(final Container[] allContainers, final NodeStatsCollector statsCollector, final RoutedMessage message,
         final boolean justArrived) {
@@ -22,8 +23,7 @@ public abstract class DeliverMessageJob implements MessageDeliveryJob {
         this.statsCollector = statsCollector;
         this.deliveries = Arrays.stream(message.containers)
             .mapToObj(ci -> allContainers[ci])
-            .map(c -> new ContainerJobMetadata(c, c.prepareMessage(message, justArrived)))
-            .toArray(ContainerJobMetadata[]::new);
+            .toArray(Container[]::new);
     }
 
     @Override
@@ -35,7 +35,7 @@ public abstract class DeliverMessageJob implements MessageDeliveryJob {
     public void calculateContainers() {}
 
     @Override
-    public ContainerJobMetadata[] containerData() {
+    public Container[] containerData() {
         return deliveries;
     }
 
@@ -49,20 +49,6 @@ public abstract class DeliverMessageJob implements MessageDeliveryJob {
         final KeyedMessage km = new KeyedMessage(message.key, message.message);
 
         Arrays.stream(deliveries)
-            .forEach(d -> d.container.dispatch(km, Operation.handle, d.containerSpecificData, justArrived));
-    }
-
-    protected void handleDiscardAllContainer() {
-        Arrays.stream(deliveries)
-            .map(d -> d.containerSpecificData)
-            .filter(p -> p != null)
-            .forEach(p -> p.messageBeingDiscarded());
-    }
-
-    protected ContainerJobMetadata lookupContainerSpecific(final Container c) {
-        return Arrays.stream(deliveries)
-            .filter(d -> d.container == c)
-            .findAny()
-            .orElse(null);
+            .forEach(c -> c.dispatch(km, Operation.handle, justArrived));
     }
 }
