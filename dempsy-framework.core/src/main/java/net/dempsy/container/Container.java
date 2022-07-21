@@ -353,8 +353,6 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
             if(num > maxPendingMessagesPerContainer) { // we just vent the message.
                 statCollector.messageDiscarded(message);
-                if(!justArrived && Operation.output != op)
-                    disposition.dispose(message.message);
                 return;
             }
         }

@@ -35,7 +35,7 @@ public class DeliverResourceJob extends DeliverMessageJob {
     private class CJ extends ContainerJob {
         public CJ(final ContainerSpecific cs) {
             super(cs);
-            disposition.replicate(message.message);
+            disposition.replicate(message.message); // unrefed in either execute or reject.
         }
 
         @Override
@@ -57,6 +57,7 @@ public class DeliverResourceJob extends DeliverMessageJob {
 
     @Override
     public List<ContainerJob> individuate() {
+        // disposition.replicate(message.message); // unrefed in individuatedJobsComplete
         return Arrays.stream(containerData())
             .map(c -> c.messageBeingEnqueudExternally(new KeyedMessage(message.key, message.message), justArrived))
             .map(i -> new CJ(i))
@@ -67,5 +68,4 @@ public class DeliverResourceJob extends DeliverMessageJob {
     public void individuatedJobsComplete() {
         disposition.dispose(message.message);
     }
-
 }
