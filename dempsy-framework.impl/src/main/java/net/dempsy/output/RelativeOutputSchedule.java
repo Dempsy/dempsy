@@ -61,11 +61,6 @@ public class RelativeOutputSchedule implements OutputScheduler {
         this.timeUnit = timeUnit;
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
-     */
     @Override
     public void setOutputInvoker(final OutputInvoker outputInvoker) {
         if(this.outputInvoker != null) {

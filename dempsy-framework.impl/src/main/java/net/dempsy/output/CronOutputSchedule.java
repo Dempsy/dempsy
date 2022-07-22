@@ -54,11 +54,6 @@ public class CronOutputSchedule implements OutputScheduler {
         this.cronExpression = cronExpression;
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see com.nokia.dempsy.output.OutputExecuter#start()
-     */
     @Override
     public void start(final Infrastructure infra) {
         LOGGER.info("Starting cron output scheduler for " + outputInvoker);
@@ -84,11 +79,6 @@ public class CronOutputSchedule implements OutputScheduler {
         return true;
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see com.nokia.dempsy.output.OutputExecuter#stop()
-     */
     @Override
     public void stop() {
         try {
@@ -99,11 +89,6 @@ public class CronOutputSchedule implements OutputScheduler {
         }
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see com.nokia.dempsy.output.OutputExecuter#setOutputInvoker(com.nokia.dempsy.output.OutputInvoker)
-     */
     @Override
     public void setOutputInvoker(final OutputInvoker outputInvoker) {
         if(this.outputInvoker != null) {
