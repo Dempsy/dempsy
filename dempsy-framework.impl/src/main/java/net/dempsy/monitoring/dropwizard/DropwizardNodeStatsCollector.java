@@ -53,7 +53,7 @@ public class DropwizardNodeStatsCollector implements NodeStatsCollector {
         reporter = new DropwizardStatsReporter(this.nodeId, reporters);
     }
 
-    public void setReporterRegisrars(final List<DropwizardReporterRegistrar> reporters) {
+    public void setReporterRegistrars(final List<DropwizardReporterRegistrar> reporters) {
         this.reporters = reporters;
     }
 

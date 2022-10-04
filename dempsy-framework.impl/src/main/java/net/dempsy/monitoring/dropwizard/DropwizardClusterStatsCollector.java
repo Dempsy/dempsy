@@ -2,6 +2,7 @@ package net.dempsy.monitoring.dropwizard;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -80,7 +81,7 @@ public class DropwizardClusterStatsCollector implements ClusterStatsCollector {
         messageDiscarded = registry.meter(getName(MESSAGES_DISCARDED));
         messageProcessorCreated = registry.meter(getName(MESSAGES_PROCESSOR_CREATED));
         messageProcessorDeleted = registry.meter(getName(MESSAGES_PROCESSOR_DELETED));
-        registry.gauge(getName(MESSAGES_PENDING), () -> () -> inProcessMessages.get());
+        registry.gauge(getName(MESSAGES_PENDING), () -> (Gauge<Long>)() -> inProcessMessages.get());
     }
 
     @Override
