@@ -5,7 +5,7 @@
    <parent>
       <groupId>net.dempsy</groupId>
       <artifactId>dempsy-framework.parent</artifactId>
-      <version>0.16.0</version>
+      <version>0.17-SNAPSHOT</version>
    </parent>
 
    <artifactId>dempsy-framework.impl</artifactId>
