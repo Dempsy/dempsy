@@ -380,3 +380,12 @@ docker run --name zookeeper --network=host -d zookeeper
 
 A working version of this example can be found here: [Distributed Simple Word Count Example](https://github.com/Dempsy/dempsy-examples/tree/master/distributed-simple-wordcount/src/main/java/net/dempsy/example/simplewordcount)
 
+<div align="center">
+<table align="center" width="70%" border="1" >
+<tr><td>
+<img width="100%" src="https://github.com/Dempsy/dempsy/raw/master/doc/images/DistributedWordCountExample.png" alt="WordCount pipline so far" />
+</td>
+</tr>
+<tr><td><center>Fig. 2 Distributed Simple WordCount example</center></td></tr>
+</table>
+</div>
