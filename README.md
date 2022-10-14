@@ -276,9 +276,9 @@ This is illustrated in the following:
 <div align="center">
 <table align="center" width="70%" border="1" >
 <tr><td>
-<img width="100%" src="https://raw.github.com/wiki/Dempsy/Dempsy/images/Dempsy-UserGuide-WordCount.png" alt="WordCount pipline so far" />
+<img width="100%" src="https://github.com/Dempsy/dempsy/raw/master/doc/images/SimpleExample.gif" alt="WordCount pipline so far" />
 </td>
 </tr>
-<tr><td><center>Fig. 1 Message Processor Lifecycle</center></td></tr>
+<tr><td><center>Fig. 1 Simple WordCount example</center></td></tr>
 </table>
 </div>
