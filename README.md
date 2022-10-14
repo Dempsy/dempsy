@@ -261,7 +261,7 @@ Having gone through the  ["Word Count" example](#jumping-right-in-an-example---t
 </tr>
 </table>
 
-In the  ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) we have a _Dempsy_ application with a single _node_ with two _clusters_. One _cluster_ contains the _WordAdaptor_ and another contains the set of `WordCount` instances being used as _message processors_.
+In the  ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) we have a _Dempsy_ application with a single _node_ with two _clusters_. One _cluster_ contains the `WordAdaptor` and another contains the set of `WordCount` instances being used as _message processors_.
 
 Once the example runs to completion, the number of `WordCount` _message processors_ will be equal to the number of unique _message keys_ from all of the _messages_ streamed. In this case the number is:
 
@@ -270,3 +270,15 @@ Once the example runs to completion, the number of `WordCount` _message processo
 ```
 
 So there will be 7 instances of `WordCount` being used as _message processors_ and an additional one representing the _message processor prototype_.
+
+This is illustrated in the following:
+
+<div align="center">
+<table align="center" width="70%" border="1" >
+<tr><td>
+<img width="100%" src="https://raw.github.com/wiki/Dempsy/Dempsy/images/Dempsy-UserGuide-WordCount.png" alt="WordCount pipline so far" />
+</td>
+</tr>
+<tr><td><center>Fig. 1 Message Processor Lifecycle</center></td></tr>
+</table>
+</div>
