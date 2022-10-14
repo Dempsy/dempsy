@@ -203,7 +203,7 @@ public class Node {
         return this;
     }
 
-    private Node receiver(final ReceiverStub receiver) {
+    public Node receiver(final ReceiverStub receiver) {
         this.receiver = receiver;
         return this;
     }
