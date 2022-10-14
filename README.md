@@ -87,7 +87,7 @@ public class WordAdaptor implements Adaptor {
 When a `WordAdaptor` is registered with Dempsy, the following will happen in order:
 
 1. _Dempsy_ will call `setDispatcher` and pass a `Dispatcher` that the `Adaptor` can use to _dispatch_ messages.
-2. _Dempsy_ will then call the `start()` method to indicate that the `Adaptor` can starting sending messages.
+2. _Dempsy_ will then call the `start()` method to indicate that the `Adaptor` can start sending messages. This will be called in a separate thread so the `Adaptor` doesn't have to return from the `start()` method until it's done sending messages. However, the `Adaptor` is free to use the `Dispatcher` in its own threads if it wants and can return from `start()` without causing a problem.
 3. When _Dempsy_ is shut down, the `Adaptor` will be notified by calling the `stop()` method.
 
 ## The Message
@@ -96,7 +96,7 @@ In the above the adaptor sends `Word` messages. Messages in _Dempsy_ need to sat
 
 1. They need to have a _MessageKey_ which uniquely identifies a _MessageProcessor_ that will handle processing that message.
 2. The _MessageKey_ needs to have the appropriate identity semantics (_hashCode_ and _equals_)
-3. In most cases when _Dempsy_ is distributed, the _Message_ needs to be serializable.
+3. In most cases when _Dempsy_ is distributed, the _Message_ needs to be serializable according to whatever serialization technique is chosen.
 
 So the `Word` message can be defined as follows:
 
@@ -122,7 +122,7 @@ Using annotations you can identify the class as a _Message_. The _MessageType_ a
 
 1. It has a _MessageKey_ which can be retrieved by calling `getWordText()`. 
 2. The _MessageKey_ is a `String` which has appropriate identity semantics.
-3. The `Word` class is serializable.
+3. The `Word` class is serializable when using _Java_ serialization.
 
 ## The Message Processor (_Mp_)
 
@@ -289,7 +289,7 @@ Having gone through the  ["Word Count" example](#jumping-right-in-an-example---t
 
 # Running the example distributed
 
-To run distributed we need to change some of the infrastructure we instantiated. But first, lets convert the stream of words to an _unbounded_ stream by looping in the `WordAdaptor`. We'll simply change `getNextWordFromSoucre()` to the following:
+To run the ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) distributed we need to change some of the infrastructure we instantiated. But first, lets convert the stream of words to an _unbounded_ stream by looping in the `WordAdaptor`. We'll simply change `WordAdaptor.getNextWordFromSoucre()` to the following:
 
 ```java
     private String getNextWordFromSoucre() {
@@ -340,7 +340,7 @@ public class SimpleWordCount {
                     )
                     // this will basically disable monitoring for the example
                     .nodeStatsCollector(new DummyNodeStatsCollector())
-                    // use a blocking queue as the transport mechanism since this is all running in the same process
+                    // use a Java NIO the transport mechanism
                     .receiver(new NioReceiver<Object>(new JavaSerializer()))
                     .build()
 
@@ -368,15 +368,17 @@ The changes from the original example include:
 
 1. the routing strategy is now set using: `.routingStrategyId("net.dempsy.router.managed")`. The "managed" routing strategy attempts to dynamically distribute all _message processors_ for a given cluster (in this case, all `WordCount` instances) across all available _nodes_.
 2. the receiver is set using: `.receiver(new NioReceiver<Object>(new JavaSerializer()))`. This identifies the technique that this node can be reached as using _Java NIO_ with the given serialization technique.
-3. the dempsy nodes will collaborate with each other using Zookeeper as set using: `.collaborator(new ZookeeperSessionFactory("localhost:2181", 3000, new JsonSerializer()).createSession())`. 
+3. the dempsy nodes will collaborate with each other using [Apache Zookeeper](https://zookeeper.apache.org/) as set using: `.collaborator(new ZookeeperSessionFactory("localhost:2181", 3000, new JsonSerializer()).createSession())`. 
 
-Now if we start multiple instances of this Java program, and we have Zookeeper running on port 2181, then the instances of `WordCount` _message processors_ will be balanced between the running nodes.
+Now if we start multiple instances of this Java program, and we have [Apache Zookeeper](https://zookeeper.apache.org/) running on port 2181, then the instances of `WordCount` _message processors_ will be balanced between the running nodes.
 
 If you want to try it you can start a single node instance of [Apache Zookeeper](https://zookeeper.apache.org/) using docker with the following command:
 
 ```bash
 docker run --name zookeeper --network=host -d zookeeper
 ```
+
+Then you can run as many instances of `SimpleWordCount` as you like.
 
 A working version of this example can be found here: [Distributed Simple Word Count Example](https://github.com/Dempsy/dempsy-examples/tree/master/distributed-simple-wordcount/src/main/java/net/dempsy/example/simplewordcount)
 
@@ -389,3 +391,4 @@ A working version of this example can be found here: [Distributed Simple Word Co
 <tr><td><center>Fig. 2 Distributed Simple WordCount example</center></td></tr>
 </table>
 </div>
+
