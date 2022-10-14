@@ -4,12 +4,14 @@
 - [The Dempsy Project](#the-dempsy-project)
   - [Table of Contents](#table-of-contents)
 - [Overview](#overview)
-  - [Jumping right in. An example - The ubiquitous "Word Count"](#jumping-right-in-an-example---the-ubiquitous-word-count)
-    - [The _Adaptor_](#the-adaptor)
-    - [The Message](#the-message)
-    - [The Message Processor (_Mp_)](#the-message-processor-mp)
-    - [Running the example.](#running-the-example)
-- [Terminology](#terminology)
+- [Jumping right in. An example - The ubiquitous "Word Count"](#jumping-right-in-an-example---the-ubiquitous-word-count)
+  - [The _Adaptor_](#the-adaptor)
+  - [The Message](#the-message)
+  - [The Message Processor (_Mp_)](#the-message-processor-mp)
+  - [Running the example.](#running-the-example)
+  - [Explanation.](#explanation)
+- [Some terminology](#some-terminology)
+- [Running the example distributed](#running-the-example-distributed)
 
 # Overview
 
@@ -17,13 +19,13 @@ Simply put _Dempsy_ (Distributed Elastic Message Processing SYstem) is an framew
 
 *Note: Dempsy does NOT guarantee message delivery and will opt to discard messages in the presence of "back-pressure." This means it's not suitable for all streaming applications.* However, if your application doesn't require guaranteed delivery, then _Dempsy_ provides programming model that makes distributed stream processing applications easier to develop and maintain than other frameworks.
 
-## Jumping right in. An example - The ubiquitous "Word Count"
+# Jumping right in. An example - The ubiquitous "Word Count"
 
 In this example we have an stream of _Word_ messages and we want to keep track of how many times each _Word_ appears in the stream. 
 
 You can find the complete working example here: [Simple WordCount](https://github.com/Dempsy/dempsy-examples/tree/master/simple-wordcount/src/main/java/net/dempsy/example/simplewordcount)
 
-### The _Adaptor_
+## The _Adaptor_
 
 To start with we need a source of _Word_ messages. This is done in _Dempsy_ by implementing an _Adaptor_.
 
@@ -88,7 +90,7 @@ When a `WordAdaptor` is registered with Dempsy, the following will happen in ord
 2. _Dempsy_ will then call the `start()` method to indicate that the `Adaptor` can starting sending messages.
 3. When _Dempsy_ is shut down, the `Adaptor` will be notified by calling the `stop()` method.
 
-### The Message
+## The Message
 
 In the above the adaptor sends `Word` messages. Messages in _Dempsy_ need to satisfy a few requirements. 
 
@@ -122,7 +124,7 @@ Using annotations you can identify the class as a _Message_. The _MessageType_ a
 2. The _MessageKey_ is a `String` which has appropriate identity semantics.
 3. The `Word` class is serializable.
 
-### The Message Processor (_Mp_)
+## The Message Processor (_Mp_)
 
 Dempsy will route each message to an appropriate _Message Processor_. A unique _Message Processor_ instance will handle each `Word` message with a given _MessageKey_. For example:
 
@@ -151,7 +153,7 @@ Dempsy will manage the lifecycle of _Message Processor_ instances. It will start
 
 So when Dempsy receives a message of type `Word`, it retrieves the _MessageKey_ using the annotated method `getWordText()`. That _MessageKey_ will become the address of a _message processor_ somewhere on the system. Dempsy will find the _message processor_ instance (in this case an instance of the class `WordCount`) within a _cluster_ of _nodes_ responsible for running the `WordCount` message processing. In the case that the instance doesn't already exist, Dempsy will `clone()` a `WordCount` instance prototype.
 
-### Running the example.
+## Running the example.
 
 The following will pull all the pieces together and process a group of `Word`s.
 
@@ -174,7 +176,7 @@ public class SimpleWordCount {
         final NodeManager nodeManager = new NodeManager()
             // add a node
             .node(
-                // a node called word-count
+                // a node in an application called word-count
                 new Node.Builder("word-count")
                     // with the following clusters
                     .clusters(
@@ -231,7 +233,31 @@ The word "of" has a count of 2
 Exiting Main
 ```
 
-# Terminology
+## Explanation.
+
+In this example we have a _Dempsy_ application with a single _node_ with two _clusters_. One _cluster_ contains the `WordAdaptor` and another contains the set of `WordCount` instances being used as _message processors_.
+
+Once the example runs to completion, the number of `WordCount` _message processors_ will be equal to the number of unique _message keys_ from all of the _messages_ streamed. In this case the number is:
+
+```java
+   Set.of("it","was","the","best","of","times","it","was","the","worst","of","times").size()
+```
+
+So there will be 7 instances of `WordCount` being used as _message processors_ and an additional one representing the _message processor prototype_.
+
+This is illustrated in the following:
+
+<div align="center">
+<table align="center" width="70%" border="1" >
+<tr><td>
+<img width="100%" src="https://github.com/Dempsy/dempsy/raw/master/doc/images/SimpleExample.gif" alt="WordCount pipline so far" />
+</td>
+</tr>
+<tr><td><center>Fig. 1 Simple WordCount example</center></td></tr>
+</table>
+</div>
+
+# Some terminology
 
 Having gone through the  ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) we should codify some of the terminology and concepts touched on.
 
@@ -261,24 +287,96 @@ Having gone through the  ["Word Count" example](#jumping-right-in-an-example---t
 </tr>
 </table>
 
-In the  ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) we have a _Dempsy_ application with a single _node_ with two _clusters_. One _cluster_ contains the `WordAdaptor` and another contains the set of `WordCount` instances being used as _message processors_.
+# Running the example distributed
 
-Once the example runs to completion, the number of `WordCount` _message processors_ will be equal to the number of unique _message keys_ from all of the _messages_ streamed. In this case the number is:
+To run distributed we need to change some of the infrastructure we instantiated. But first, lets convert the stream of words to an _unbounded_ stream by looping in the `WordAdaptor`. We'll simply change `getNextWordFromSoucre()` to the following:
 
 ```java
-   Set.of("it","was","the","best","of","times","it","was","the","worst","of","times").size()
+    private String getNextWordFromSoucre() {
+        if(wordSourceIndex >= wordSource.length)
+            wordSourceIndex = 0;
+        return wordSource[wordSourceIndex++];
+    }
 ```
 
-So there will be 7 instances of `WordCount` being used as _message processors_ and an additional one representing the _message processor prototype_.
+To change the infrastructure we need start _Dempsy_ selecting distributed implementations. The updated `SimpleWordCount` class would be:
 
-This is illustrated in the following:
+```java
+...
+import net.dempsy.NodeManager;
+import net.dempsy.cluster.ClusterInfoException;
+import net.dempsy.cluster.zookeeper.ZookeeperSessionFactory;
+import net.dempsy.config.Cluster;
+import net.dempsy.config.Node;
+import net.dempsy.lifecycle.annotation.MessageProcessor;
+import net.dempsy.monitoring.dummy.DummyNodeStatsCollector;
+import net.dempsy.serialization.jackson.JsonSerializer;
+import net.dempsy.serialization.java.JavaSerializer;
+import net.dempsy.transport.tcp.nio.NioReceiver;
 
-<div align="center">
-<table align="center" width="70%" border="1" >
-<tr><td>
-<img width="100%" src="https://github.com/Dempsy/dempsy/raw/master/doc/images/SimpleExample.gif" alt="WordCount pipline so far" />
-</td>
-</tr>
-<tr><td><center>Fig. 1 Simple WordCount example</center></td></tr>
-</table>
-</div>
+public class SimpleWordCount {
+
+    public static void main(final String[] args) throws InterruptedException, IllegalStateException, IllegalArgumentException, ClusterInfoException {
+
+        final WordAdaptor wordAdaptor = new WordAdaptor();
+
+        @SuppressWarnings("resource")
+        final NodeManager nodeManager = new NodeManager()
+            // add a node
+            .node(
+                // a node in an application called word-count
+                new Node.Builder("word-count")
+                    // with the following clusters
+                    .clusters(
+                        // a cluster that has the adaptor
+                        new Cluster("adaptor")
+                            .adaptor(wordAdaptor),
+                        // and a cluster that contains the WordCount message processor
+                        new Cluster("counter")
+                            .mp(new MessageProcessor<WordCount>(new WordCount()))
+                            // with the following routing strategy
+                            .routingStrategyId("net.dempsy.router.managed")
+
+                    )
+                    // this will basically disable monitoring for the example
+                    .nodeStatsCollector(new DummyNodeStatsCollector())
+                    // use a blocking queue as the transport mechanism since this is all running in the same process
+                    .receiver(new NioReceiver<Object>(new JavaSerializer()))
+                    .build()
+
+            )
+
+            // define the infrastructure to be used.
+
+            // we want to connect to a zookeeper instance running on this machine.
+            .collaborator(new ZookeeperSessionFactory("localhost:2181", 3000, new JsonSerializer()).createSession());
+
+        // start dempsy processing for this node in the background.
+        nodeManager.start();
+
+        // wait for the node manager to be started.
+        while(!nodeManager.isReady())
+            Thread.yield();
+
+        // we're just going to wait *forever*
+        Thread.sleep(999999);
+    }
+}
+```
+
+The changes from the original example include:
+
+1. the routing strategy is now set using: `.routingStrategyId("net.dempsy.router.managed")`. The "managed" routing strategy attempts to dynamically distribute all _message processors_ for a given cluster (in this case, all `WordCount` instances) across all available _nodes_.
+2. the receiver is set using: `.receiver(new NioReceiver<Object>(new JavaSerializer()))`. This identifies the technique that this node can be reached as using _Java NIO_ with the given serialization technique.
+3. the dempsy nodes will collaborate with each other using Zookeeper as set using: `.collaborator(new ZookeeperSessionFactory("localhost:2181", 3000, new JsonSerializer()).createSession())`. 
+
+Now if we start multiple instances of this Java program, and we have Zookeeper running on port 2181, then the instances of `WordCount` _message processors_ will be balanced between the running nodes.
+
+If you want to try it you can start a single node instance of [Apache Zookeeper](https://zookeeper.apache.org/) using docker with the following command:
+
+```bash
+docker run --name zookeeper --network=host -d zookeeper
+```
+
+A working version of this example can be found here: [Distributed Simple Word Count Example](https://github.com/Dempsy/dempsy-examples/tree/master/distributed-simple-wordcount/src/main/java/net/dempsy/example/simplewordcount)
+
