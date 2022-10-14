@@ -9,6 +9,7 @@
     - [The Message](#the-message)
     - [The Message Processor (_Mp_)](#the-message-processor-mp)
     - [Running the example.](#running-the-example)
+- [Terminology](#terminology)
 
 # Overview
 
@@ -20,7 +21,7 @@ Simply put _Dempsy_ (Distributed Elastic Message Processing SYstem) is an framew
 
 In this example we have an stream of _Word_ messages and we want to keep track of how many times each _Word_ appears in the stream. 
 
-You can find the complete working example here: [Simple WordCount](https://github.com/Dempsy/dempsy-examples/tree/master/simple-wordcount)
+You can find the complete working example here: [Simple WordCount](https://github.com/Dempsy/dempsy-examples/tree/master/simple-wordcount/src/main/java/net/dempsy/example/simplewordcount)
 
 ### The _Adaptor_
 
@@ -81,7 +82,7 @@ public class WordAdaptor implements Adaptor {
 }
 ```
 
-When a `WordAdaptor` is registered with Dempsy, it will do the following in order:
+When a `WordAdaptor` is registered with Dempsy, the following will happen in order:
 
 1. _Dempsy_ will call `setDispatcher` and pass a `Dispatcher` that the `Adaptor` can use to _dispatch_ messages.
 2. _Dempsy_ will then call the `start()` method to indicate that the `Adaptor` can starting sending messages.
@@ -147,6 +148,8 @@ public class WordCount implements Cloneable {
 ```
 
 Dempsy will manage the lifecycle of _Message Processor_ instances. It will start with a single instance that will be used as a _Prototype_. When it needs more instances it will `clone()` the prototype. In this example _Dempsy_ will create an instance of `WordCount` for every unique _MessageKey_ of a `Word` message that gets dispatched. It will call the _MessageHandler_ on the corresponding instance.
+
+So when Dempsy receives a message of type `Word`, it retrieves the _MessageKey_ using the annotated method `getWordText()`. That _MessageKey_ will become the address of a _message processor_ somewhere on the system. Dempsy will find the _message processor_ instance (in this case an instance of the class `WordCount`) within a _cluster_ of _nodes_ responsible for running the `WordCount` message processing. In the case that the instance doesn't already exist, Dempsy will `clone()` a `WordCount` instance prototype.
 
 ### Running the example.
 
@@ -228,3 +231,42 @@ The word "of" has a count of 2
 Exiting Main
 ```
 
+# Terminology
+
+Having gone through the  ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) we should codify some of the terminology and concepts touched on.
+
+<table>
+<tr><th>Term</th><th>Definition</th>
+</tr>
+<tr>
+<td> message processor </td><td> an instance of a cloned <em>message processor prototype</em> responsible for processing every <em>message</em> of a particular type with a particular unique <em>key</em>. </td>
+</tr>
+<tr>
+<td> message processor prototype </td><td> an instance used by Dempsy to serve as a template when it needs to `clone()` more instances of a <em>message processor</em>. </td>
+</tr>
+<tr>
+<td> message </td><td> is an object that Dempsy routes to a <em>message processor</em> based on the <em>message</em>'s <em>key</em>. </td>
+</tr>
+<tr>
+<td> message key </td><td> obtained from a <em>message</em> using the method on the <em>message</em> object that's annotated with the `@MessageKey` annotation. Each unique <em>key</em> addresses an individual <em>message processor</em> instance in a <em>cluster</em> </td>
+</tr>
+<tr>
+<td> cluster </td><td> a <em>cluster</em> is the collection of all <em>message processors</em> or <em>adaptors</em> of a common type in the same stage of processing of a Dempsy application. A <em>cluster</em> contains a complete set of potential <em>message processors</em> keyed by all of the potential <em>keys</em> from a particular <em>message</em> type.That is, a <em>cluster</em> of <em>message processor</em> instances covers the entire <em>key</em>-space of a <em>message</em>. </td>
+</tr>
+<tr>
+<td> node </td><td> a <em>node</em> is a subset of a set of <em>cluster</em>s containing a portion of the each <em>cluster's message processors</em>. <em>nodes</em> are almost always (except in some possible test situations) the intersection of a <em>cluster</em> and a Java process. That is, the portion of a <em>cluster</em> that's running in a particular process is the <em>cluster's node</em> </td>
+</tr>
+<tr>
+<td> container </td><td> Sometimes also referred to as a <em>message processor container</em>, it is the part of the Dempsy infrastructure that manages the lifecycle of <em>message processors</em> within an individual <em>node</em>. That is, there is a one-to-one between the portion of a cluster running in a particular <em>node</em>, and a <em>container</em>. </td>
+</tr>
+</table>
+
+In the  ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) we have a _Dempsy_ application with a single _node_ with two _clusters_. One _cluster_ contains the _WordAdaptor_ and another contains the set of `WordCount` instances being used as _message processors_.
+
+Once the example runs to completion, the number of `WordCount` _message processors_ will be equal to the number of unique _message keys_ from all of the _messages_ streamed. In this case the number is:
+
+```java
+   Set.of("it","was","the","best","of","times","it","was","the","worst","of","times").size()
+```
+
+So there will be 7 instances of `WordCount` being used as _message processors_ and an additional one representing the _message processor prototype_.
