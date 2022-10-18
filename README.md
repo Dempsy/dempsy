@@ -4,12 +4,13 @@
 - [The Dempsy Project](#the-dempsy-project)
   - [Table of Contents](#table-of-contents)
 - [Overview](#overview)
-- [Jumping right in. An example - The ubiquitous "Word Count"](#jumping-right-in-an-example---the-ubiquitous-word-count)
-  - [The _Adaptor_](#the-adaptor)
-  - [The Message](#the-message)
-  - [The Message Processor (_Mp_)](#the-message-processor-mp)
-  - [Running the example.](#running-the-example)
-  - [Explanation.](#explanation)
+- [Jumping right in.](#jumping-right-in)
+  - [An example - The ubiquitous "Word Count"](#an-example---the-ubiquitous-word-count)
+    - [The _Adaptor_](#the-adaptor)
+    - [The Message](#the-message)
+    - [The Message Processor (_Mp_)](#the-message-processor-mp)
+    - [Running the example.](#running-the-example)
+    - [Explanation.](#explanation)
 - [Some terminology](#some-terminology)
 - [Running the example distributed](#running-the-example-distributed)
 
@@ -19,13 +20,15 @@ Simply put _Dempsy_ (Distributed Elastic Message Processing SYstem) is an framew
 
 *Note: Dempsy does NOT guarantee message delivery and will opt to discard messages in the presence of "back-pressure." This means it's not suitable for all streaming applications.* However, if your application doesn't require guaranteed delivery, then _Dempsy_ provides programming model that makes distributed stream processing applications easier to develop and maintain than other frameworks.
 
-# Jumping right in. An example - The ubiquitous "Word Count"
+# Jumping right in. 
+
+## An example - The ubiquitous "Word Count"
 
 In this example we have an stream of _Word_ messages and we want to keep track of how many times each _Word_ appears in the stream. 
 
 You can find the complete working example here: [Simple WordCount](https://github.com/Dempsy/dempsy-examples/tree/master/simple-wordcount/src/main/java/net/dempsy/example/simplewordcount)
 
-## The _Adaptor_
+### The _Adaptor_
 
 To start with we need a source of _Word_ messages. This is done in _Dempsy_ by implementing an _Adaptor_.
 
@@ -90,7 +93,7 @@ When a `WordAdaptor` is registered with Dempsy, the following will happen in ord
 2. _Dempsy_ will then call the `start()` method to indicate that the `Adaptor` can start sending messages. This will be called in a separate thread so the `Adaptor` doesn't have to return from the `start()` method until it's done sending messages. However, the `Adaptor` is free to use the `Dispatcher` in its own threads if it wants and can return from `start()` without causing a problem.
 3. When _Dempsy_ is shut down, the `Adaptor` will be notified by calling the `stop()` method.
 
-## The Message
+### The Message
 
 In the above the adaptor sends `Word` messages. Messages in _Dempsy_ need to satisfy a few requirements. 
 
@@ -124,7 +127,7 @@ Using annotations you can identify the class as a _Message_. The _MessageType_ a
 2. The _MessageKey_ is a `String` which has appropriate identity semantics.
 3. The `Word` class is serializable when using _Java_ serialization.
 
-## The Message Processor (_Mp_)
+### The Message Processor (_Mp_)
 
 Dempsy will route each message to an appropriate _Message Processor_. A unique _Message Processor_ instance will handle each `Word` message with a given _MessageKey_. For example:
 
@@ -149,11 +152,19 @@ public class WordCount implements Cloneable {
 }
 ```
 
-Dempsy will manage the lifecycle of _Message Processor_ instances. It will start with a single instance that will be used as a _Prototype_. When it needs more instances it will `clone()` the prototype. In this example _Dempsy_ will create an instance of `WordCount` for every unique _MessageKey_ of a `Word` message that gets dispatched. It will call the _MessageHandler_ on the corresponding instance.
-
 So when Dempsy receives a message of type `Word`, it retrieves the _MessageKey_ using the annotated method `getWordText()`. That _MessageKey_ will become the address of a _message processor_ somewhere on the system. Dempsy will find the _message processor_ instance (in this case an instance of the class `WordCount`) within a _cluster_ of _nodes_ responsible for running the `WordCount` message processing. In the case that the instance doesn't already exist, Dempsy will `clone()` a `WordCount` instance prototype.
 
-## Running the example.
+
+<div align="center">
+<table align="center" border="2" >
+<tr><td><center>Note: You should consider the <i>MessageKey</i> as the address of a unique <i>MessageProcessor</i> instance.</center></td></tr>
+</table>
+</div>
+
+
+Dempsy will manage the lifecycle of _Message Processor_ instances. It will start with a single instance that will be used as a _Prototype_. When it needs more instances it will `clone()` the prototype. In this example _Dempsy_ will create an instance of `WordCount` for every unique _MessageKey_ of a `Word` message that gets dispatched. It will call the _MessageHandler_ on the corresponding instance.
+
+### Running the example.
 
 The following will pull all the pieces together and process a group of `Word`s.
 
@@ -233,7 +244,7 @@ The word "of" has a count of 2
 Exiting Main
 ```
 
-## Explanation.
+### Explanation.
 
 In this example we have a _Dempsy_ application with a single _node_ with two _clusters_. One _cluster_ contains the `WordAdaptor` and another contains the set of `WordCount` instances being used as _message processors_.
 
@@ -259,7 +270,7 @@ This is illustrated in the following:
 
 # Some terminology
 
-Having gone through the  ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) we should codify some of the terminology and concepts touched on.
+Having gone through the  ["Word Count" example](#an-example---the-ubiquitous-word-count) we should codify some of the terminology and concepts touched on.
 
 <table>
 <tr><th>Term</th><th>Definition</th>
@@ -274,7 +285,7 @@ Having gone through the  ["Word Count" example](#jumping-right-in-an-example---t
 <td> message </td><td> is an object that Dempsy routes to a <em>message processor</em> based on the <em>message</em>'s <em>key</em>. </td>
 </tr>
 <tr>
-<td> message key </td><td> obtained from a <em>message</em> using the method on the <em>message</em> object that's annotated with the `@MessageKey` annotation. Each unique <em>key</em> addresses an individual <em>message processor</em> instance in a <em>cluster</em> </td>
+<td> message key </td><td> A key for the message, obtained from a <em>message</em>. Each unique <em>message key</em> addresses a unique <em>message processor</em> instance in a <em>cluster</em> </td>
 </tr>
 <tr>
 <td> cluster </td><td> a <em>cluster</em> is the collection of all <em>message processors</em> or <em>adaptors</em> of a common type in the same stage of processing of a Dempsy application. A <em>cluster</em> contains a complete set of potential <em>message processors</em> keyed by all of the potential <em>keys</em> from a particular <em>message</em> type.That is, a <em>cluster</em> of <em>message processor</em> instances covers the entire <em>key</em>-space of a <em>message</em>. </td>
@@ -289,7 +300,7 @@ Having gone through the  ["Word Count" example](#jumping-right-in-an-example---t
 
 # Running the example distributed
 
-To run the ["Word Count" example](#jumping-right-in-an-example---the-ubiquitous-word-count) distributed we need to change some of the infrastructure we instantiated. But first, lets convert the stream of words to an _unbounded_ stream by looping in the `WordAdaptor`. We'll simply change `WordAdaptor.getNextWordFromSoucre()` to the following:
+To run the ["Word Count" example](#an-example---the-ubiquitous-word-count) distributed we need to change some of the infrastructure we instantiated. But first, lets convert the stream of words to an _unbounded_ stream by looping in the `WordAdaptor`. We'll simply change `WordAdaptor.getNextWordFromSoucre()` to the following:
 
 ```java
     private String getNextWordFromSoucre() {
