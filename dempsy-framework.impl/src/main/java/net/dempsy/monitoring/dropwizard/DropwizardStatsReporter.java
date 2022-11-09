@@ -1,12 +1,12 @@
 package net.dempsy.monitoring.dropwizard;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Reporter;
-import com.codahale.metrics.ScheduledReporter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,9 +41,13 @@ public class DropwizardStatsReporter {
 
     public void stopReporters() {
         reporters.stream()
-            .filter(r -> r instanceof ScheduledReporter)
-            .map(r -> (ScheduledReporter)r)
-            .forEach(r -> r.stop());
+            .forEach(r -> {
+                try {
+                    r.close();
+                } catch(final IOException ioe) {
+                    LOGGER.error("Close of " + SafeString.objectDescription(r), ioe);
+                }
+            });
     }
 
 }
