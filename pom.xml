@@ -5,6 +5,7 @@
     <groupId>net.dempsy</groupId>
     <artifactId>dempsy-commons-settings</artifactId>
     <version>2.4.0</version>
+    <relativePath />
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
