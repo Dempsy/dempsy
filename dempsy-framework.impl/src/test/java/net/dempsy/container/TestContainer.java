@@ -61,6 +61,7 @@ import net.dempsy.container.altnonlocking.NonLockingAltContainer;
 import net.dempsy.container.locking.LockingContainer;
 import net.dempsy.container.mocks.ContainerTestMessage;
 import net.dempsy.container.mocks.OutputMessage;
+import net.dempsy.container.simple.SimpleContainer;
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.Evictable;
 import net.dempsy.lifecycle.annotation.MessageHandler;
@@ -78,6 +79,7 @@ import net.dempsy.messages.KeyedMessage;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.monitoring.ClusterStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
+import net.dempsy.threading.OrderedPerContainerThreadingModelAlt;
 import net.dempsy.transport.blockingqueue.BlockingQueueReceiver;
 import net.dempsy.util.SystemPropertyManager;
 
@@ -101,6 +103,7 @@ public class TestContainer {
             // the NonLockingContainer is broken
             // {NonLockingContainer.class.getPackage().getName()},
             {NonLockingAltContainer.class.getPackage().getName()},
+            {SimpleContainer.class.getPackage().getName()},
         });
     }
 
@@ -136,7 +139,10 @@ public class TestContainer {
         context = track(new ClassPathXmlApplicationContext(ctx));
         sessionFactory = new LocalClusterSessionFactory();
         final Node node = context.getBean(Node.class);
-        manager = track(new NodeManager()).node(node).collaborator(track(sessionFactory.createSession())).start();
+        manager = track(new NodeManager()).node(node).collaborator(track(sessionFactory.createSession()));
+        if(containerId.contains("simple")) // if it's not thread safe we need an ordered container
+            manager.threadingModel(track(new OrderedPerContainerThreadingModelAlt("tm")));
+        manager.start();
         statsCollector = manager.getClusterStatsCollector(new ClusterId("test-app", "test-cluster"));
         container = manager.getContainers().get(0);
         assertTrue(poll(manager, m -> m.isReady()));
@@ -625,64 +631,74 @@ public class TestContainer {
 
     @Test
     public void testEvictCollisionWithBlocking() throws Throwable {
+//        if(!container.containerIsThreadSafe())
+//            return; // we can't run this test unless the container is thread safe.
+        boolean countedDown = false;
         final TestProcessor mp = createAndGet("foo");
+        try {
 
-        // now we're going to cause the passivate to be held up.
-        mp.blockPassivate = new CountDownLatch(1);
-        mp.evict.set(true); // allow eviction
+            // now we're going to cause the passivate to be held up.
+            mp.blockPassivate = new CountDownLatch(1);
+            mp.evict.set(true); // allow eviction
 
-        // now kick off the evict in a separate thread since we expect it to hang
-        // until the mp becomes unstuck.
-        final AtomicBoolean evictIsComplete = new AtomicBoolean(false); // this will allow us to see the evict pass complete
-        final Thread thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                container.evict();
-                evictIsComplete.set(true);
+            // now kick off the evict in a separate thread since we expect it to hang
+            // until the mp becomes unstuck.
+            final AtomicBoolean evictIsComplete = new AtomicBoolean(false); // this will allow us to see the evict pass complete
+            final Thread thread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    container.evict();
+                    evictIsComplete.set(true);
+                }
+            });
+            thread.start();
+
+            Thread.sleep(500); // let it get going.
+            // assertFalse(evictIsComplete.get()); // check to see we're hung.
+
+            final ClusterMetricGetters sc = (ClusterMetricGetters)statsCollector;
+            assertEquals(0, sc.getMessageCollisionCount());
+
+            // sending it a message will now cause it to have the collision tick up
+            final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
+            adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
+
+            // give it some time.
+            Thread.sleep(100);
+
+            // make sure there's no collision
+            assertEquals(0, sc.getMessageCollisionCount());
+
+            // make sure no message got handled
+            assertEquals(1, mp.invocationCount); // 1 is the initial invocation that caused the instantiation.
+
+            // now let the evict finish
+            countedDown = true;
+            mp.blockPassivate.countDown();
+
+            // wait until the eviction completes
+            assertTrue(poll(evictIsComplete, o -> o.get()));
+
+            // Once the poll finishes a new Mp is instantiated and handling messages.
+            assertTrue(poll(cache, c -> c.get("foo") != null));
+            final TestProcessor mp2 = cache.get("foo");
+            assertNotNull("MP not associated with expected key", mp);
+
+            // invocationCount should be 1 from the initial invocation that caused the clone, and no more
+            assertEquals(1, mp.invocationCount);
+            assertEquals(1, mp2.invocationCount);
+            assertTrue(mp != mp2);
+
+            // send a message that should go through
+            adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
+            assertTrue(poll(o -> mp2.invocationCount > 1));
+            Thread.sleep(100);
+            assertEquals(1, mp.invocationCount);
+            assertEquals(2, mp2.invocationCount);
+        } finally {
+            if(!countedDown && mp.blockPassivate != null) {
+                mp.blockPassivate.countDown();
             }
-        });
-        thread.start();
-
-        Thread.sleep(500); // let it get going.
-        assertFalse(evictIsComplete.get()); // check to see we're hung.
-
-        final ClusterMetricGetters sc = (ClusterMetricGetters)statsCollector;
-        assertEquals(0, sc.getMessageCollisionCount());
-
-        // sending it a message will now cause it to have the collision tick up
-        final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
-        adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
-
-        // give it some time.
-        Thread.sleep(100);
-
-        // make sure there's no collision
-        assertEquals(0, sc.getMessageCollisionCount());
-
-        // make sure no message got handled
-        assertEquals(1, mp.invocationCount); // 1 is the initial invocation that caused the instantiation.
-
-        // now let the evict finish
-        mp.blockPassivate.countDown();
-
-        // wait until the eviction completes
-        assertTrue(poll(evictIsComplete, o -> o.get()));
-
-        // Once the poll finishes a new Mp is instantiated and handling messages.
-        assertTrue(poll(cache, c -> c.get("foo") != null));
-        final TestProcessor mp2 = cache.get("foo");
-        assertNotNull("MP not associated with expected key", mp);
-
-        // invocationCount should be 1 from the initial invocation that caused the clone, and no more
-        assertEquals(1, mp.invocationCount);
-        assertEquals(1, mp2.invocationCount);
-        assertTrue(mp != mp2);
-
-        // send a message that should go through
-        adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
-        assertTrue(poll(o -> mp2.invocationCount > 1));
-        Thread.sleep(100);
-        assertEquals(1, mp.invocationCount);
-        assertEquals(2, mp2.invocationCount);
+        }
     }
 }

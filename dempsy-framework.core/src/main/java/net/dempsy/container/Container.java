@@ -401,6 +401,8 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
 
     public abstract boolean containerSupportsBulkProcessing();
 
+    public abstract boolean containerIsThreadSafe();
+
     public void setEvictionCycle(final long evictionCycleTime, final TimeUnit timeUnit) {
         this.evictionCycleTime = evictionCycleTime;
         this.evictionTimeUnit = timeUnit;

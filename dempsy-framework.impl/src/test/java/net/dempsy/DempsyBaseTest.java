@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.junit.ClassRule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -28,14 +29,18 @@ import net.dempsy.config.Node;
 import net.dempsy.serialization.util.ClassTracker;
 import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.threading.OrderedPerContainerThreadingModel;
+import net.dempsy.threading.OrderedPerContainerThreadingModelAlt;
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.blockingqueue.BlockingQueueAddress;
 import net.dempsy.util.SystemPropertyManager;
+import net.dempsy.utils.test.CloseableRule;
 
 @RunWith(Parameterized.class)
 public abstract class DempsyBaseTest {
 
     public static final long TEN_SECONDS = 10000;
+
+    @ClassRule public static CloseableRule props = new CloseableRule(new SystemPropertyManager().set("org.quartz.threadPool.threadCount", "1"));
 
     /**
      * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
@@ -131,7 +136,8 @@ public abstract class DempsyBaseTest {
     private static List<String> transportsThatRequireSerializer = Arrays.asList("nio");
     private static List<String> groupRoutingStrategies = Arrays.asList("group");
     private static List<String> containersThatSupportLimitedQueueLen = Arrays.asList("locking");
-    private static List<String> containersThatDontInternallyQueue = Arrays.asList("locking");
+    private static List<String> containersThatDontInternallyQueue = Arrays.asList("locking", "simple");
+    private static List<String> containersThatArentThreadSafe = Arrays.asList("simple");
 
     // ======================================================
     // These define how the tests use the threading model. Don't
@@ -175,13 +181,18 @@ public abstract class DempsyBaseTest {
                 {"ordered",(Function<String, ThreadingModel>)(testName) -> new OrderedPerContainerThreadingModel(testName)
                     .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
                 },
+                {"orderedAlt",(Function<String, ThreadingModel>)(testName) -> new OrderedPerContainerThreadingModelAlt(testName)
+                    .setAdditionalThreads(TM_ADDITIONAL_THREADS)
+                    .setCoresFactor(TM_CORES_FACTOR)
+                    .setMaxNumberOfQueuedLimitedTasks(-1)
+                },
             });
     }
 
     public static Combos production() {
         return new Combos(
             new String[] {"managed","group"},
-            new String[] {"altnonlockingbulk","locking"},
+            new String[] {"simple","altnonlockingbulk","locking"},
             new String[] {"zookeeper"},
             new String[] {"nio","bq"},
             new String[] {"kryo"},
@@ -196,6 +207,11 @@ public abstract class DempsyBaseTest {
                 },
                 {"ordered",(Function<String, ThreadingModel>)(testName) -> new OrderedPerContainerThreadingModel(testName)
                     .setMaxNumberOfQueuedLimitedTasks(TM_QUEUE_DEPTH_WHEN_LIMITED)
+                },
+                {"orderedAlt",(Function<String, ThreadingModel>)(testName) -> new OrderedPerContainerThreadingModelAlt(testName)
+                    .setAdditionalThreads(TM_ADDITIONAL_THREADS)
+                    .setCoresFactor(TM_CORES_FACTOR)
+                    .setMaxNumberOfQueuedLimitedTasks(-1)
                 },
             });
     }
@@ -224,6 +240,10 @@ public abstract class DempsyBaseTest {
         return !containerDoesntInternallyQueue(containerId);
     }
 
+    public static boolean containerNotThreadSafe(final String containerId) {
+        return containersThatArentThreadSafe.contains(containerId);
+    }
+
     @Parameters(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
     public static Collection<Object[]> combos() {
         final Combos combos = (hardcore) ? hardcore() : production();
@@ -239,7 +259,11 @@ public abstract class DempsyBaseTest {
                     for(final Object[] threading: combos.threadingDetails) {
                         // OrderedPerContainerThreadingModel can't be used with
                         // containers that internally queue.
-                        if("ordered".equals(threading[0]) && containerInternallyQueues(container))
+                        if(threading[0].toString().startsWith("ordered") && containerInternallyQueues(container))
+                            continue;
+
+                        // if the container is not thread safe, then it's incompatible with anything but ordered threading models.
+                        if(containerNotThreadSafe(container) && !threading[0].toString().startsWith("ordered"))
                             continue;
 
                         for(final String tp: combos.transports) {

@@ -266,6 +266,7 @@ public class TestElasticity extends DempsyBaseTest {
         }));
     }
 
+    @SuppressWarnings("resource")
     @Test
     public void testForProfiler() throws Throwable {
         try {
@@ -367,6 +368,7 @@ public class TestElasticity extends DempsyBaseTest {
         assertTrue(poll(tmpThread, t -> !t.isAlive()));
     }
 
+    @SuppressWarnings("resource")
     @Test
     public void testNumberCountDropOneAndReAdd() throws Throwable {
 
@@ -437,6 +439,7 @@ public class TestElasticity extends DempsyBaseTest {
         });
     }
 
+    @SuppressWarnings("resource")
     @Test
     public void testNumberCountAddOneThenDrop() throws Throwable {
         runCombos("testNumberCountAddOneThenDrop", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, ns -> {
@@ -506,6 +509,7 @@ public class TestElasticity extends DempsyBaseTest {
         });
     }
 
+    @SuppressWarnings("resource")
     @Test
     public void testExpansionPassivation() throws Exception {
         final String[][] actxPath = {

@@ -5,7 +5,6 @@ import net.dempsy.container.Container.Operation;
 import net.dempsy.messages.KeyedMessage;
 
 public abstract class ContainerJob {
-
     public final ContainerSpecific individuatedCs;
 
     protected ContainerJob(final ContainerSpecific cs) {
@@ -31,5 +30,4 @@ public abstract class ContainerJob {
         if(individuatedCs != null)
             container.messageBeingRejectedExternally(message, justArrived, individuatedCs);
     }
-
 }

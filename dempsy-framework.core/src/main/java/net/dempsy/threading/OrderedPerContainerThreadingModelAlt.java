@@ -5,7 +5,6 @@ import static net.dempsy.util.Functional.chain;
 import static net.dempsy.util.Functional.ignore;
 import static net.dempsy.util.OccasionalRunnable.staticOccasionalRunnable;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerJob;
 import net.dempsy.container.MessageDeliveryJob;
+import net.dempsy.util.GroupExecutor;
 
 /**
  * This threading model provides some ordering guarantees where the default
@@ -40,8 +40,10 @@ import net.dempsy.container.MessageDeliveryJob;
  */
 // TODO: While this handles the maxPendingMessagesPerContainer correctly
 // the maxNumWaitingLimitedTasks is effectively ignored.
-public class OrderedPerContainerThreadingModel implements ThreadingModel {
-    private static Logger LOGGER = LoggerFactory.getLogger(OrderedPerContainerThreadingModel.class);
+public class OrderedPerContainerThreadingModelAlt implements ThreadingModel {
+    private static Logger LOGGER = LoggerFactory.getLogger(OrderedPerContainerThreadingModelAlt.class);
+
+    private static final int minNumThreads = 1;
 
     // when this anded (&) with the current message count is
     // zero, we'll log a message to the logger (as long as the log level is set appropriately).
@@ -56,6 +58,12 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     public static final String CONFIG_KEY_DESERIALIZATION_THREADS = "deserialization_threads";
     public static final String DEFAULT_DESERIALIZATION_THREADS = "2";
 
+    public static final String CONFIG_KEY_CORES_FACTOR = "cores_factor";
+    public static final String DEFAULT_CORES_FACTOR = "1.0";
+
+    public static final String CONFIG_KEY_ADDITIONAL_THREADS = "additional_threads";
+    public static final String DEFAULT_ADDITIONAL_THREADS = "1";
+
     private static final AtomicLong seq = new AtomicLong(0);
 
     private ExecutorService calcContainersWork = null;
@@ -67,7 +75,6 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     private final AtomicLong numLimited = new AtomicLong(0);
     private long maxNumWaitingLimitedTasks;
     private long maxNumWaitingLimitedTasksX2;
-    public final boolean wereLimiting;
 
     private int deserializationThreadCount = Integer.parseInt(DEFAULT_DESERIALIZATION_THREADS);
 
@@ -75,36 +82,71 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
     private final static AtomicLong threadNum = new AtomicLong();
     private boolean started = false;
-    private Shuttler shuttler = null;
+    private final static AtomicLong poolNum = new AtomicLong(0L);
+    private GroupExecutor groupExecutor = null;
 
-    private OrderedPerContainerThreadingModel(final Supplier<String> nameSupplier, final int maxNumWaitingLimitedTasks) {
-        this.nameSupplier = nameSupplier;
-        this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
-        maxNumWaitingLimitedTasksX2 = maxNumWaitingLimitedTasks << 1;
-        wereLimiting = (maxNumWaitingLimitedTasks > 0);
-    }
+    private double m = Double.parseDouble(DEFAULT_CORES_FACTOR);
+    private int additionalThreads = Integer.parseInt(DEFAULT_ADDITIONAL_THREADS);
+    private final int threadPoolSize;
 
-    private OrderedPerContainerThreadingModel(final Supplier<String> nameSupplier) {
-        this(nameSupplier, Integer.parseInt(DEFAULT_MAX_PENDING));
-    }
-
-    private static Supplier<String> bakedDefaultName(final String threadNameBase) {
-        final long curTmNum = threadNum.getAndIncrement();
-        return () -> threadNameBase + "-" + curTmNum;
-    }
-
-    public OrderedPerContainerThreadingModel(final String threadNameBase) {
-        this(bakedDefaultName(threadNameBase));
+    public OrderedPerContainerThreadingModelAlt(final String threadNameBase) {
+        this(threadNameBase, -1, Integer.parseInt(DEFAULT_MAX_PENDING));
     }
 
     /**
-     * Create a DefaultDempsyExecutor with a fixed number of threads while setting the maximum number of limited tasks.
+     * Create a OrderedPerContainerThreadingModelAlt with a fixed number of threads while setting the maximum number of limited tasks.
      */
-    public OrderedPerContainerThreadingModel(final String threadNameBase, final int maxNumWaitingLimitedTasks) {
-        this(bakedDefaultName(threadNameBase), maxNumWaitingLimitedTasks);
+    public OrderedPerContainerThreadingModelAlt(final String threadNameBase, final int threadPoolSize, final int maxNumWaitingLimitedTasks) {
+        final long curPoolNum = poolNum.getAndIncrement();
+        this.nameSupplier = () -> threadNameBase + "-" + curPoolNum + "-" + threadNum.getAndIncrement();;
+        if(maxNumWaitingLimitedTasks < 0) { // unbounded
+            this.maxNumWaitingLimitedTasks = Long.MAX_VALUE;
+            this.maxNumWaitingLimitedTasksX2 = Long.MAX_VALUE;
+        } else {
+            this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+            this.maxNumWaitingLimitedTasksX2 = maxNumWaitingLimitedTasks << 1;
+        }
+        this.threadPoolSize = threadPoolSize;
     }
 
-    public OrderedPerContainerThreadingModel setDeserializationThreadCount(final int deserializationThreadCount) {
+    /**
+     * <p>
+     * Prior to calling start you can set the cores factor and additional cores.
+     * Ultimately the number of threads in the pool will be given by:
+     * </p>
+     *
+     * <p>
+     * num threads = m * num cores + b
+     * </p>
+     *
+     * <p>
+     * Where 'm' is set by setCoresFactor and 'b' is set by setAdditionalThreads
+     * </p>
+     */
+    public OrderedPerContainerThreadingModelAlt setCoresFactor(final double m) {
+        this.m = m;
+        return this;
+    }
+
+    /**
+     * <p>
+     * Prior to calling start you can set the cores factor and additional cores. Ultimately the number of threads in the pool will be given by:
+     * </p>
+     *
+     * <p>
+     * num threads = m * num cores + b
+     * </p>
+     *
+     * <p>
+     * Where 'm' is set by setCoresFactor and 'b' is set by setAdditionalThreads
+     * </p>
+     */
+    public OrderedPerContainerThreadingModelAlt setAdditionalThreads(final int additionalThreads) {
+        this.additionalThreads = additionalThreads;
+        return this;
+    }
+
+    public OrderedPerContainerThreadingModelAlt setDeserializationThreadCount(final int deserializationThreadCount) {
         this.deserializationThreadCount = deserializationThreadCount;
         return this;
     }
@@ -228,19 +270,18 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
      * This object is the runnable for the thread that is the container's thread.
      * It has it's own queue which is specific to the container it's managing.
      */
-    private class ContainerWorker implements Runnable {
-        public final LinkedBlockingDeque<ContainerJobHolder> queue;
-        public final Container container;
-        public final int maxPendingMessagesPerContainerX2;
-        public final boolean shedMode;
-        private final Thread thread;
+    private class ContainerWorker {
+        private final GroupExecutor.Queue queue;
+        private final Container containerX;
+        private final int maxPendingMessagesPerContainerX2;
+        private final boolean shedMode;
 
         public ContainerWorker(final Container container) {
-            this.container = container;
+            this.containerX = container;
             final Container c = container;
             if(c.containerInternallyQueuesMessages())
                 throw new IllegalArgumentException(
-                    "Cannot use an " + OrderedPerContainerThreadingModel.class.getSimpleName() + " with a " + c.getClass().getSimpleName()
+                    "Cannot use an " + OrderedPerContainerThreadingModelAlt.class.getSimpleName() + " with a " + c.getClass().getSimpleName()
                         + " container, as is being done for the cluster \"" + c.getClusterId().clusterName
                         + "\" because it internally queues messages, defeating the only reason to use this threading model.");
             maxPendingMessagesPerContainerX2 = c.getMaxPendingMessagesPerContainer() * 2;
@@ -252,14 +293,8 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
             } else
                 shedMode = true;
 
-            this.queue = new LinkedBlockingDeque<>();
-
-            thread = chain(
-                // this used to use the nameSupplier but the name is too long in `htop`
-                // to understand what's going on so it's been switched to simple "c-"
-                // (for "container") and the name of the cluster.
-                new Thread(this, "c-" + container.getClusterId().clusterName),
-                t -> t.start());
+            // this.queue = new LinkedBlockingDeque<>();
+            this.queue = groupExecutor.newExecutor();
         }
 
         /**
@@ -273,56 +308,23 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         public void handleEnqueuing(final ContainerJobHolder curJobHolder) {
             // We can't really conditionally reject the oldest without disrupting the ordering guarantees.
             // We're going to throw away this one if we're at double our limits.
-            if(curJobHolder.isLimited() && shedMode && (queue.size() > maxPendingMessagesPerContainerX2)) {
-                curJobHolder.reject(container);
-            } else if(!queue.offer(curJobHolder)) { // offer the job. If the job is queued then
-                                                    // ownership of the lifecycle has been successfully
-                                                    // passed to the container...
+            if(curJobHolder.isLimited() && shedMode &&
+                (queue.size() > maxPendingMessagesPerContainerX2)) {
+                curJobHolder.reject(containerX);
+            } else if(!queue.submit(() -> {
+                if(curJobHolder.isLimited() && (numLimited.get() - 1) > maxNumWaitingLimitedTasks)
+                    curJobHolder.reject(containerX);
+                else
+                    curJobHolder.process(containerX);
+            })) { // offer the job. If the job is queued then
+                  // ownership of the lifecycle has been successfully
+                  // passed to the container...
 
                 // ... otherwise we need to make sure we mark the job as rejected at the container level.
-                curJobHolder.reject(container);
+                curJobHolder.reject(containerX);
                 LOGGER.trace("Failed to be queued to container {}. The queue has {} messages in it",
-                    container.getClusterId(), queue.size());
+                    containerX.getClusterId(), queue.size());
             }
-        }
-
-        private void stop() {
-            if(!isStopped.get())
-                throw new IllegalStateException();
-            thread.interrupt();
-        }
-
-        @Override
-        public void run() {
-            while(!isStopped.get()) {
-                try {
-                    final ContainerJobHolder job = queue.take();
-                    if(job != null) {
-                        // the "- 1" is because this job is being counted as on the
-                        // queue right now until I either reject or process it. BUT
-                        // I'd rather assume it's OFF the queue since, it effectively
-                        // is, it's just that it's bookkeeping isn't done until reject/process
-                        // is called.
-                        //
-                        // This also makes the bookkeeping exactly consistent with the
-                        // DefaultThreadingModel
-                        if(job.isLimited() && (numLimited.get() - 1) > maxNumWaitingLimitedTasks)
-                            job.reject(container);
-                        else
-                            job.process(container);
-                    }
-                } catch(final InterruptedException ie) {
-                    if(!isStopped.get())
-                        LOGGER.error("Interrupted but not stopped:", ie);
-                } catch(final Throwable th) {
-                    LOGGER.error("Completely unexpected exception:", th);
-                }
-            }
-
-            // if we got here then we're shutting down ... we need to account for all of the queued jobs.
-            final List<ContainerJobHolder> drainTo = new ArrayList<>(queue.size());
-            queue.drainTo(drainTo);
-            drainTo.forEach(d -> d.reject(container));
         }
     }
 
@@ -373,7 +375,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
 
             // This is used to log the message
             final Runnable occLogger = staticOccasionalRunnable(LOG_QUEUE_LEN_MESSAGE_COUNT,
-                () -> LOGGER.debug("Total messages pending on {}: {}", OrderedPerContainerThreadingModel.class.getSimpleName(), inqueue.size()));
+                () -> LOGGER.debug("Total messages pending on {}: {}", OrderedPerContainerThreadingModelAlt.class.getSimpleName(), inqueue.size()));
 
             while(!isStopped.get()) {
                 // this flag just helps the spin-lock spin
@@ -461,13 +463,23 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
     }
 
     @Override
-    public OrderedPerContainerThreadingModel start(final String nodeid) {
-        logConfig(LOGGER, "Threading Model {} for node: {}", OrderedPerContainerThreadingModel.class.getSimpleName(), nodeid);
+    public OrderedPerContainerThreadingModelAlt start(final String nodeid) {
+        logConfig(LOGGER, "Threading Model {} for node: {}", OrderedPerContainerThreadingModelAlt.class.getSimpleName(), nodeid);
         logConfig(LOGGER, configKey(CONFIG_KEY_MAX_PENDING), getMaxNumberOfQueuedLimitedTasks(), DEFAULT_MAX_PENDING);
         logConfig(LOGGER, configKey(CONFIG_KEY_DESERIALIZATION_THREADS), deserializationThreadCount, DEFAULT_DESERIALIZATION_THREADS);
 
-        shuttler = new Shuttler();
-        shuttleThread = chain(newThread(shuttler, nameSupplier.get() + "-Shuttle"), t -> t.start());
+        int ctps = threadPoolSize;
+        if(ctps == -1) {
+            // figure out the number of cores.
+            final int cores = Runtime.getRuntime().availableProcessors();
+            final int cpuBasedThreadCount = (int)Math.ceil(cores * m) + additionalThreads; // why? I don't know. If you don't like it
+                                                                                           // then use the other constructor
+            ctps = Math.max(cpuBasedThreadCount, minNumThreads);
+        }
+
+        groupExecutor = new GroupExecutor(ctps, r -> new Thread(r, nameSupplier.get()));
+
+        shuttleThread = chain(newThread(new Shuttler(), nameSupplier.get() + "-Shuttle"), t -> t.start());
         // This is the executor that is running the deserialization (usually done in calculateContainers)
         // while the message is queued
         calcContainersWork = Executors.newFixedThreadPool(deserializationThreadCount,
@@ -477,7 +489,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         return this;
     }
 
-    public OrderedPerContainerThreadingModel configure(final Map<String, String> configuration) {
+    public OrderedPerContainerThreadingModelAlt configure(final Map<String, String> configuration) {
         setMaxNumberOfQueuedLimitedTasks(Integer.parseInt(getConfigValue(configuration, CONFIG_KEY_MAX_PENDING, DEFAULT_MAX_PENDING)));
         setDeserializationThreadCount(Integer.parseInt(getConfigValue(configuration, CONFIG_KEY_DESERIALIZATION_THREADS, DEFAULT_DESERIALIZATION_THREADS)));
         return this;
@@ -487,9 +499,14 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         return (int)maxNumWaitingLimitedTasks;
     }
 
-    public OrderedPerContainerThreadingModel setMaxNumberOfQueuedLimitedTasks(final long maxNumWaitingLimitedTasks) {
-        this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
-        this.maxNumWaitingLimitedTasksX2 = maxNumWaitingLimitedTasks << 1;
+    public OrderedPerContainerThreadingModelAlt setMaxNumberOfQueuedLimitedTasks(final long maxNumWaitingLimitedTasks) {
+        if(maxNumWaitingLimitedTasks < 0) { // unbounded
+            this.maxNumWaitingLimitedTasks = Long.MAX_VALUE;
+            this.maxNumWaitingLimitedTasksX2 = Long.MAX_VALUE;
+        } else {
+            this.maxNumWaitingLimitedTasks = maxNumWaitingLimitedTasks;
+            this.maxNumWaitingLimitedTasksX2 = maxNumWaitingLimitedTasks << 1;
+        }
         return this;
     }
 
@@ -510,8 +527,7 @@ public class OrderedPerContainerThreadingModel implements ThreadingModel {
         if(!calcContainersWork.isTerminated())
             calcContainersWork.shutdownNow();
 
-        if(shuttler != null)
-            shuttler.containerWorkers.values().forEach(cw -> cw.stop());
+        groupExecutor.shutdownNow();
     }
 
     @Override

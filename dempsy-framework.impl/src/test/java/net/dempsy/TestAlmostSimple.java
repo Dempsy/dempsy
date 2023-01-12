@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.junit.Test;
@@ -26,6 +27,7 @@ import net.dempsy.container.Container;
 import net.dempsy.container.altnonlocking.NonLockingAltContainer;
 import net.dempsy.container.altnonlockingbulk.NonLockingAltBulkContainer;
 import net.dempsy.container.locking.LockingContainer;
+import net.dempsy.container.simple.SimpleContainer;
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.Evictable;
 import net.dempsy.lifecycle.annotation.MessageHandler;
@@ -36,6 +38,8 @@ import net.dempsy.lifecycle.annotation.Mp;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.threading.DefaultThreadingModel;
+import net.dempsy.threading.OrderedPerContainerThreadingModelAlt;
+import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.Listener;
 import net.dempsy.transport.MessageTransportException;
 import net.dempsy.transport.NodeAddress;
@@ -46,9 +50,11 @@ import net.dempsy.utils.test.ConditionPoll;
 public class TestAlmostSimple {
 
     final String containerTypeId;
+    final Supplier<ThreadingModel> tmSupplier;
 
-    public TestAlmostSimple(final String containerTypeId) {
+    public TestAlmostSimple(final String containerTypeId, final Supplier<ThreadingModel> tmSupplier) {
         this.containerTypeId = containerTypeId;
+        this.tmSupplier = tmSupplier;
 
         // reset the value
         MpEven.allowEviction.set(false);
@@ -57,9 +63,10 @@ public class TestAlmostSimple {
     @Parameters(name = "container type={0}")
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-            {NonLockingAltContainer.class.getPackageName()},
-            {NonLockingAltBulkContainer.class.getPackageName()},
-            {LockingContainer.class.getPackageName()},
+            {NonLockingAltContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)},
+            {NonLockingAltBulkContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)},
+            {LockingContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)},
+            {SimpleContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new OrderedPerContainerThreadingModelAlt("TB", -1, 1)},
             // non-locking container is broken
             // {NonLockingContainer.class.getPackageName()},
         });
@@ -166,7 +173,7 @@ public class TestAlmostSimple {
         final AtomicLong count = new AtomicLong(0);
 
         Adaptor adaptor = null;
-        try(final DefaultThreadingModel tm = new DefaultThreadingModel("TB", -1, 1);
+        try(final ThreadingModel tm = tmSupplier.get();
             final NodeManager nm = new NodeManager();) {
             final Node n = new Node.Builder("test-app")
                 .defaultRoutingStrategyId("net.dempsy.router.simple")

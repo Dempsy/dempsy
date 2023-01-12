@@ -15,6 +15,11 @@ import net.dempsy.container.MessageDeliveryJob;
 import net.dempsy.util.OccasionalRunnable;
 import net.dempsy.util.SimpleExecutor;
 
+/**
+ * Note on ordering. Since multiple threads can retrieve from the queue it's all together
+ * possible that one thread retrieves a message for a container immediately followed by
+ * another but the second thread makes the call on the container first.
+ */
 public class DefaultThreadingModel implements ThreadingModel {
     private static Logger LOGGER = LoggerFactory.getLogger(DefaultThreadingModel.class);
 
@@ -150,18 +155,6 @@ public class DefaultThreadingModel implements ThreadingModel {
             threadPoolSize = Math.max(cpuBasedThreadCount, minNumThreads);
         }
 
-        // priorityQueue = new LinkedBlockingDeque<Runnable>() {
-        // private static final long serialVersionUID = 1L;
-        //
-        // @Override
-        // public boolean offer(final Runnable e) {
-        // if(e instanceof PriorityRunnable)
-        // return super.offerFirst(e);
-        // return super.offer(e);
-        // }
-        //
-        // };
-        // executor = new ThreadPoolExecutor(threadPoolSize, threadPoolSize, 0L, TimeUnit.MILLISECONDS, priorityQueue, r -> new Thread(r, nameSupplier.get()));
         executor = new SimpleExecutor(threadPoolSize, r -> new Thread(r, nameSupplier.get()));
 
         if(blocking) {
@@ -394,7 +387,6 @@ public class DefaultThreadingModel implements ThreadingModel {
                 LOGGER.warn("Rejecting a job resulted in an exception", rte);
             }
         }
-
     }
 
     private static class BlockingLimited implements SubmitLimited {

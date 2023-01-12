@@ -28,6 +28,9 @@ public interface ThreadingModel extends AutoCloseable {
      */
     public void submitLimited(MessageDeliveryJob r);
 
+    /**
+     * queue a message that will be handled before other non-priority jobs.
+     */
     public void submitPrioity(MessageDeliveryJob r);
 
     /**

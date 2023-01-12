@@ -356,6 +356,11 @@ public class NonLockingAltContainer extends Container {
     }
 
     @Override
+    public boolean containerIsThreadSafe() {
+        return true;
+    }
+
+    @Override
     public void stop() {
         super.stop();
 

@@ -48,7 +48,6 @@ public class NodeReceiver implements Listener<RoutedMessage> {
      *
      * If the message is a resource (and therefore disposition isn't null) there's an assumption that
      * the message is "opened" and responsibility for the closing of it is being passed along to propogateMessageToNode
-     *
      */
     public void propogateMessageToNode(final RoutedMessage message, final boolean justArrived, final MessageResourceManager disposition) {
         if(disposition == null) {

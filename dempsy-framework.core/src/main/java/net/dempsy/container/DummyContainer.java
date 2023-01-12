@@ -59,4 +59,8 @@ public class DummyContainer extends Container {
         return false;
     }
 
+    @Override
+    public boolean containerIsThreadSafe() {
+        return true;
+    }
 }

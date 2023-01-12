@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -31,13 +32,15 @@ public class TestThreadingModel {
     public static Object[][] params() {
 
         final String threadNameBase = TestThreadingModel.class.getSimpleName() + "-";
-        final DefaultThreadingModel dtm = chain(new DefaultThreadingModel(threadNameBase, NUM_THREADS, MAX_PENDING),
+        final Supplier<ThreadingModel> dtm = () -> chain(new DefaultThreadingModel(threadNameBase, NUM_THREADS, MAX_PENDING),
             tm -> tm.start("nodeid"));
 
         // threading model, num threads,
         return new Object[][] {
             {dtm,NUM_THREADS,MAX_PENDING},
-            {chain(new OrderedPerContainerThreadingModel(threadNameBase, MAX_PENDING), tm -> tm.start("nodeid")),1,MAX_PENDING}
+            {(Supplier<ThreadingModel>)() -> chain(new OrderedPerContainerThreadingModel(threadNameBase, MAX_PENDING), tm -> tm.start("nodeid")),1,MAX_PENDING},
+            {(Supplier<ThreadingModel>)() -> chain(new OrderedPerContainerThreadingModelAlt(threadNameBase, NUM_THREADS, MAX_PENDING),
+                tm -> tm.start("nodeid")),1,MAX_PENDING},
         };
 
     }
@@ -47,8 +50,8 @@ public class TestThreadingModel {
     public final int maxNumLimited;
     public final Container container;
 
-    public TestThreadingModel(final ThreadingModel ut, final int numThreads, final int maxNumLimited) {
-        this.ut = ut;
+    public TestThreadingModel(final Supplier<ThreadingModel> ut, final int numThreads, final int maxNumLimited) {
+        this.ut = ut.get();
         this.numThreads = numThreads;
         this.maxNumLimited = maxNumLimited;
         this.container = new DummyContainer();

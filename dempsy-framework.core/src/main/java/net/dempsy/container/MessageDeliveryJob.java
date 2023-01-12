@@ -49,7 +49,6 @@ import java.util.List;
  * <li>{@link rejected} - the job is to be rejected by that container..</li>
  * </ul>
  * </ul>
- *
  */
 public interface MessageDeliveryJob {
 
