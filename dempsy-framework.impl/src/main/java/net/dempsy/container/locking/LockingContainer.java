@@ -458,7 +458,7 @@ public class LockingContainer extends Container {
 
         // otherwise we will be working to get one.
         final Boolean tmplock = Boolean.TRUE;
-        Boolean lock = keysBeingWorked.putIfAbsent(key, tmplock);
+        Object lock = keysBeingWorked.putIfAbsent(key, tmplock);
         if(lock == null)
             lock = tmplock;
 

@@ -296,6 +296,7 @@ public class TestResourceManagement extends DempsyBaseTest {
         }, testName);
     }
 
+    @SuppressWarnings("resource")
     private void executeSimpleWordCountTest(final String[][] ctxs, final String testName) throws Throwable {
         try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {

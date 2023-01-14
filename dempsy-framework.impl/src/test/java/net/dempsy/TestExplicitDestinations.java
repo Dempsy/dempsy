@@ -124,6 +124,7 @@ public class TestExplicitDestinations extends DempsyBaseTest {
         Mp2.uniqueCounts.clear();
     }
 
+    @SuppressWarnings("resource")
     @Test
     public void testSeparateNodes() throws Exception {
 

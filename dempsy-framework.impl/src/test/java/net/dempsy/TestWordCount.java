@@ -58,6 +58,7 @@ import net.dempsy.messages.MessageProcessorLifecycle;
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.SystemPropertyManager;
 
+@SuppressWarnings("resource")
 public class TestWordCount extends DempsyBaseTest {
     private static Logger LOGGER = LoggerFactory.getLogger(TestWordCount.class);
 
@@ -463,8 +464,7 @@ public class TestWordCount extends DempsyBaseTest {
 
     @Test
     public void testWordCountNoRank() throws Throwable {
-        try(@SuppressWarnings("resource")
-        final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {
+        try(final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {
             final String[][] ctxs = {{
                 "classpath:/word-count/adaptor-kjv.xml",
                 "classpath:/word-count/mp-word-count.xml",
