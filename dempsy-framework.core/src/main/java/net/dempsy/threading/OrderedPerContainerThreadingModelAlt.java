@@ -266,10 +266,6 @@ public class OrderedPerContainerThreadingModelAlt implements ThreadingModel {
         }
     }
 
-    /**
-     * This object is the runnable for the thread that is the container's thread.
-     * It has it's own queue which is specific to the container it's managing.
-     */
     private class ContainerWorker {
         private final GroupExecutor.Queue queue;
         private final Container containerX;
@@ -349,13 +345,14 @@ public class OrderedPerContainerThreadingModelAlt implements ThreadingModel {
                 // processing is called while there's still messages to be delivered.
                 //
                 // Instantiating the ContainerJobHolders creates the bookeeping for knowing when everything is complete.
-                final ContainerJobHolder[] cjholders = containerJobs.stream().map(cj -> new ContainerJobHolder(cj, message))
+                final ContainerJobHolder[] cjholders = containerJobs.stream()
+                    .map(cj -> new ContainerJobHolder(cj, message))
                     .toArray(ContainerJobHolder[]::new);
 
                 int i = 0;
                 for(final ContainerJobHolder curJobHolder: cjholders) {
                     final Container container = deliveries[i];
-                    // this is a single thread so this should be safe. The Function<> is NOT side effect free. It starts a thread.
+                    // this is a single thread so this should be safe.
                     final ContainerWorker curWorker = containerWorkers.computeIfAbsent(container, x -> new ContainerWorker(container));
 
                     curWorker.handleEnqueuing(curJobHolder);
@@ -384,7 +381,7 @@ public class OrderedPerContainerThreadingModelAlt implements ThreadingModel {
 
                 // ========================================================
                 // Phase I of this event loop:
-                // check the inqueue.
+                // check the in-queue.
                 // ========================================================
                 try {
                     final MessageDeliveryJobHolder message = inqueue.poll();
