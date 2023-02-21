@@ -30,7 +30,7 @@
   </scm>
 
   <properties>
-    <dempsy-commons-bom.version>2.4.1-SNAPSHOT</dempsy-commons-bom.version>
+    <dempsy-commons-bom.version>2.4.1</dempsy-commons-bom.version>
     <spring.version>5.3.20</spring.version>
     <metrics.version>4.2.12</metrics.version>
     <metrics-ganglia.version>3.2.6</metrics-ganglia.version>
