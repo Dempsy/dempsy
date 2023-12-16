@@ -4,7 +4,7 @@
   <parent>
     <groupId>net.dempsy</groupId>
     <artifactId>dempsy-commons-settings</artifactId>
-    <version>2.4.0</version>
+    <version>2.4.2-SNAPSHOT</version>
     <relativePath />
   </parent>
 
@@ -13,7 +13,7 @@
   <artifactId>dempsy-framework.parent</artifactId>
   <version>0.17-SNAPSHOT</version>
   <packaging>pom</packaging>
-  <name>Distributed Elastic Message Processing - Master Build</name>
+  <description>Distributed Elastic Message Processing - Master Build</description>
 
   <licenses>
     <license>
@@ -30,7 +30,7 @@
   </scm>
 
   <properties>
-    <dempsy-commons-bom.version>2.4.1</dempsy-commons-bom.version>
+    <dempsy-commons-bom.version>2.4.2-SNAPSHOT</dempsy-commons-bom.version>
     <spring.version>5.3.20</spring.version>
     <metrics.version>4.2.12</metrics.version>
     <metrics-ganglia.version>3.2.6</metrics-ganglia.version>
