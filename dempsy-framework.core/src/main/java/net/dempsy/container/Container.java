@@ -707,7 +707,7 @@ public abstract class Container implements Service, KeyspaceChangeListener, Outp
         catch(final DempsyException e) {
             result = null;
             LOGGER.warn("the container for " + clusterId + " failed when trying to invoke " + op + " on " + objectDescription(instance) +
-                " because an exception was thrown by the Message Processeor itself", e);
+                " because an exception was thrown by the Message Processor itself", e);
             statCollector.messageFailed(numMessages);
         }
         // RuntimeExceptions book-keeping
