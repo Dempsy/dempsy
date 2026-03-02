@@ -262,6 +262,17 @@ public class ApplicationState {
         return ret;
     }
 
+    /**
+     * Evicts a stale sender from the cache so the next call to {@link #getSender(NodeAddress)}
+     * goes back through the {@link SenderFactory} and picks up a fresh connection (with the
+     * current address from the routing layer / ZooKeeper).
+     */
+    public void removeSender(final NodeAddress na) {
+        final Sender removed = senders.remove(na);
+        if(removed != null)
+            removed.stop();
+    }
+
     // =====================================================================
     // Strictly for testing.
     // =====================================================================

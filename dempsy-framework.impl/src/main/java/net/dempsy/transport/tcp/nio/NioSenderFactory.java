@@ -48,6 +48,11 @@ public class NioSenderFactory implements SenderFactory {
 
     private final ConcurrentHashMap<TcpAddress, NioSender> senders = new ConcurrentHashMap<>();
 
+    /** Package-private: allows NioSender to evict itself from the cache on unrecoverable failure. */
+    void removeSender(final TcpAddress addr, final NioSender expected) {
+        senders.remove(addr, expected);
+    }
+
     final ConcurrentHashMap<NioSender, NioSender> idleSenders = new ConcurrentHashMap<>();
 
     // =======================================
@@ -113,7 +118,7 @@ public class NioSenderFactory implements SenderFactory {
     @Override
     public NioSender getSender(final NodeAddress destination) throws MessageTransportException {
         final TcpAddress tcpaddr = (TcpAddress)destination;
-        final NioSender ret;
+        NioSender ret;
         if(isRunning.get()) {
             ret = senders.computeIfAbsent(tcpaddr, a -> new NioSender(a, this));
         } else
@@ -122,7 +127,22 @@ public class NioSenderFactory implements SenderFactory {
         try {
             ret.connect(false);
         } catch(final IOException e) {
-            throw new MessageTransportException(nodeId + " sender failed to connect to " + destination, e);
+            // Connection is dead (e.g. remote pod restarted in k8s).
+            // Evict the stale sender and retry once with a fresh connection.
+            LOGGER.warn(nodeId + " sender to " + destination + " failed to connect, evicting stale sender and retrying.", e);
+            senders.remove(tcpaddr, ret);
+            ret.stop();
+            if(isRunning.get()) {
+                ret = new NioSender(tcpaddr, this);
+                try {
+                    ret.connect(false);
+                    senders.putIfAbsent(tcpaddr, ret);
+                } catch(final IOException e2) {
+                    throw new MessageTransportException(nodeId + " sender failed to connect to " + destination + " after retry", e2);
+                }
+            } else {
+                throw new MessageTransportException(nodeId + " sender had getSender called while stopped.");
+            }
         }
         return ret;
     }

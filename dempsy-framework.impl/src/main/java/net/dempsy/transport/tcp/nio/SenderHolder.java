@@ -128,7 +128,9 @@ public class SenderHolder {
                     // Eliminate the key - only if the connect succeeded
                     key.cancel(); // otherwise this is the only place to keep track of the channel
                 } catch(final IOException ioe2) {
-                    LOGGER.warn("Failed the reconnection attempt from " + sender.nodeId + " to " + sender.addr, ioe2);
+                    LOGGER.error("Failed the reconnection attempt from " + sender.nodeId + " to " + sender.addr
+                        + ". Marking sender as dead and evicting from cache so a fresh sender is created on next dispatch.", ioe2);
+                    sender.markDeadAndEvict();
                 }
             }
 
