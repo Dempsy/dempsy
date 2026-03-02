@@ -65,6 +65,8 @@ public final class NioSender implements Sender {
             // if(!done && Thread.interrupted())
             // throw new InterruptedException();
         }
+        if(!done && !running)
+            throw new MessageTransportException(nodeId + " sender to " + addr + " is no longer running. Message not sent.");
     }
 
     @Override
@@ -130,6 +132,16 @@ public final class NioSender implements Sender {
     }
 
     static class StopMessage {}
+
+    /**
+     * Mark this sender as dead and evict it from the factory's sender cache.
+     * Called by SenderHolder when a reconnection attempt fails, so the next
+     * dispatch goes back through the routing layer and creates a fresh sender.
+     */
+    void markDeadAndEvict() {
+        running = false;
+        owner.removeSender(addr, this);
+    }
 
     void connect(final boolean force) throws IOException {
         if(!connected || force) {

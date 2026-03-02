@@ -23,6 +23,7 @@ import net.dempsy.cluster.DirMode;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.KeyedMessageWithType;
 import net.dempsy.messages.MessageResourceManager;
+import net.dempsy.transport.MessageTransportException;
 import net.dempsy.monitoring.NodeStatsCollector;
 import net.dempsy.router.RoutingStrategy;
 import net.dempsy.router.RoutingStrategy.ContainerAddress;
@@ -183,10 +184,18 @@ public class OutgoingDispatcher extends Dispatcher implements Service {
                             LOGGER.error("[{}] Couldn't send message to " + curNode + " from " + thisNodeId + " because there's no "
                                 + Sender.class.getSimpleName(), thisNodeId);
                     } else {
-                        sender.send(new RoutedMessage(curAddr.clusters, messageKey,
-                            sender.considerMessageOwnsershipTransfered() ? (disposer == null ? message.message : disposer.replicate(message.message))
-                                : message.message));
-                        messageSentSomewhere = true;
+                        try {
+                            sender.send(new RoutedMessage(curAddr.clusters, messageKey,
+                                sender.considerMessageOwnsershipTransfered() ? (disposer == null ? message.message : disposer.replicate(message.message))
+                                    : message.message));
+                            messageSentSomewhere = true;
+                        } catch(final MessageTransportException mte) {
+                            // The sender is dead (e.g. remote pod restarted in k8s and reconnect failed).
+                            // Evict it from the cache so the next dispatch creates a fresh sender via the
+                            // routing layer, which will get the updated address from ZooKeeper.
+                            LOGGER.warn("[{}] Send to {} failed, evicting stale sender: {}", thisNodeId, curNode, mte.getMessage());
+                            cur.removeSender(curNode);
+                        }
                     }
                 }
             }
