@@ -2,6 +2,16 @@ package net.dempsy.lifecycle.annotation;
 
 import net.dempsy.util.QuietCloseable;
 
+/**
+ * A reference-counted resource that can be shared across message processor invocations.
+ * Implementations track how many references exist and only release underlying resources
+ * when the count drops to zero via {@link #close()}.
+ *
+ * <p>Use {@link AbstractResource} as a base class for concrete implementations.</p>
+ *
+ * @see AbstractResource
+ * @see ResourceManager
+ */
 public interface Resource extends QuietCloseable {
 
     /**
