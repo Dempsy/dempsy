@@ -717,7 +717,7 @@ new Node.Builder("my-app")
     // Disable monitoring (testing / examples)
     .nodeStatsCollector(new DummyNodeStatsCollector())
     // Or use a real monitoring back-end:
-    // .clusterStatsCollectorFactoryId("net.dempsy.monitoring.dropwizard")
+    // .clusterStatsCollectorFactoryId("net.dempsy.monitoring.micrometer")
     .build();
 ```
 
