@@ -1,3 +1,5 @@
+> **Note:** This document is superseded by [README.md](README.md). It is retained for historical reference only.
+
 # The Dempsy Project
 
 ## Table of Contents

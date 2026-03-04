@@ -14,6 +14,20 @@
   - [Running the example distributed](#running-the-example-distributed)
     - [Distributed Infrastructure Selection](#distributed-infrastructure-selection)
 - [Some terminology](#some-terminology)
+- [Message Processor Lifecycle](#message-processor-lifecycle)
+  - [Construct and @Start](#construct-and-start)
+  - [clone() and @Activation](#clone-and-activation)
+  - [@MessageHandler](#messagehandler)
+  - [@Output](#output)
+  - [@Evictable](#evictable)
+  - [@Passivation](#passivation)
+  - [Lifecycle Summary](#lifecycle-summary)
+- [Configuration and Deployment](#configuration-and-deployment)
+  - [Infrastructure Selection](#infrastructure-selection)
+  - [Serialization Options](#serialization-options)
+  - [Output Scheduling and Eviction Frequency](#output-scheduling-and-eviction-frequency)
+  - [Putting It All Together](#putting-it-all-together)
+- [Design Philosophy](#design-philosophy)
 
 # Overview
 
@@ -405,3 +419,408 @@ Having gone through the  ["Word Count" example](#an-example---the-ubiquitous-wor
 <td> container </td><td> Sometimes also referred to as a <em>message processor container</em>, it is the part of the Dempsy infrastructure that manages the lifecycle of <em>message processors</em> within an individual <em>node</em>. That is, there is a one-to-one between the portion of a cluster running in a particular <em>node</em>, and a <em>container</em>. </td>
 </tr>
 </table>
+
+# Message Processor Lifecycle
+
+The core of a Dempsy application is the Message Processor. Understanding its full lifecycle is essential for building robust stream processing applications. The lifecycle is driven entirely by annotations on your POJO class, keeping your code decoupled from the framework.
+
+The following walks through each stage in the order they occur.
+
+## Construct and `@Start`
+
+First, the _message processor prototype_ is instantiated on node start-up. After construction, any method annotated with `@Start` is called on the prototype. This happens once per node, before any messages are accepted and before any cloning occurs.
+
+```java
+import net.dempsy.lifecycle.annotation.Mp;
+import net.dempsy.lifecycle.annotation.Start;
+
+@Mp
+public class SessionTracker implements Cloneable {
+    private SomeSharedResource resource;
+
+    @Start
+    public void init() {
+        // Called on the prototype only, once per node.
+        // Safe place to initialize shared static state or resources.
+        resource = SomeSharedResource.connect();
+    }
+
+    // ...
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
+}
+```
+
+Use `@Start` when you need to initialize shared state that should only be set up in nodes where this message processor type actually runs. Think of it as a `@PostConstruct` for the prototype.
+
+## `clone()` and `@Activation`
+
+When a message arrives with a key that does not yet have a corresponding _message processor_ instance, Dempsy calls `clone()` on the prototype to create one. Immediately after cloning, the framework invokes any method annotated with `@Activation`.
+
+The `@Activation` method can accept the _message key_ (the type matching the key returned by `@MessageKey`) and an optional `byte[]` containing activation data. The activation data will be non-null when the instance is being restored from a previous `@Passivation` (for example, after migration between nodes).
+
+```java
+import net.dempsy.lifecycle.annotation.Activation;
+import net.dempsy.lifecycle.annotation.Mp;
+
+@Mp
+public class SessionTracker implements Cloneable {
+    private String sessionId;
+
+    @Activation
+    public void activate(final String key, final byte[] activationData) {
+        this.sessionId = key;
+        if (activationData != null) {
+            // Restore persisted state from a prior @Passivation
+            restoreState(activationData);
+        }
+    }
+
+    // ...
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
+}
+```
+
+## `@MessageHandler`
+
+Once activated, the _message processor_ is ready to handle messages. Any method annotated with `@MessageHandler` will be invoked when a matching message arrives. The method must take a single parameter whose type determines which messages it handles.
+
+A `@MessageHandler` method can optionally return a message (or collection of messages). Any returned messages are dispatched into the Dempsy pipeline and routed to whatever cluster handles that message type.
+
+Multiple methods can be annotated with `@MessageHandler` on the same class, each handling a different message type.
+
+```java
+import net.dempsy.lifecycle.annotation.MessageHandler;
+import net.dempsy.lifecycle.annotation.Mp;
+
+@Mp
+public class WordCount implements Cloneable {
+    private long count = 0;
+
+    @MessageHandler
+    public void countWord(final Word word) {
+        count++;
+    }
+
+    @MessageHandler
+    public CountedWord handleQuery(final WordQuery query) {
+        // Returning a message sends it downstream
+        return new CountedWord(query.getWord(), count);
+    }
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
+}
+```
+
+Dempsy guarantees that a given _message processor_ instance will never be called concurrently. You do not need synchronization inside your handler methods.
+
+## `@Output`
+
+During a scheduled output cycle, Dempsy invokes any method annotated with `@Output` on every active _message processor_ in the cluster. The method takes no parameters. Any returned message is dispatched downstream, just like `@MessageHandler` return values.
+
+This is useful when you need to periodically emit aggregated results rather than responding to every individual message.
+
+```java
+import net.dempsy.lifecycle.annotation.MessageHandler;
+import net.dempsy.lifecycle.annotation.Mp;
+import net.dempsy.lifecycle.annotation.Output;
+
+@Mp
+public class WordCount implements Cloneable {
+    private String word;
+    private long count = 0;
+
+    @MessageHandler
+    public void countWord(final Word w) {
+        this.word = w.getWordText();
+        count++;
+    }
+
+    @Output
+    public CountedWord outputCount() {
+        // Called on a schedule, emits current count downstream
+        return new CountedWord(word, count);
+    }
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
+}
+```
+
+The output schedule is configured on the cluster (see the [Configuration and Deployment](#configuration-and-deployment) section below).
+
+## `@Evictable`
+
+In use cases where _message processor_ instances are transient (for example, tracking individual user sessions), you want stale instances to be cleaned up. Annotate a method with `@Evictable` that returns a `boolean`. The framework periodically calls this method on each instance. If it returns `true`, the instance is removed from the container and will no longer receive messages or participate in output cycles.
+
+```java
+import net.dempsy.lifecycle.annotation.Evictable;
+import net.dempsy.lifecycle.annotation.MessageHandler;
+import net.dempsy.lifecycle.annotation.Mp;
+
+@Mp
+public class SessionTracker implements Cloneable {
+    private long lastActivityTime;
+
+    @MessageHandler
+    public void handleEvent(final SessionEvent event) {
+        lastActivityTime = System.currentTimeMillis();
+        // process event...
+    }
+
+    @Evictable
+    public boolean shouldEvict() {
+        // Evict if no activity for 30 minutes
+        return (System.currentTimeMillis() - lastActivityTime) > 1_800_000;
+    }
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
+}
+```
+
+The eviction check frequency is configurable per cluster.
+
+## `@Passivation`
+
+When a _message processor_ is about to be removed from a container -- either due to eviction or migration to another node -- the framework calls any method annotated with `@Passivation`. This method takes no parameters and must return a `byte[]` (or `null`). The returned bytes can be used as activation data if the instance is later re-activated on another node.
+
+```java
+import net.dempsy.lifecycle.annotation.Activation;
+import net.dempsy.lifecycle.annotation.Mp;
+import net.dempsy.lifecycle.annotation.Passivation;
+
+@Mp
+public class SessionTracker implements Cloneable {
+    private String sessionId;
+    private long count;
+
+    @Activation
+    public void activate(final String key, final byte[] data) {
+        this.sessionId = key;
+        if (data != null) {
+            this.count = deserializeCount(data);
+        }
+    }
+
+    @Passivation
+    public byte[] passivate() {
+        // Return state to persist for potential re-activation elsewhere
+        return serializeCount(count);
+    }
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
+}
+```
+
+Note that `@Passivation` is _not_ invoked during a hard node failure. If your application requires durable state, you should persist it within your `@MessageHandler` logic rather than relying solely on `@Passivation`.
+
+## Lifecycle Summary
+
+| Stage | Annotation | Called On | Parameters | Returns |
+|---|---|---|---|---|
+| Initialization | `@Start` | Prototype | None | void |
+| Instance creation | `@Activation` | Cloned instance | Key, optional `byte[]` | void |
+| Message handling | `@MessageHandler` | Active instance | Message | Optional message(s) |
+| Scheduled output | `@Output` | Active instance | None | Optional message(s) |
+| Eviction check | `@Evictable` | Active instance | None | `boolean` |
+| Removal | `@Passivation` | Active instance | None | `byte[]` or null |
+
+# Configuration and Deployment
+
+The current README already demonstrates the `Node.Builder` API for wiring up a Dempsy application. This section covers the configuration options in more detail.
+
+## Infrastructure Selection
+
+A Dempsy `Node` is configured by selecting concrete implementations for transport, routing, collaboration, and monitoring. The `Node.Builder` API makes this straightforward.
+
+### Transport (Receiver)
+
+The _receiver_ determines how messages are physically delivered between nodes.
+
+| Transport | Class | Use Case |
+|---|---|---|
+| Blocking Queue | `BlockingQueueReceiver` | Single-process / testing |
+| Java NIO | `NioReceiver` | Distributed production deployment |
+
+```java
+// In-process (single JVM, testing)
+new Node.Builder("my-app")
+    .receiver(new BlockingQueueReceiver(new ArrayBlockingQueue<>(100000)))
+    // ...
+    .build();
+
+// Distributed (multi-JVM production)
+new Node.Builder("my-app")
+    .receiver(new NioReceiver<Object>(new JavaSerializer()))
+    // ...
+    .build();
+```
+
+### Routing Strategy
+
+The _routing strategy_ determines how message processors are distributed across nodes.
+
+| Strategy ID | Behavior |
+|---|---|
+| `net.dempsy.router.simple` | All MPs on one node (single-process) |
+| `net.dempsy.router.managed` | Dynamically distributes MPs across nodes |
+
+Set the routing strategy on individual clusters, or set a default on the node:
+
+```java
+new Node.Builder("my-app")
+    .defaultRoutingStrategyId("net.dempsy.router.managed")
+    .clusters(
+        new Cluster("adaptor").adaptor(new WordAdaptor()),
+        new Cluster("counter")
+            .mp(new MessageProcessor<WordCount>(new WordCount()))
+            // Override the default for this cluster if needed:
+            .routingStrategyId("net.dempsy.router.simple")
+    )
+    .build();
+```
+
+### Collaboration (Cluster Coordination)
+
+Nodes discover each other through a _collaborator_. For single-process applications use `LocalClusterSessionFactory`. For distributed deployments use `ZookeeperSessionFactory`.
+
+```java
+// Local (single process)
+new LocalClusterSessionFactory().createSession();
+
+// Distributed (ZooKeeper)
+new ZookeeperSessionFactory("zk-host:2181", 3000, new JsonSerializer()).createSession();
+```
+
+### Monitoring
+
+The _node stats collector_ and _cluster stats collector factory_ control metrics collection.
+
+```java
+new Node.Builder("my-app")
+    // Disable monitoring (testing / examples)
+    .nodeStatsCollector(new DummyNodeStatsCollector())
+    // Or use a real monitoring back-end:
+    // .clusterStatsCollectorFactoryId("net.dempsy.monitoring.dropwizard")
+    .build();
+```
+
+## Serialization Options
+
+Dempsy's serialization is pluggable. The serializer is passed to the receiver (for transport) and to the collaborator (for cluster coordination metadata). Three implementations ship out of the box:
+
+| Serializer | Class | Notes |
+|---|---|---|
+| Kryo | `net.dempsy.serialization.kryo.KryoSerializer` | Fast and compact. Default for most use cases. Requires a default constructor on serialized classes. |
+| Jackson (JSON) | `net.dempsy.serialization.jackson.JsonSerializer` | Human-readable. Good for debugging and for ZooKeeper session data. |
+| Java | `net.dempsy.serialization.java.JavaSerializer` | Standard `java.io.Serializable`. Simple but slower and larger on the wire. |
+
+```java
+import net.dempsy.serialization.kryo.KryoSerializer;
+import net.dempsy.serialization.jackson.JsonSerializer;
+import net.dempsy.serialization.java.JavaSerializer;
+
+// Use Kryo for transport (fast, compact)
+new Node.Builder("my-app")
+    .receiver(new NioReceiver<Object>(new KryoSerializer()))
+    .build();
+
+// Use Jackson for ZooKeeper coordination metadata
+new ZookeeperSessionFactory("localhost:2181", 3000, new JsonSerializer()).createSession();
+```
+
+## Output Scheduling and Eviction Frequency
+
+When your message processor uses `@Output`, you must configure an output scheduler on the cluster. Similarly, you can tune how often `@Evictable` checks run:
+
+```java
+import java.util.concurrent.TimeUnit;
+
+new Node.Builder("my-app")
+    .clusters(
+        new Cluster("analytics")
+            .mp(new MessageProcessor<StatsCollector>(new StatsCollector()))
+            .outputScheduler(new RelativeOutputSchedule(1, TimeUnit.MINUTES))
+            .evictionFrequency(10, TimeUnit.MINUTES)
+    )
+    .build();
+```
+
+## Putting It All Together
+
+Here is a full distributed configuration pulling together all the pieces:
+
+```java
+import net.dempsy.NodeManager;
+import net.dempsy.cluster.zookeeper.ZookeeperSessionFactory;
+import net.dempsy.config.Cluster;
+import net.dempsy.config.Node;
+import net.dempsy.lifecycle.annotation.MessageProcessor;
+import net.dempsy.serialization.jackson.JsonSerializer;
+import net.dempsy.serialization.kryo.KryoSerializer;
+import net.dempsy.transport.tcp.nio.NioReceiver;
+
+public class ProductionWordCount {
+
+    public static void main(final String[] args) throws Exception {
+
+        final NodeManager nodeManager = new NodeManager()
+            .node(
+                new Node.Builder("word-count")
+                    .clusters(
+                        new Cluster("adaptor")
+                            .adaptor(new WordAdaptor()),
+                        new Cluster("counter")
+                            .mp(new MessageProcessor<WordCount>(new WordCount()))
+                            .routingStrategyId("net.dempsy.router.managed")
+                    )
+                    .receiver(new NioReceiver<Object>(new KryoSerializer()))
+                    .build()
+            )
+            .collaborator(
+                new ZookeeperSessionFactory("zk-host:2181", 3000, new JsonSerializer())
+                    .createSession()
+            );
+
+        nodeManager.start();
+
+        while (!nodeManager.isReady())
+            Thread.yield();
+
+        // Application is now running distributed.
+        // Start additional JVM instances to scale horizontally.
+    }
+}
+```
+
+# Design Philosophy
+
+Dempsy is built around one overriding idea: _simplicity reduces the total cost of ownership_. It does not try to be a general-purpose framework. It solves one class of problems -- distributed, real-time stream processing -- and it aims to do that one thing well.
+
+The guiding principles are:
+
+- **Actor-model concurrency without the boilerplate.** Each message processor instance handles messages one at a time. You never write synchronization code. Unlike pure actor frameworks, message processors do not need to know their destinations; the framework discovers the topology at runtime based on message types.
+
+- **Separation of concerns through inversion of control.** Your message processors are POJOs with no framework dependencies beyond annotations. Business logic is isolated from infrastructure concerns -- no threading code, no messaging code, no serialization code. This makes your analytics easily testable outside of the framework.
+
+- **Elasticity as a first-class feature.** Dempsy was designed from the ground up to support dynamic scaling. Nodes can be added or removed at runtime without code or configuration changes. The framework automatically rebalances message processors across available nodes, cooperating with cloud provisioning tools (auto-scaling groups, container orchestrators) rather than replacing them.
+
+- **Convention over configuration.** The topology of a Dempsy application is discovered at runtime. You do not define which message processors feed into which other message processors. The framework deduces the routing from the message types and `@MessageHandler` parameter types. This means complex multi-stage pipelines require no topology configuration at all.
+
+- **Do not solve solved problems.** Dempsy is not an application server. It does not manage deployments or provision machines. It relies on existing IaaS/PaaS tooling for those concerns and focuses exclusively on the coordination and lifecycle management of distributed message processors.
