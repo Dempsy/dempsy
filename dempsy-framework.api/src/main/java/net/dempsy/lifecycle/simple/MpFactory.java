@@ -5,6 +5,18 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Supplier;
 
+/**
+ * Factory for creating instances of a simple (non-annotation-based) message processor.
+ * Extends {@link Supplier} to provide new {@link Mp} instances on demand, and declares
+ * the message types the processor handles.
+ *
+ * <p>Override {@link #isEvictionSupported()} and {@link #isOutputSupported()} if your
+ * {@link Mp} implementation uses those lifecycle phases. Use the static
+ * {@link #make(Supplier, String...)} helper for simple cases.</p>
+ *
+ * @param <T> the concrete {@link Mp} type this factory produces
+ * @see Mp
+ */
 public interface MpFactory<T extends Mp> extends Supplier<T> {
 
     public Set<String> messageTypesHandled();

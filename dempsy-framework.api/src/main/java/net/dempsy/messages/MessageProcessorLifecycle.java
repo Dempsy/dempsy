@@ -8,7 +8,20 @@ import net.dempsy.config.ClusterId;
 import net.dempsy.config.Node;
 
 /**
- * @param <T> is the type of the message processor being managed.
+ * Core lifecycle interface for message processors within the Dempsy framework. Defines the
+ * contract for creating, activating, invoking, outputting, evicting, and passivating message
+ * processor instances.
+ *
+ * <p>The framework calls these methods in order: {@link #newInstance()} &rarr;
+ * {@link #activate(Object, Object, Object)} &rarr; {@link #invoke(Object, KeyedMessage)}
+ * (repeatedly) &rarr; {@link #passivate(Object)}. The {@link #invokeOutput(Object)} and
+ * {@link #invokeEvictable(Object)} phases are optional.</p>
+ *
+ * <p>Two implementations are provided: the annotation-driven
+ * {@link net.dempsy.lifecycle.annotation.MessageProcessor} and the interface-based
+ * {@link net.dempsy.lifecycle.simple.MessageProcessor}.</p>
+ *
+ * @param <T> the type of the message processor being managed
  */
 public interface MessageProcessorLifecycle<T> {
 

@@ -5,6 +5,11 @@ import java.util.function.Function;
 
 import org.slf4j.Logger;
 
+/**
+ * Utility for logging configuration property values in a consistent format. Logs each
+ * property name, its current value, and optionally the default value if one was specified.
+ * Supports lazy evaluation via {@link java.util.function.Function} values.
+ */
 public class ConfigLogger {
 
     public static void logConfig(final Logger logger, final String propertyName, final Object value, final Object defaultValue) {

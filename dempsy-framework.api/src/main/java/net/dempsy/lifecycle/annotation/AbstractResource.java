@@ -18,6 +18,18 @@ import net.dempsy.util.QuietCloseable;
 import net.dempsy.util.SafeString;
 import net.dempsy.util.io.DUtils;
 
+/**
+ * Base implementation of {@link Resource} providing atomic reference counting and optional
+ * leak-tracking diagnostics. Subclasses implement {@link #freeResources()} to release
+ * the actual underlying resource when the reference count reaches zero.
+ *
+ * <p>Leak tracking can be enabled via the system property {@code dempsy.TRACK_RESOURCE_LIFECYCLE}
+ * or environment variable {@code DEMPSY_TRACK_RESOURCE_LIFECYCLE}. When enabled, stack traces
+ * for every reference/close call are recorded and dumped to {@link #DEFAULT_LEAK_TRACKING_OUTPUT_FILE}
+ * if a resource is garbage-collected with a non-zero count.</p>
+ *
+ * @see Resource
+ */
 public abstract class AbstractResource implements Resource {
     private static Logger LOGGER = LoggerFactory.getLogger(AbstractResource.class);
 

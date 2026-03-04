@@ -2,6 +2,10 @@ package net.dempsy.messages;
 
 import net.dempsy.DempsyException;
 
+/**
+ * No-op {@link Dispatcher} implementation where dispatched messages are silently discarded.
+ * Useful as a placeholder when no downstream routing is configured.
+ */
 public class DummyDispatcher extends Dispatcher {
 
     @Override

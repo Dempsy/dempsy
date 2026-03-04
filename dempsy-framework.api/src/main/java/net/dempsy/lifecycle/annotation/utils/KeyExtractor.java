@@ -14,6 +14,14 @@ import net.dempsy.lifecycle.annotation.internal.MessageUtils;
 import net.dempsy.lifecycle.annotation.internal.MessageUtils.MessageTypeDetails;
 import net.dempsy.messages.KeyedMessageWithType;
 
+/**
+ * Extracts {@link KeyedMessageWithType} instances from message objects by invoking methods
+ * annotated with {@link MessageKey}. Caches the reflection metadata per message class for
+ * efficient repeated extraction.
+ *
+ * <p>This is primarily useful outside the framework (e.g., in tests or adaptors) when you
+ * need to manually derive routing keys from message objects.</p>
+ */
 public class KeyExtractor {
 
     private final Map<Class<?>, MessageTypeDetails[]> cache = new ConcurrentHashMap<Class<?>, MessageTypeDetails[]>();
