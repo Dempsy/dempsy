@@ -90,6 +90,13 @@
         <scope>import</scope>
       </dependency>
 
+      <!-- Deprecated distconfig (frozen, removed from commons BOM) -->
+      <dependency>
+        <groupId>net.dempsy</groupId>
+        <artifactId>dempsy-distconfig.classpath</artifactId>
+        <version>2.4.0</version>
+      </dependency>
+
       <!-- Third party -->
        <dependency>
         <groupId>org.javatuples</groupId>
