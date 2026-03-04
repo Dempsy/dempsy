@@ -1,4 +1,4 @@
-package net.dempsy.monitoring.dropwizard;
+package net.dempsy.monitoring.micrometer;
 
 import net.dempsy.Locator;
 import net.dempsy.monitoring.ClusterStatsCollectorFactory;
@@ -9,7 +9,7 @@ public class Factory implements Locator {
     @Override
     public <T> T locate(final Class<T> clazz) {
         if(ClusterStatsCollectorFactory.class.equals(clazz))
-            return (T)new DropwizardStatsCollectorFactory();
+            return (T)new MicrometerStatsCollectorFactory();
         return null;
     }
 
