@@ -20,11 +20,6 @@
        <groupId>net.dempsy</groupId>
        <artifactId>dempsy-serialization.api</artifactId>
      </dependency>
-     <dependency>
-       <groupId>org.slf4j</groupId>
-       <artifactId>slf4j-log4j12</artifactId>
-       <scope>test</scope>
-     </dependency>
    </dependencies>
    
 </project>

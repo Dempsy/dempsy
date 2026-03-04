@@ -1,0 +1,25 @@
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d [%t] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="org.springframework" level="WARN" />
+  <logger name="org.reflections" level="WARN" />
+  <logger name="org.apache.zookeeper" level="WARN" />
+  <logger name="org.apache.zookeeper.jmx.MBeanRegistry" level="ERROR" />
+  <logger name="org.apache.zookeeper.server.admin" level="ERROR" />
+
+  <!-- <logger name="net.dempsy.router.microshard.Transaction" level="TRACE" /> -->
+  <!-- <logger name="net.dempsy.router.microshard" level="TRACE" /> -->
+  <!-- <logger name="net.dempsy.Router" level="TRACE" /> -->
+  <!-- <logger name="net.dempsy.router.microshard.TestMicroshardingRoutingStrategy" level="TRACE" /> -->
+  <!-- <logger name="net.dempsy.router.managed.TestManagedRoutingStrategy" level="TRACE" /> -->
+  <!-- <logger name="net.dempsy.TestElasticity" level="TRACE" /> -->
+  <!-- <logger name="net.dempsy.container" level="TRACE" /> -->
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT" />
+  </root>
+</configuration>

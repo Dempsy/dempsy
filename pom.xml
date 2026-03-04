@@ -36,7 +36,8 @@
     <metrics-ganglia.version>3.2.6</metrics-ganglia.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <quartz.version>2.3.2</quartz.version>
-    <slf4j.version>1.7.30</slf4j.version>
+    <slf4j.version>2.0.16</slf4j.version>
+    <logback.version>1.5.12</logback.version>
     <javatuples.version>1.2</javatuples.version>
   </properties>
 
@@ -53,13 +54,8 @@
       <artifactId>slf4j-api</artifactId>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-log4j12</artifactId>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -111,14 +107,9 @@
         <version>${quartz.version}</version>
       </dependency> 
       <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
-        <version>${slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>log4j</groupId>
-        <artifactId>log4j</artifactId>
-        <version>1.2.17</version>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>${logback.version}</version>
       </dependency>
       <dependency>
         <groupId>junit</groupId>
