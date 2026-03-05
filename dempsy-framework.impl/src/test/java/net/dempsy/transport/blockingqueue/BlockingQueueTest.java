@@ -18,15 +18,15 @@ package net.dempsy.transport.blockingqueue;
 
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.transport.MessageTransportException;

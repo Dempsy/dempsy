@@ -4,8 +4,8 @@ import static net.dempsy.util.Functional.chain;
 import static net.dempsy.util.Functional.uncheck;
 import static net.dempsy.utils.test.ConditionPoll.assertTrue;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -19,11 +19,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +46,10 @@ import net.dempsy.transport.NodeAddress;
 public class TestElasticity extends DempsyBaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(TestElasticity.class);
 
+    {
+        super.LOGGER = TestElasticity.LOGGER;
+    }
+
     private static final int profilerTestNumberCount = 100000;
 
     public static final String[][] actxPath = {
@@ -55,11 +59,6 @@ public class TestElasticity extends DempsyBaseTest {
         {"elasticity/mp-num-count.xml",},
         {"elasticity/mp-num-rank.xml",},
     };
-
-    public TestElasticity(final String routerId, final String containerId, final String sessCtx, final String tpCtx, final String serType,
-        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
-        super(LOGGER, routerId, containerId, sessCtx, tpCtx, serType, threadingModelDescription, threadingModelSource);
-    }
 
     // ========================================================================
     // Test classes we will be working with. The old word count example modified.
@@ -267,8 +266,11 @@ public class TestElasticity extends DempsyBaseTest {
     }
 
     @SuppressWarnings("resource")
-    @Test
-    public void testForProfiler() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testForProfiler(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         try {
             // set up the test.
             final Number[] numbers = new Number[profilerTestNumberCount];
@@ -369,8 +371,11 @@ public class TestElasticity extends DempsyBaseTest {
     }
 
     @SuppressWarnings("resource")
-    @Test
-    public void testNumberCountDropOneAndReAdd() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testNumberCountDropOneAndReAdd(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
 
         runCombos("testNumberCountDropOneAndReAdd", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, ns -> {
             // keepGoing is for the separate thread that pumps messages into the system.
@@ -440,8 +445,11 @@ public class TestElasticity extends DempsyBaseTest {
     }
 
     @SuppressWarnings("resource")
-    @Test
-    public void testNumberCountAddOneThenDrop() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testNumberCountAddOneThenDrop(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         runCombos("testNumberCountAddOneThenDrop", (r, c, s, t, ser) -> isElasticRoutingStrategy(r), actxPath, ns -> {
             // keepGoing is for the separate thread that pumps messages into the system.
             final AtomicBoolean keepGoing = new AtomicBoolean(true);
@@ -510,8 +518,11 @@ public class TestElasticity extends DempsyBaseTest {
     }
 
     @SuppressWarnings("resource")
-    @Test
-    public void testExpansionPassivation() throws Exception {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testExpansionPassivation(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Exception {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         final String[][] actxPath = {
             {"elasticity/adaptor.xml",},
             {"elasticity/mp-num-count.xml",},

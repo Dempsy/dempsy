@@ -16,14 +16,14 @@
 
 package net.dempsy.container.nonlocking;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
@@ -50,7 +50,6 @@ import net.dempsy.monitoring.basic.BasicClusterStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
 import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.util.TestInfrastructure;
-import net.dempsy.utils.test.CloseableRule;
 
 public class TestInstanceManager {
 
@@ -242,10 +241,11 @@ public class TestInstanceManager {
     BasicClusterStatsCollector statsCollector;
     DefaultThreadingModel tm = null;
 
-    @Rule public CloseableRule t = new CloseableRule(() -> {
+    @AfterEach
+    public void tearDown() {
         if(tm != null)
             tm.close();
-    });
+    }
 
     @SuppressWarnings("resource")
     public Container setupContainer(final MessageProcessorLifecycle<?> prototype) throws ContainerException {
@@ -290,8 +290,9 @@ public class TestInstanceManager {
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             manager.invokeOutput();
-            assertEquals("number of processed messages should include outputs.", 4,
-                ((ClusterMetricGetters)statsCollector).getProcessedMessageCount());
+            assertEquals(4,
+                ((ClusterMetricGetters)statsCollector).getProcessedMessageCount(),
+                "number of processed messages should include outputs.");
         }
     }
 
@@ -310,8 +311,9 @@ public class TestInstanceManager {
 
         manager.invokeOutput();
         // output messages are NOT considered "processed" if there is no output method on the MP.
-        assertEquals("number of processed messages should include outputs.", 2,
-            ((ClusterMetricGetters)statsCollector).getProcessedMessageCount());
+        assertEquals(2,
+            ((ClusterMetricGetters)statsCollector).getProcessedMessageCount(),
+            "number of processed messages should include outputs.");
     }
 
     @Mp

@@ -1,9 +1,13 @@
 package net.dempsy.monitoring.micrometer;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
@@ -17,13 +21,13 @@ public class TestMicrometerClusterStatsCollector {
     private SimpleMeterRegistry registry;
     private MicrometerClusterStatsCollector collector;
 
-    @Before
+    @BeforeEach
     public void createCollector() {
         registry = new SimpleMeterRegistry();
         collector = new MicrometerClusterStatsCollector(new ClusterId("appName", "clusterName"), registry);
     }
 
-    @After
+    @AfterEach
     public void cleanup() {
         registry.close();
     }
@@ -62,11 +66,11 @@ public class TestMicrometerClusterStatsCollector {
         collector.evictionPassStarted();
         collector.preInstantiationStarted();
 
-        Assert.assertFalse(registry.getMeters().isEmpty());
+        assertFalse(registry.getMeters().isEmpty());
 
         collector.close();
 
-        Assert.assertTrue(registry.getMeters().isEmpty());
+        assertTrue(registry.getMeters().isEmpty());
     }
 
     private void verifyCounter(final String name, final long expectedValue) {
@@ -74,8 +78,8 @@ public class TestMicrometerClusterStatsCollector {
             .tag("app", "appName")
             .tag("cluster", "clusterName")
             .counter();
-        Assert.assertNotNull("Counter " + name + " not found", c);
-        Assert.assertEquals(expectedValue, (long)c.count());
+        assertNotNull(c, "Counter " + name + " not found");
+        assertEquals(expectedValue, (long)c.count());
     }
 
     @Test
@@ -92,8 +96,8 @@ public class TestMicrometerClusterStatsCollector {
             .tag("app", "appName")
             .tag("cluster", "clusterName")
             .timer();
-        Assert.assertNotNull("Timer " + name + " not found", t);
-        Assert.assertEquals(1, t.count());
-        Assert.assertTrue(t.max(java.util.concurrent.TimeUnit.NANOSECONDS) > 0);
+        assertNotNull(t, "Timer " + name + " not found");
+        assertEquals(1, t.count());
+        assertTrue(t.max(java.util.concurrent.TimeUnit.NANOSECONDS) > 0);
     }
 }

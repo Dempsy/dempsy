@@ -3,24 +3,23 @@ package net.dempsy.threading;
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.util.Functional.ignore;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import net.dempsy.container.Container;
 import net.dempsy.container.ContainerJob;
 import net.dempsy.container.DummyContainer;
 import net.dempsy.container.MessageDeliveryJob;
 
-@RunWith(Parameterized.class)
 public class TestThreadingModel {
 
     public static final int NUM_THREADS = 10;
@@ -28,36 +27,23 @@ public class TestThreadingModel {
 
     public static boolean waitOnSignal = true;
 
-    @Parameters(name = "{index}: threading model={0}, num threads={1}, max pending={2}")
-    public static Object[][] params() {
+    public static Stream<Arguments> params() {
 
         final String threadNameBase = TestThreadingModel.class.getSimpleName() + "-";
         final Supplier<ThreadingModel> dtm = () -> chain(new DefaultThreadingModel(threadNameBase, NUM_THREADS, MAX_PENDING),
             tm -> tm.start("nodeid"));
 
         // threading model, num threads,
-        return new Object[][] {
-            {dtm,NUM_THREADS,MAX_PENDING},
-            {(Supplier<ThreadingModel>)() -> chain(new OrderedPerContainerThreadingModel(threadNameBase, MAX_PENDING), tm -> tm.start("nodeid")),1,MAX_PENDING},
-            {(Supplier<ThreadingModel>)() -> chain(new OrderedPerContainerThreadingModelAlt(threadNameBase, NUM_THREADS, MAX_PENDING),
-                tm -> tm.start("nodeid")),1,MAX_PENDING},
-        };
+        return Stream.of(
+            Arguments.of(dtm,NUM_THREADS,MAX_PENDING),
+            Arguments.of((Supplier<ThreadingModel>)() -> chain(new OrderedPerContainerThreadingModel(threadNameBase, MAX_PENDING), tm -> tm.start("nodeid")),1,MAX_PENDING),
+            Arguments.of((Supplier<ThreadingModel>)() -> chain(new OrderedPerContainerThreadingModelAlt(threadNameBase, NUM_THREADS, MAX_PENDING),
+                tm -> tm.start("nodeid")),1,MAX_PENDING)
+        );
 
     }
 
-    public final ThreadingModel ut;
-    public final int numThreads;
-    public final int maxNumLimited;
-    public final Container container;
-
-    public TestThreadingModel(final Supplier<ThreadingModel> ut, final int numThreads, final int maxNumLimited) {
-        this.ut = ut.get();
-        this.numThreads = numThreads;
-        this.maxNumLimited = maxNumLimited;
-        this.container = new DummyContainer();
-    }
-
-    private void submitOne(final ThreadingModel ut, final Object waitOnMe, final AtomicLong sequence, final AtomicLong numPending,
+    private void submitOne(final ThreadingModel ut, final Container container, final Object waitOnMe, final AtomicLong sequence, final AtomicLong numPending,
         final AtomicLong numRejected, final AtomicLong numCompleted, final AtomicLong numCompletedSuccessfully) {
         waitOnSignal = true;
 
@@ -128,8 +114,11 @@ public class TestThreadingModel {
         });
     }
 
-    @Test
-    public void test() throws Exception {
+    @ParameterizedTest(name = "{index}: threading model={0}, num threads={1}, max pending={2}")
+    @MethodSource("params")
+    public void test(final Supplier<ThreadingModel> utSupplier, final int numThreads, final int maxNumLimited) throws Exception {
+        final ThreadingModel ut = utSupplier.get();
+        final Container container = new DummyContainer();
         try(final ThreadingModel qctm = ut;) {
 
             final Object waitOnMe = new Object();
@@ -142,14 +131,14 @@ public class TestThreadingModel {
             int totalNumSubmitted = 0;
             // submit 1 to busy every worker
             for(int i = 0; i < numThreads; i++) {
-                submitOne(ut, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
+                submitOne(ut, container, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
                 totalNumSubmitted++;
             }
 
             assertTrue(poll(o -> numPending.get() >= numThreads));
             // submit 1 for every spot in the queue
             for(int i = 0; i < maxNumLimited; i++) {
-                submitOne(ut, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
+                submitOne(ut, container, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
                 totalNumSubmitted++;
             }
 
@@ -158,12 +147,12 @@ public class TestThreadingModel {
             assertEquals(maxNumLimited, ut.getNumberLimitedPending());
             // double the pending
             for(int i = 0; i < maxNumLimited; i++) {
-                submitOne(ut, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
+                submitOne(ut, container, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
                 totalNumSubmitted++;
             }
             assertEquals(maxNumLimited * 2, ut.getNumberLimitedPending());
 
-            submitOne(ut, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
+            submitOne(ut, container, waitOnMe, sequence, numPending, numRejected, numCompleted, numCompletedSuccessfully);
             totalNumSubmitted++;
 
             assertTrue(poll(o -> numRejected.get() == 1));

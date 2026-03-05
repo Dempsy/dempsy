@@ -2,9 +2,9 @@ package net.dempsy.router.managed;
 
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,7 +17,8 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,13 +41,15 @@ import net.dempsy.util.TestInfrastructure;
 public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
     static final Logger LOGGER = LoggerFactory.getLogger(TestManagedRoutingStrategy.class);
 
-    public TestManagedRoutingStrategy(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
-            final Consumer<ClusterInfoSession> disruptor) {
-        super(LOGGER, factory.get(), disruptor);
+    {
+        super.LOGGER = TestManagedRoutingStrategy.LOGGER;
     }
 
-    @Test
-    public void testInboundSimpleHappyPathRegister() throws Exception {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testInboundSimpleHappyPathRegister(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final int numShardsToExpect = Integer.parseInt(Utils.DEFAULT_TOTAL_SHARDS);
         final Manager<RoutingStrategy.Inbound> manager = new Manager<>(RoutingStrategy.Inbound.class);
         try (final RoutingStrategy.Inbound ib = manager.getAssociatedInstance(ManagedInbound.class.getPackage().getName());) {
@@ -113,8 +116,11 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
 
     }
 
-    @Test
-    public void testInboundDoubleHappyPathRegister() throws Exception {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testInboundDoubleHappyPathRegister(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final int numShardsToExpect = Integer.parseInt(Utils.DEFAULT_TOTAL_SHARDS);
 
         try (final RoutingStrategy.Inbound ib1 = new Manager<>(RoutingStrategy.Inbound.class)
@@ -154,8 +160,11 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
         }
     }
 
-    @Test
-    public void testInboundResillience() throws Exception {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testInboundResillience(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final int numShardsToExpect = Integer.parseInt(Utils.DEFAULT_TOTAL_SHARDS);
         final Manager<RoutingStrategy.Inbound> manager = new Manager<>(RoutingStrategy.Inbound.class);
         try (final RoutingStrategy.Inbound ib = manager.getAssociatedInstance(ManagedInbound.class.getPackage().getName());) {
@@ -175,8 +184,11 @@ public class TestManagedRoutingStrategy extends BaseRouterTestWithSession {
         }
     }
 
-    @Test
-    public void testInboundWithOutbound() throws Exception {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testInboundWithOutbound(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final int numShardsToExpect = Integer.parseInt(Utils.DEFAULT_TOTAL_SHARDS);
         final Manager<RoutingStrategy.Inbound> manager = new Manager<>(RoutingStrategy.Inbound.class);
         try (final RoutingStrategy.Inbound ib = manager.getAssociatedInstance(ManagedInbound.class.getPackage().getName());) {

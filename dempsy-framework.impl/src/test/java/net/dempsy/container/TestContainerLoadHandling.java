@@ -18,9 +18,9 @@ package net.dempsy.container;
 
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,13 +30,15 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,28 +71,22 @@ import net.dempsy.util.TestInfrastructure;
  * Test load handling / shedding in the MP container. This is probably involved enough to merit
  * not mixing into the existing MPContainer test cases.
  */
-@RunWith(Parameterized.class)
 public class TestContainerLoadHandling {
     private void checkStat(final ClusterMetricGetters stat) {
         assertEquals(stat.getDispatchedMessageCount(),
             stat.getMessageFailedCount() + stat.getProcessedMessageCount() + stat.getInFlightMessageCount());
     }
 
-    @Parameters
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-            {LockingContainer.class.getPackage().getName()},
+    public static Stream<Arguments> data() {
+        return Stream.of(
+            Arguments.of(LockingContainer.class.getPackage().getName()),
             // the NonLockingContainer is broken
-            // {NonLockingContainer.class.getPackage().getName()},
-            {NonLockingAltContainer.class.getPackage().getName()},
-        });
+            // Arguments.of(NonLockingContainer.class.getPackage().getName()),
+            Arguments.of(NonLockingAltContainer.class.getPackage().getName())
+        );
     }
 
-    private final String containerId;
-
-    public TestContainerLoadHandling(final String containerId) {
-        this.containerId = containerId;
-    }
+    private String containerId;
 
     private static int NUMMPS = 10;
     private static int NUMTHREADS = 8;
@@ -110,8 +106,8 @@ public class TestContainerLoadHandling {
 
     ServiceTracker tr = new ServiceTracker();
 
-    @Before
-    public void setUp() throws Exception {
+    public void setUp(final String containerId) throws Exception {
+        this.containerId = containerId;
         final ClusterId cid = new ClusterId("TestContainerLoadHandling", "test" + sequence++);
         dispatcher = new MockDispatcher();
 
@@ -143,7 +139,7 @@ public class TestContainerLoadHandling {
         stillRunning = true;
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         tr.stopAll();
         ((StatsCollector)clusterStats).stop();
@@ -308,7 +304,7 @@ public class TestContainerLoadHandling {
             SendMessageThread.startLatch.countDown(); // let the messages go.
 
             // after sends are allowed to proceed
-            assertTrue("Timeout waiting on message to be sent", poll(o -> SendMessageThread.finishedCount.get() >= NUMTHREADS));
+            assertTrue(poll(o -> SendMessageThread.finishedCount.get() >= NUMTHREADS), "Timeout waiting on message to be sent");
             assertEquals(NUMTHREADS, SendMessageThread.finishedCount.get());
 
             assertTrue(poll(o -> clusterStats.getInFlightMessageCount() == 0));
@@ -329,16 +325,20 @@ public class TestContainerLoadHandling {
     /**
      * Test the simple case of messages arriving slowly and always having a thread available.
      */
-    @Test
-    public void testSimpleProcessingWithoutQueuingBlocking() throws Exception {
+    @ParameterizedTest
+    @MethodSource("data")
+    public void testSimpleProcessingWithoutQueuingBlocking(final String containerId) throws Exception {
+        setUp(containerId);
         runSimpleProcessingWithoutQueuing();
     }
 
     /**
      * Test the case where messages arrive faster than they are processed but the queue never exceeds the Thread Pool Size * 2, so no messages are discarded.
      */
-    @Test
-    public void testMessagesCanQueueWithinLimitsBlocking() throws Exception {
+    @ParameterizedTest
+    @MethodSource("data")
+    public void testMessagesCanQueueWithinLimitsBlocking(final String containerId) throws Exception {
+        setUp(containerId);
         // produce the initial MPs
         final ArrayList<Thread> in = new ArrayList<Thread>();
         final KeyedMessage[] messages = new KeyedMessage[NUMMPS];
@@ -387,7 +387,7 @@ public class TestContainerLoadHandling {
 
             commonLongRunningHandler.countDown(); // let the rest of them go
 
-            assertTrue("Timeout waiting on message to be sent", poll(o -> in.stream().filter(t -> t.isAlive() == true).count() == 0));
+            assertTrue(poll(o -> in.stream().filter(t -> t.isAlive() == true).count() == 0), "Timeout waiting on message to be sent");
 
             // after sends are allowed to proceed
             assertEquals(NUMMPS, SendMessageThread.finishedCount.get());
@@ -430,14 +430,14 @@ public class TestContainerLoadHandling {
     // checkStat(stats);
     //
     // // after sends are allowed to proceed
-    // assertTrue("Timeout waiting on message to be sent", SendMessageThread.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(SendMessageThread.latch.await(2, TimeUnit.SECONDS, "Timeout waiting on message to be sent"));
     //
-    // assertTrue("Timeout waiting for MPs", finishLatch.await(2, TimeUnit.SECONDS));
+    // assertTrue(finishLatch.await(2, TimeUnit.SECONDS, "Timeout waiting for MPs"));
     // while (stats.getInFlightMessageCount() > 0) {
     // Thread.yield();
     // }
     //
-    // assertTrue("Timeout waiting for MP sends", dispatcher.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(dispatcher.latch.await(2, TimeUnit.SECONDS, "Timeout waiting for MP sends"));
     // assertEquals(3 * NUMMPS, dispatcher.messages.size());
     // assertEquals(3 * NUMMPS, stats.getProcessedMessageCount());
     // dispatcher.latch = new CountDownLatch(3 * NUMMPS); // reset the latch
@@ -451,13 +451,13 @@ public class TestContainerLoadHandling {
     // Thread.sleep(50);
     // assertEquals(2, stats.getDiscardedMessageCount());
     // }
-    // assertTrue("Timeout waiting on message to be sent", SendMessageThread.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(SendMessageThread.latch.await(2, TimeUnit.SECONDS, "Timeout waiting on message to be sent"));
     //
-    // assertTrue("Timeout waiting for MPs", finishLatch.await(2, TimeUnit.SECONDS));
+    // assertTrue(finishLatch.await(2, TimeUnit.SECONDS, "Timeout waiting for MPs"));
     // while (stats.getInFlightMessageCount() > 0)
     // Thread.yield();
     //
-    // assertTrue("Timeout waiting for MPs", dispatcher.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(dispatcher.latch.await(2, TimeUnit.SECONDS, "Timeout waiting for MPs"));
     // assertEquals(2 * 3 * NUMMPS, dispatcher.messages.size());
     // assertEquals(2 * 3 * NUMMPS, stats.getProcessedMessageCount());
     // checkStat(stats);
@@ -479,10 +479,10 @@ public class TestContainerLoadHandling {
     // sendMessage(container, new MockInputMessage("key" + i), false);
     //
     // // wait for all of the messages to have been sent.
-    // assertTrue("Timeout waiting on message to be sent", SendMessageThread.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(SendMessageThread.latch.await(2, TimeUnit.SECONDS, "Timeout waiting on message to be sent"));
     //
     // // wait for all of the messages to have been handled by the new Mps
-    // assertTrue("Timeout on initial messages", finishLatch.await(4, TimeUnit.SECONDS));
+    // assertTrue(finishLatch.await(4, TimeUnit.SECONDS, "Timeout on initial messages"));
     //
     // // the above can be triggered while still within the message processor handler so we wait
     // // for the stats collector to have registered the processed messages.
@@ -505,7 +505,7 @@ public class TestContainerLoadHandling {
     // }
     //
     // // there ought to be 2 * NTHREADS inflight ops since the startLatch isn't triggered
-    // assertTrue("Timeout on initial messages", imIn.await(4, TimeUnit.SECONDS));
+    // assertTrue(imIn.await(4, TimeUnit.SECONDS, "Timeout on initial messages"));
     // checkStat(stats);
     // assertEquals(2 * NUMMPS, stats.getInFlightMessageCount());
     //
@@ -528,8 +528,8 @@ public class TestContainerLoadHandling {
     //
     // // 2 * NTHREADS are at startLatch while there are 4 * NTHREADS total MPs.
     // // Thererfore two outputs should have executed and two more are thrashing now.
-    // assertTrue("Timeout on initial messages", imIn.await(4, TimeUnit.SECONDS)); // wait for the 2 * NTHREADS output calls to be entered
-    // assertTrue("Timeout on initial messages", finishOutputLatch.await(4 * NUMMPS, TimeUnit.SECONDS)); // wait for those two to actually finish output
+    // assertTrue(imIn.await(4, TimeUnit.SECONDS, "Timeout on initial messages")); // wait for the 2 * NTHREADS output calls to be entered
+    // assertTrue(finishOutputLatch.await(4 * NUMMPS, TimeUnit.SECONDS, "Timeout on initial messages")); // wait for those two to actually finish output
     // processing
     //
     // // there's a race condition between finishing the output and the output call being registered so we need to wait
@@ -544,13 +544,13 @@ public class TestContainerLoadHandling {
     //
     // imIn = new CountDownLatch(2 * NUMMPS); // give me a place to wait for the remaining outputs.
     // startLatch.countDown(); // let the 2 MPs that are waiting run.
-    // assertTrue("Timeout waiting for MPs", finishLatch.await(6, TimeUnit.SECONDS));
-    // assertTrue("Timeout waiting for MP outputs to finish", imIn.await(6, TimeUnit.SECONDS));
+    // assertTrue(finishLatch.await(6, TimeUnit.SECONDS, "Timeout waiting for MPs"));
+    // assertTrue(imIn.await(6, TimeUnit.SECONDS, "Timeout waiting for MP outputs to finish"));
     //
     // while (stats.getInFlightMessageCount() > 0)
     // Thread.yield();
     //
-    // assertTrue("Timeout waiting for MP sends", dispatcher.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(dispatcher.latch.await(2, TimeUnit.SECONDS, "Timeout waiting for MP sends"));
     //
     // // all output messages were processed
     // int outMessages = 0;
@@ -576,9 +576,9 @@ public class TestContainerLoadHandling {
     // SendMessageThread.latch = new CountDownLatch(NUMMPS * 4);
     // for (int i = 0; i < (NUMMPS * 4); i++)
     // sendMessage(container, new MockInputMessage("key" + i), false);
-    // assertTrue("Timeout on initial messages", finishLatch.await(4, TimeUnit.SECONDS));
+    // assertTrue(finishLatch.await(4, TimeUnit.SECONDS, "Timeout on initial messages"));
     // Thread.yield(); // cover any deltas between mp decrementing latch and returning
-    // assertTrue("Timeout waiting on message to be sent", SendMessageThread.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(SendMessageThread.latch.await(2, TimeUnit.SECONDS, "Timeout waiting on message to be sent"));
     // checkStat(stats);
     //
     // assertEquals(NUMMPS * 4, stats.getProcessedMessageCount());
@@ -609,18 +609,18 @@ public class TestContainerLoadHandling {
     // assertEquals(0, stats.getDiscardedMessageCount());
     // }
     //
-    // assertTrue("Timeout on initial messages", imIn.await(4, TimeUnit.SECONDS));
+    // assertTrue(imIn.await(4, TimeUnit.SECONDS, "Timeout on initial messages"));
     // assertEquals(0, stats.getDiscardedMessageCount());
     // checkStat(stats);
     //
     // // let things run
     // startLatch.countDown();
-    // assertTrue("Timeout waiting on MPs", finishLatch.await(6, TimeUnit.SECONDS));
+    // assertTrue(finishLatch.await(6, TimeUnit.SECONDS, "Timeout waiting on MPs"));
     //
     // // after sends are allowed to proceed
-    // assertTrue("Timeout waiting on message to be sent", SendMessageThread.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(SendMessageThread.latch.await(2, TimeUnit.SECONDS, "Timeout waiting on message to be sent"));
     //
-    // assertTrue("Timeout waiting for MP sends", dispatcher.latch.await(2, TimeUnit.SECONDS));
+    // assertTrue(dispatcher.latch.await(2, TimeUnit.SECONDS, "Timeout waiting for MP sends"));
     // assertEquals(0, stats.getDiscardedMessageCount());
     // assertEquals(10 * NUMMPS, dispatcher.messages.size());
     // }

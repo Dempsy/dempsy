@@ -2,24 +2,22 @@ package net.dempsy;
 
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.util.Functional.uncheck;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import net.dempsy.cluster.local.LocalClusterSessionFactory;
 import net.dempsy.config.Node;
@@ -46,30 +44,17 @@ import net.dempsy.transport.NodeAddress;
 import net.dempsy.transport.Receiver;
 import net.dempsy.utils.test.ConditionPoll;
 
-@RunWith(Parameterized.class)
 public class TestAlmostSimple {
 
-    final String containerTypeId;
-    final Supplier<ThreadingModel> tmSupplier;
-
-    public TestAlmostSimple(final String containerTypeId, final Supplier<ThreadingModel> tmSupplier) {
-        this.containerTypeId = containerTypeId;
-        this.tmSupplier = tmSupplier;
-
-        // reset the value
-        MpEven.allowEviction.set(false);
-    }
-
-    @Parameters(name = "container type={0}")
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-            {NonLockingAltContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)},
-            {NonLockingAltBulkContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)},
-            {LockingContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)},
-            {SimpleContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new OrderedPerContainerThreadingModelAlt("TB", -1, 1)},
+    public static Stream<Arguments> data() {
+        return Stream.of(
+            Arguments.of(NonLockingAltContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)),
+            Arguments.of(NonLockingAltBulkContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)),
+            Arguments.of(LockingContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new DefaultThreadingModel("TB", -1, 1)),
+            Arguments.of(SimpleContainer.class.getPackageName(),(Supplier<ThreadingModel>)() -> new OrderedPerContainerThreadingModelAlt("TB", -1, 1))
             // non-locking container is broken
-            // {NonLockingContainer.class.getPackageName()},
-        });
+            // Arguments.of(NonLockingContainer.class.getPackageName()),
+        );
     }
 
     public static class Dummy implements Receiver {
@@ -165,8 +150,12 @@ public class TestAlmostSimple {
         }
     }
 
-    @Test
-    public void testSimple() throws Exception {
+    @ParameterizedTest(name = "container type={0}")
+    @MethodSource("data")
+    public void testSimple(final String containerTypeId, final Supplier<ThreadingModel> tmSupplier) throws Exception {
+        // reset the value
+        MpEven.allowEviction.set(false);
+
         final MpEven mpEven = new MpEven();
         final MpOdd mpOdd = new MpOdd();
 

@@ -19,6 +19,9 @@
   <!-- <logger name="net.dempsy.TestElasticity" level="TRACE" /> -->
   <!-- <logger name="net.dempsy.container" level="DEBUG" /> -->
 
+  <logger name="net.dempsy.util.GroupExecutor" level="WARN" />
+  <logger name="net.dempsy.util.SimpleExecutor" level="WARN" />
+
   <root level="INFO">
     <appender-ref ref="STDOUT" />
   </root>

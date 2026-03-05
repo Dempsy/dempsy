@@ -16,16 +16,17 @@
 
 package net.dempsy.lifecycle.annotations;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.InvocationTargetException;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.lifecycle.annotation.Activation;
 import net.dempsy.lifecycle.annotation.MessageHandler;
@@ -227,11 +228,11 @@ public class TestInvocation {
         final MessageProcessorLifecycle<InvocationTestMp> helper1b = new MessageProcessor<>(new InvocationTestMp());
         final MessageProcessorLifecycle<LifecycleEqualityTestMP> helper2 = new MessageProcessor<>(new LifecycleEqualityTestMP());
 
-        assertTrue("same MP class means euqal helpers", helper1a.equals(helper1b));
-        assertFalse("different MP class means not-equal helpers", helper1a.equals(helper2));
+        assertTrue(helper1a.equals(helper1b), "same MP class means euqal helpers");
+        assertFalse(helper1a.equals(helper2), "different MP class means not-equal helpers");
 
-        assertTrue("same hashcode for same MP class", helper1a.hashCode() == helper1b.hashCode());
-        assertFalse("different hashcode for different MP class (I hope)", helper1a.hashCode() == helper2.hashCode());
+        assertTrue(helper1a.hashCode() == helper1b.hashCode(), "same hashcode for same MP class");
+        assertFalse(helper1a.hashCode() == helper2.hashCode(), "different hashcode for different MP class (I hope)");
     }
 
     @Test
@@ -240,26 +241,26 @@ public class TestInvocation {
         final MessageProcessorLifecycle<InvocationTestMp> invoker = new MessageProcessor<>(prototype);
 
         final InvocationTestMp instance = invoker.newInstance();
-        assertNotNull("instantiation failed; null instance", instance);
-        assertNotSame("instantiation failed; returned prototype", prototype, instance);
+        assertNotNull(instance, "instantiation failed; null instance");
+        assertNotSame(prototype, instance, "instantiation failed; returned prototype");
 
-        assertFalse("instance activated before activation method called", instance.isActivated);
+        assertFalse(instance.isActivated, "instance activated before activation method called");
         invoker.activate(instance, null, new Object());
-        assertTrue("instance was not activated", instance.isActivated);
+        assertTrue(instance.isActivated, "instance was not activated");
 
-        assertFalse("instance passivated before passivation method called", instance.isPassivated);
+        assertFalse(instance.isPassivated, "instance passivated before passivation method called");
         invoker.passivate(instance);
-        assertTrue("instance was not passivated", instance.isPassivated);
+        assertTrue(instance.isPassivated, "instance was not passivated");
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testConstructorFailsIfNoCloneMethod() throws Exception {
-        new MessageProcessor<InvalidMP_NoClone>(new InvalidMP_NoClone());
+        assertThrows(IllegalStateException.class, () -> new MessageProcessor<InvalidMP_NoClone>(new InvalidMP_NoClone()));
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testConstructorFailsIfNotAnnotedAsMP() throws Exception {
-        new MessageProcessor<InvalidMP_NoAnnotation>(new InvalidMP_NoAnnotation());
+        assertThrows(IllegalStateException.class, () -> new MessageProcessor<InvalidMP_NoAnnotation>(new InvalidMP_NoAnnotation()));
     }
 
     @Test
@@ -308,22 +309,22 @@ public class TestInvocation {
         assertEquals(message2.value, instance.lastNumberHandlerValue);
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testInvocationFailureNoHandler() throws Exception {
         final InvocationTestMp prototype = new InvocationTestMp();
         final MessageProcessor<InvocationTestMp> invoker = new MessageProcessor<>(prototype);
         final InvocationTestMp instance = invoker.newInstance();
 
-        invoker.invoke(instance, km(new MsgNoHandler()));
+        assertThrows(IllegalArgumentException.class, () -> invoker.invoke(instance, km(new MsgNoHandler())));
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testInvocationFailureNullMessage() {
         final InvocationTestMp prototype = new InvocationTestMp();
         final MessageProcessor<InvocationTestMp> invoker = new MessageProcessor<>(prototype);
         final InvocationTestMp instance = invoker.newInstance();
 
-        invoker.invoke(instance, null);
+        assertThrows(NullPointerException.class, () -> invoker.invoke(instance, null));
     }
 
     @Test
@@ -332,9 +333,9 @@ public class TestInvocation {
         final MessageProcessor<InvocationTestMp> invoker = new MessageProcessor<>(prototype);
         final InvocationTestMp instance = invoker.newInstance();
 
-        assertFalse("instance says it did output before method called", instance.outputCalled);
+        assertFalse(instance.outputCalled, "instance says it did output before method called");
         invoker.invokeOutput(instance);
-        assertTrue("output method was not called", instance.outputCalled);
+        assertTrue(instance.outputCalled, "output method was not called");
     }
 
 }

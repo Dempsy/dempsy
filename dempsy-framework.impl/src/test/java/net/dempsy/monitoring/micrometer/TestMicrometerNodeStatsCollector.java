@@ -1,9 +1,13 @@
 package net.dempsy.monitoring.micrometer;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
@@ -16,14 +20,14 @@ public class TestMicrometerNodeStatsCollector {
     private SimpleMeterRegistry registry;
     private MicrometerNodeStatsCollector collector;
 
-    @Before
+    @BeforeEach
     public void createCollector() throws ClusterInfoException {
         registry = new SimpleMeterRegistry();
         collector = new MicrometerNodeStatsCollector(registry);
         collector.setNodeId("nodeId");
     }
 
-    @After
+    @AfterEach
     public void cleanup() {
         registry.close();
     }
@@ -47,8 +51,8 @@ public class TestMicrometerNodeStatsCollector {
 
     private void verifyCounter(final String name, final long expectedValue) {
         final Counter c = registry.find(name).counter();
-        Assert.assertNotNull("Counter " + name + " not found", c);
-        Assert.assertEquals(expectedValue, (long)c.count());
+        assertNotNull(c, "Counter " + name + " not found");
+        assertEquals(expectedValue, (long)c.count());
     }
 
     @Test
@@ -62,8 +66,8 @@ public class TestMicrometerNodeStatsCollector {
 
     private void verifyGauge(final String name, final long expectedValue) {
         final Gauge g = registry.find(name).gauge();
-        Assert.assertNotNull("Gauge " + name + " not found", g);
-        Assert.assertEquals((double)expectedValue, g.value(), 0.001);
+        assertNotNull(g, "Gauge " + name + " not found");
+        assertEquals((double)expectedValue, g.value(), 0.001);
     }
 
     @Test
@@ -76,10 +80,10 @@ public class TestMicrometerNodeStatsCollector {
         collector.setMessagesPendingGauge(() -> 1L);
         collector.setMessagesOutPendingGauge(() -> 2L);
 
-        Assert.assertFalse(registry.getMeters().isEmpty());
+        assertFalse(registry.getMeters().isEmpty());
 
         collector.close();
 
-        Assert.assertTrue(registry.getMeters().isEmpty());
+        assertTrue(registry.getMeters().isEmpty());
     }
 }

@@ -2,8 +2,8 @@
 package net.dempsy.router.shardutils;
 
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,13 +27,15 @@ import net.dempsy.transport.NodeAddress;
 public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
     static final Logger LOGGER = LoggerFactory.getLogger(TestLeaderAndSubscriber.class);
 
-    public TestLeaderAndSubscriber(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
-        final Consumer<ClusterInfoSession> disruptor) {
-        super(LOGGER, factory.get(), disruptor);
+    {
+        super.LOGGER = TestLeaderAndSubscriber.LOGGER;
     }
 
-    @Test
-    public void testOneLeader() throws InterruptedException {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testOneLeader(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final ClusterId cid = setTestName("testOneLeader");
         final Utils<ContainerAddress> utils = new Utils<ContainerAddress>(makeInfra(session, sched), cid.clusterName,
             new ContainerAddress(new DummyNodeAddress(), new int[] {0}));
@@ -59,8 +62,11 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
         }
     }
 
-    @Test
-    public void testMultiLeader() throws Exception {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testMultiLeader(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final int NUM_THREADS = 10;
 
         final ClusterId cid = setTestName("testMultiLeader");
@@ -117,8 +123,11 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
         }
     }
 
-    @Test
-    public void testLeaderWithSubscriber() throws Exception {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testLeaderWithSubscriber(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final ClusterId cid = setTestName("testLeaderWithSubscriber");
         final Utils<ContainerAddress> utils = new Utils<>(makeInfra(session, sched), cid.clusterName,
             new ContainerAddress(new DummyNodeAddress(), new int[] {0}));
@@ -142,8 +151,11 @@ public class TestLeaderAndSubscriber extends BaseRouterTestWithSession {
         }
     }
 
-    @Test
-    public void testLeaderWithMutipleSubscribers() throws Exception {
+    @ParameterizedTest(name = "{index}: factory={0}, disruptor={1}")
+    @MethodSource("data")
+    public void testLeaderWithMutipleSubscribers(final Supplier<ClusterInfoSessionFactory> factory, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws Exception {
+        initParams(factory, disruptorName, disruptor);
         final int NUM_SUBS = 10;
         final ClusterId cid = setTestName("testLeaderWithMutipleSubscribers");
 

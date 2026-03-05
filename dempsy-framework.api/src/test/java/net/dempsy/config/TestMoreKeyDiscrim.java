@@ -1,6 +1,8 @@
 package net.dempsy.config;
 
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.lifecycle.annotation.Evictable;
 import net.dempsy.lifecycle.annotation.MessageHandler;
@@ -12,7 +14,7 @@ import net.dempsy.lifecycle.annotation.Start;
 
 public class TestMoreKeyDiscrim {
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testConfigMpWithMessageWithBadKeys() throws Throwable {
         final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
 
@@ -48,10 +50,7 @@ public class TestMoreKeyDiscrim {
             }
         }
 
-        final Cluster cd1 = new Cluster("test-slot-1");
-        cd1.setMessageProcessor(new MessageProcessor<mp1>(new mp1()));
-        app.addClusters(cd1);
-        app.validate();
+        assertThrows(IllegalStateException.class, () -> new MessageProcessor<mp1>(new mp1()));
     }
 
 }
