@@ -4,14 +4,14 @@
   <parent>
     <groupId>net.dempsy</groupId>
     <artifactId>dempsy-commons-settings</artifactId>
-    <version>2.4.2-SNAPSHOT</version>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath />
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>dempsy-framework.parent</artifactId>
-  <version>0.17-SNAPSHOT</version>
+  <version>0.18-SNAPSHOT</version>
   <packaging>pom</packaging>
   <description>Distributed Elastic Message Processing - Master Build</description>
 
@@ -30,7 +30,7 @@
   </scm>
 
   <properties>
-    <dempsy-commons-bom.version>2.4.2-SNAPSHOT</dempsy-commons-bom.version>
+    <dempsy-commons-bom.version>3.0.0-SNAPSHOT</dempsy-commons-bom.version>
     <spring.version>6.2.3</spring.version>
     <micrometer.version>1.14.4</micrometer.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
