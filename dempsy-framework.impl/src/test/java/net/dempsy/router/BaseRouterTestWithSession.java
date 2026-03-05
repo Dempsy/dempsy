@@ -4,18 +4,18 @@ import static net.dempsy.util.Functional.uncheck;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.provider.Arguments;
+
+
+
 import org.slf4j.Logger;
 
 import net.dempsy.Infrastructure;
@@ -32,16 +32,15 @@ import net.dempsy.serialization.jackson.JsonSerializer;
 import net.dempsy.util.TestInfrastructure;
 import net.dempsy.util.executor.AutoDisposeSingleThreadScheduler;
 
-@RunWith(Parameterized.class)
 public abstract class BaseRouterTestWithSession {
-    final Logger LOGGER;
+    protected Logger LOGGER;
 
     protected Infrastructure infra = null;
     protected ClusterInfoSession session = null;
     protected AutoDisposeSingleThreadScheduler sched = null;
 
-    protected final Consumer<ClusterInfoSession> disruptor;
-    protected final ClusterInfoSessionFactory sessFact;
+    protected Consumer<ClusterInfoSession> disruptor;
+    protected ClusterInfoSessionFactory sessFact;
 
     protected String testName = null;
 
@@ -54,26 +53,28 @@ public abstract class BaseRouterTestWithSession {
     protected static ZookeeperTestServer zookeeperTestServer = null;
     protected static ClusterInfoSessionFactory zookeeperFactory = null;
 
-    @Parameters // (name = "{index}: session factory={0}, disruptor={1}")
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
+    @SuppressWarnings("unchecked")
+    protected void initParams(final Supplier<ClusterInfoSessionFactory> factorySupplier, final String disruptorName,
+        final Consumer<ClusterInfoSession> disruptor) throws ClusterInfoException, IOException {
+        final ClusterInfoSessionFactory factory = factorySupplier.get();
+        LOGGER.debug("Running {}", factory.getClass().getSimpleName());
+        this.sessFact = factory;
+        this.disruptor = disruptor;
+        setup();
+    }
+
+    public static Stream<Arguments> data() {
+        return Arrays.<Object[]>asList(new Object[][] {
             {(Supplier<ClusterInfoSessionFactory>)() -> new LocalClusterSessionFactory(),"standard",
                 (Consumer<ClusterInfoSession>)s -> ((DisruptibleSession)s).disrupt()},
             {(Supplier<ClusterInfoSessionFactory>)() -> zookeeperFactory,"standard",
                 (Consumer<ClusterInfoSession>)s -> ((DisruptibleSession)s).disrupt()},
             {(Supplier<ClusterInfoSessionFactory>)() -> zookeeperFactory,"session-expire",
                 (Consumer<ClusterInfoSession>)s -> uncheck(() -> zookeeperTestServer.forceSessionExpiration((ZookeeperSession)s))},
-        });
+        }).stream().map(arr -> Arguments.of(arr));
     }
 
-    protected BaseRouterTestWithSession(final Logger LOGGER, final ClusterInfoSessionFactory factory, final Consumer<ClusterInfoSession> disruptor) {
-        LOGGER.debug("Running {}", factory.getClass().getSimpleName());
-        this.sessFact = factory;
-        this.disruptor = disruptor;
-        this.LOGGER = LOGGER;
-    }
-
-    @BeforeClass
+    @BeforeAll
     public static void setupClass() {
         zookeeperFactory = new ClusterInfoSessionFactory() {
             ZookeeperSessionFactory proxied = null;
@@ -95,7 +96,7 @@ public abstract class BaseRouterTestWithSession {
 
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() {
         if(zookeeperTestServer != null) {
             zookeeperTestServer.close();
@@ -107,14 +108,13 @@ public abstract class BaseRouterTestWithSession {
         }
     }
 
-    @Before
-    public void setup() throws ClusterInfoException, IOException {
+    protected void setup() throws ClusterInfoException, IOException {
         session = sessFact.createSession();
         sched = new AutoDisposeSingleThreadScheduler(testName + "-AutoDisposeSingleThreadScheduler");
         infra = makeInfra(session, sched);
     }
 
-    @After
+    @AfterEach
     public void after() {
         if(session != null)
             session.close();

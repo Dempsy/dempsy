@@ -1,13 +1,13 @@
 package net.dempsy.output;
 
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.container.Container;
 import net.dempsy.container.altnonlocking.NonLockingAltContainer;
@@ -24,7 +24,7 @@ public class TestOutputSchedulers {
      *
      * @throws Exception the exception
      */
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         outputInvoked.set(false);
 

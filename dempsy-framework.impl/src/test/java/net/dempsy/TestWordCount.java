@@ -2,9 +2,9 @@ package net.dempsy;
 
 import static net.dempsy.utils.test.ConditionPoll.assertTrue;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -25,7 +25,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
@@ -33,8 +32,9 @@ import org.apache.commons.io.IOUtils;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 import org.javatuples.Tuple;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
@@ -55,12 +55,15 @@ import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.MessageProcessorLifecycle;
-import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.SystemPropertyManager;
 
 @SuppressWarnings("resource")
 public class TestWordCount extends DempsyBaseTest {
     private static Logger LOGGER = LoggerFactory.getLogger(TestWordCount.class);
+
+    {
+        super.LOGGER = TestWordCount.LOGGER;
+    }
 
     public static final String wordResource = "word-count/AV1611Bible.txt.gz";
 
@@ -79,18 +82,7 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    public TestWordCount(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
-        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
-        super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
-    }
-
-    protected TestWordCount(final Logger logger, final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
-        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource, final boolean considerOnlyContainersThatCanLimit) {
-        super(logger, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
-        this.considerOnlyContainersThatCanLimit = considerOnlyContainersThatCanLimit;
-    }
-
-    @Before
+    @BeforeEach
     public void setup() {
         WordProducer.latch = new CountDownLatch(0);
     }
@@ -462,8 +454,11 @@ public class TestWordCount extends DempsyBaseTest {
 
     // ========================================================================
 
-    @Test
-    public void testWordCountNoRank() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testWordCountNoRank(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         try(final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {
             final String[][] ctxs = {{
                 "classpath:/word-count/adaptor-kjv.xml",
@@ -505,8 +500,11 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    @Test
-    public void testWordCountWithRank() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testWordCountWithRank(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "1")) {
 
@@ -564,7 +562,7 @@ public class TestWordCount extends DempsyBaseTest {
                 final List<Rank> top10 = ranks.subList(0, top10OrSo);
                 final String errStr = "expected the top 10 results: " + top10 + " to all be in:" + finalResults;
                 top10.stream()
-                    .forEach(r -> assertTrue(errStr, finalResults.contains(r.word)));
+                    .forEach(r -> assertTrue(finalResults.contains(r.word), errStr));
             });
 
             final int remaining = WordCounter.aliveWordsToTestPassivate.size();
@@ -573,8 +571,11 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    @Test
-    public void testWordCountNoRankMultinode() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testWordCountNoRankMultinode(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "2")) {
 
@@ -625,8 +626,11 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    @Test
-    public void testWordCountNoRankAdaptorOnlyNode() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testWordCountNoRankAdaptorOnlyNode(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         try(@SuppressWarnings("resource")
         final SystemPropertyManager props = new SystemPropertyManager().set("min_nodes", "2")) {
 
@@ -681,8 +685,11 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    @Test
-    public void testWordCountHomogeneousProcessing() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testWordCountHomogeneousProcessing(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         final String[][] ctxs = {
             {"classpath:/word-count/adaptor-kjv.xml",}, // adaptor only node
             {"classpath:/word-count/mp-word-count.xml","classpath:/word-count/mp-word-rank.xml"},
@@ -773,13 +780,19 @@ public class TestWordCount extends DempsyBaseTest {
         }
     }
 
-    @Test
-    public void testWithOutputCycleCron() throws Exception {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testWithOutputCycleCron(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Exception {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         runTestWithOutputCycle("testWithOutputCycleCron", "classpath:/word-count/output-scheduler-cron.xml");
     }
 
-    @Test
-    public void testWithOutputCycleRelative() throws Exception {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testWithOutputCycleRelative(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Exception {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         runTestWithOutputCycle("testWithOutputCycleRelative", "classpath:/word-count/output-scheduler-relative.xml");
     }
 

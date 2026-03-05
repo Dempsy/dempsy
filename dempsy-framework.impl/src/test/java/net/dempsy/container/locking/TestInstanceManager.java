@@ -16,17 +16,18 @@
 
 package net.dempsy.container.locking;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.config.ClusterId;
 import net.dempsy.container.ClusterMetricGetters;
@@ -52,7 +53,6 @@ import net.dempsy.monitoring.basic.BasicClusterStatsCollector;
 import net.dempsy.monitoring.basic.BasicNodeStatsCollector;
 import net.dempsy.threading.DefaultThreadingModel;
 import net.dempsy.util.TestInfrastructure;
-import net.dempsy.utils.test.CloseableRule;
 
 public class TestInstanceManager {
 
@@ -246,11 +246,12 @@ public class TestInstanceManager {
 
     DefaultThreadingModel tm = null;
 
-    @Rule public CloseableRule t = new CloseableRule(() -> {
+    @AfterEach
+    public void tearDown() {
         if(tm != null)
             tm.close();
         tm = null;
-    });
+    }
 
     @SuppressWarnings("resource")
     public LockingContainer setupContainer(final MessageProcessorLifecycle<?> prototype) throws ContainerException {
@@ -284,35 +285,35 @@ public class TestInstanceManager {
     public void testSingleInstanceOneMessage() throws Throwable {
         final CombinedMP prototype = new CombinedMP();
         try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
-            assertEquals("starts with no instances", 0, manager.getProcessorCount());
+            assertEquals(0, manager.getProcessorCount(), "starts with no instances");
 
             final KeyedMessageWithType message = km(new MessageOne(123));
             final InstanceWrapper wrapper = manager.getInstanceForKey(message.key, message.message);
-            assertEquals("instance was created", 1, manager.getProcessorCount());
+            assertEquals(1, manager.getProcessorCount(), "instance was created");
 
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
             // activation is now inline with insantiation so it's active immediately
-            // assertEquals("instance not already activated", 0, instance.activationCount);
-            assertEquals("instance activated", 1, instance.activationCount);
-            assertEquals("instance has no existing messages", -1, instance.firstMessageTime);
-            // assertNull("instance has no message list", instance.messages);
-            assertTrue("real activation time", instance.activationTime > 0);
-            assertEquals("message count", 0, instance.messages.size());
+            // assertEquals(0, instance.activationCount, "instance not already activated");
+            assertEquals(1, instance.activationCount, "instance activated");
+            assertEquals(-1, instance.firstMessageTime, "instance has no existing messages");
+            // assertNull(instance.messages, "instance has no message list");
+            assertTrue(instance.activationTime > 0, "real activation time");
+            assertEquals(0, instance.messages.size(), "message count");
 
             // dispatch the message
             // wrapper.run();
             manager.dispatch(message, Operation.handle, true);
-            assertEquals("instance activated", 1, instance.activationCount);
-            assertTrue("real activation time", instance.activationTime > 0);
-            assertSame("instance received message", message.message, instance.messages.get(0));
-            assertEquals("message count", 1, instance.messages.size());
-            assertTrue("activated before first message", instance.activationTime < instance.firstMessageTime);
+            assertEquals(1, instance.activationCount, "instance activated");
+            assertTrue(instance.activationTime > 0, "real activation time");
+            assertSame(message.message, instance.messages.get(0), "instance received message");
+            assertEquals(1, instance.messages.size(), "message count");
+            assertTrue(instance.activationTime < instance.firstMessageTime, "activated before first message");
             // The return value cannot be routed.
             assertEquals(new ReturnString("MessageOne"), ((DummyDispatcher)manager.getDispatcher()).lastDispatched.message);
 
-            assertEquals("prototype not activated", 0, prototype.activationCount);
-            assertEquals("prototype did not receive messages", -1, prototype.firstMessageTime);
-            assertNull("prototype has no message list", prototype.messages);
+            assertEquals(0, prototype.activationCount, "prototype not activated");
+            assertEquals(-1, prototype.firstMessageTime, "prototype did not receive messages");
+            assertNull(prototype.messages, "prototype has no message list");
         }
     }
 
@@ -323,32 +324,32 @@ public class TestInstanceManager {
         try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
-            assertEquals("starts with no instances", 0, manager.getProcessorCount());
+            assertEquals(0, manager.getProcessorCount(), "starts with no instances");
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, Operation.handle, true);
             final CombinedMP instance = (CombinedMP)wrapper1.getInstance();
 
-            assertEquals("instance was created", 1, manager.getProcessorCount());
+            assertEquals(1, manager.getProcessorCount(), "instance was created");
 
-            assertEquals("instance activated", 1, instance.activationCount);
-            assertTrue("real activation time", instance.activationTime > 0);
-            assertSame("instance received message", message1.message, instance.messages.get(0));
-            assertEquals("message count", 1, instance.messages.size());
-            assertTrue("activated before first message", instance.activationTime < instance.firstMessageTime);
+            assertEquals(1, instance.activationCount, "instance activated");
+            assertTrue(instance.activationTime > 0, "real activation time");
+            assertSame(message1.message, instance.messages.get(0), "instance received message");
+            assertEquals(1, instance.messages.size(), "message count");
+            assertTrue(instance.activationTime < instance.firstMessageTime, "activated before first message");
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             final KeyedMessageWithType message2 = km(new MessageOne(123));
             final InstanceWrapper wrapper2 = manager.getInstanceForKey(message2.key, message2.message);
             manager.dispatch(message2, Operation.handle, true);
-            assertSame("same wrapper returned for second message", wrapper1, wrapper2);
-            assertEquals("no other instance was created", 1, manager.getProcessorCount());
+            assertSame(wrapper1, wrapper2, "same wrapper returned for second message");
+            assertEquals(1, manager.getProcessorCount(), "no other instance was created");
 
-            assertEquals("no second activation", 1, instance.activationCount);
-            assertEquals("both messages delivered", 2, instance.messages.size());
-            assertSame("message1 delivered first", message1.message, instance.messages.get(0));
-            assertSame("message2 delivered second", message2.message, instance.messages.get(1));
+            assertEquals(1, instance.activationCount, "no second activation");
+            assertEquals(2, instance.messages.size(), "both messages delivered");
+            assertSame(message1.message, instance.messages.get(0), "message1 delivered first");
+            assertSame(message2.message, instance.messages.get(1), "message2 delivered second");
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
         }
     }
@@ -360,26 +361,26 @@ public class TestInstanceManager {
         try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
-            assertEquals("starts with no instances", 0, manager.getProcessorCount());
+            assertEquals(0, manager.getProcessorCount(), "starts with no instances");
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, Operation.handle, true);
-            assertEquals("instance was created", 1, manager.getProcessorCount());
+            assertEquals(1, manager.getProcessorCount(), "instance was created");
             final KeyedMessageWithType message2 = km(new MessageOne(123));
-            assertSame("same wrapper returned for second message",
-                wrapper, manager.getInstanceForKey(message2.key, message2.message));
+            assertSame(wrapper, manager.getInstanceForKey(message2.key, message2.message),
+                "same wrapper returned for second message");
             manager.dispatch(message2, Operation.handle, true);
 
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
-            assertEquals("no other instance was created", 1, manager.getProcessorCount());
+            assertEquals(1, manager.getProcessorCount(), "no other instance was created");
 
-            assertEquals("instance activated", 1, instance.activationCount);
-            assertTrue("real activation time", instance.activationTime > 0);
-            assertTrue("activated before first message", instance.activationTime < instance.firstMessageTime);
-            assertEquals("both messages delivered", 2, instance.messages.size());
-            assertSame("message1 delivered first", message1.message, instance.messages.get(0));
-            assertSame("message2 delivered second", message2.message, instance.messages.get(1));
+            assertEquals(1, instance.activationCount, "instance activated");
+            assertTrue(instance.activationTime > 0, "real activation time");
+            assertTrue(instance.activationTime < instance.firstMessageTime, "activated before first message");
+            assertEquals(2, instance.messages.size(), "both messages delivered");
+            assertSame(message1.message, instance.messages.get(0), "message1 delivered first");
+            assertSame(message2.message, instance.messages.get(1), "message2 delivered second");
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
         }
     }
@@ -391,31 +392,31 @@ public class TestInstanceManager {
         try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
-            assertEquals("starts with no instances", 0, manager.getProcessorCount());
+            assertEquals(0, manager.getProcessorCount(), "starts with no instances");
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper = manager.getInstanceForKey(message1.key, message1.message);
             manager.dispatch(message1, Operation.handle, true);
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
 
-            assertEquals("instance was created", 1, manager.getProcessorCount());
+            assertEquals(1, manager.getProcessorCount(), "instance was created");
 
-            assertEquals("instance activated", 1, instance.activationCount);
-            assertTrue("real activation time", instance.activationTime > 0);
-            assertSame("instance received message", message1.message, instance.messages.get(0));
-            assertEquals("message count", 1, instance.messages.size());
-            assertTrue("activated before first message", instance.activationTime < instance.firstMessageTime);
+            assertEquals(1, instance.activationCount, "instance activated");
+            assertTrue(instance.activationTime > 0, "real activation time");
+            assertSame(message1.message, instance.messages.get(0), "instance received message");
+            assertEquals(1, instance.messages.size(), "message count");
+            assertTrue(instance.activationTime < instance.firstMessageTime, "activated before first message");
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             final KeyedMessageWithType message2 = km(new MessageTwo(123));
-            assertSame("same wrapper returned for second message", wrapper, manager.getInstanceForKey(message2.key, message2.message));
+            assertSame(wrapper, manager.getInstanceForKey(message2.key, message2.message), "same wrapper returned for second message");
             manager.dispatch(message2, Operation.handle, true);
-            assertEquals("no other instance was created", 1, manager.getProcessorCount());
+            assertEquals(1, manager.getProcessorCount(), "no other instance was created");
 
-            assertEquals("no second activation", 1, instance.activationCount);
-            assertEquals("both messages delivered", 2, instance.messages.size());
-            assertSame("message1 delivered first", message1.message, instance.messages.get(0));
-            assertSame("message2 delivered second", message2.message, instance.messages.get(1));
+            assertEquals(1, instance.activationCount, "no second activation");
+            assertEquals(2, instance.messages.size(), "both messages delivered");
+            assertSame(message1.message, instance.messages.get(0), "message1 delivered first");
+            assertSame(message2.message, instance.messages.get(1), "message2 delivered second");
             assertEquals(new ReturnString("MessageTwo"), dispatcher.lastDispatched.message);
         }
     }
@@ -426,7 +427,7 @@ public class TestInstanceManager {
         try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
             final DummyDispatcher dispatcher = ((DummyDispatcher)manager.getDispatcher());
 
-            assertEquals("starts with no instances", 0, manager.getProcessorCount());
+            assertEquals(0, manager.getProcessorCount(), "starts with no instances");
 
             final KeyedMessageWithType message1 = km(new MessageOne(123));
             final InstanceWrapper wrapper1 = manager.getInstanceForKey(message1.key, message1.message);
@@ -438,15 +439,15 @@ public class TestInstanceManager {
             manager.dispatch(message2, Operation.handle, true);
             final CombinedMP instance2 = (CombinedMP)wrapper2.getInstance();
 
-            assertEquals("instances were created", 2, manager.getProcessorCount());
+            assertEquals(2, manager.getProcessorCount(), "instances were created");
 
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
-            assertEquals("message count to instance1", 1, instance1.messages.size());
-            assertEquals("message count to instance2", 1, instance2.messages.size());
+            assertEquals(1, instance1.messages.size(), "message count to instance1");
+            assertEquals(1, instance2.messages.size(), "message count to instance2");
 
-            assertSame("message1 went to instance1", message1.message, instance1.messages.get(0));
-            assertSame("message2 went to instance2", message2.message, instance2.messages.get(0));
+            assertSame(message1.message, instance1.messages.get(0), "message1 went to instance1");
+            assertSame(message2.message, instance2.messages.get(0), "message2 went to instance2");
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
         }
     }
@@ -469,10 +470,10 @@ public class TestInstanceManager {
             manager.outputPass();
 
             final OutputTestMP mp1 = (OutputTestMP)wrapper1.getInstance();
-            assertTrue("MP1 output did not occur after activation", mp1.activationTime < mp1.outputTime);
+            assertTrue(mp1.activationTime < mp1.outputTime, "MP1 output did not occur after activation");
 
             final OutputTestMP mp2 = (OutputTestMP)wrapper2.getInstance();
-            assertTrue("MP2 output did not occur after activation", mp2.activationTime < mp2.outputTime);
+            assertTrue(mp2.activationTime < mp2.outputTime, "MP2 output did not occur after activation");
             assertTrue(mp1 != mp2);
 
             assertEquals(new ReturnInt(42), dispatcher.lastDispatched.message);
@@ -493,8 +494,9 @@ public class TestInstanceManager {
             assertEquals(new ReturnString("MessageOne"), dispatcher.lastDispatched.message);
 
             manager.invokeOutput();
-            assertEquals("number of processed messages should include outputs.", 4,
-                ((ClusterMetricGetters)statsCollector).getProcessedMessageCount());
+            assertEquals(4,
+                ((ClusterMetricGetters)statsCollector).getProcessedMessageCount(),
+                "number of processed messages should include outputs.");
         }
     }
 
@@ -513,8 +515,9 @@ public class TestInstanceManager {
 
         manager.invokeOutput();
         // output messages are NOT considered "processed" if there is no output method on the MP.
-        assertEquals("number of processed messages should include outputs.", 2,
-            ((ClusterMetricGetters)statsCollector).getProcessedMessageCount());
+        assertEquals(2,
+            ((ClusterMetricGetters)statsCollector).getProcessedMessageCount(),
+            "number of processed messages should include outputs.");
     }
 
     // This test no longer really matters since there is no queue but we might as well leave it
@@ -527,39 +530,39 @@ public class TestInstanceManager {
             final KeyedMessageWithType message = km(new MessageOne(123));
             final InstanceWrapper wrapper = manager.getInstanceForKey(message.key, message.message);
             manager.dispatch(message, Operation.handle, true);
-            assertEquals("instance was created", 1, manager.getProcessorCount());
+            assertEquals(1, manager.getProcessorCount(), "instance was created");
 
             final CombinedMP instance = (CombinedMP)wrapper.getInstance();
 
-            assertEquals("instance activated", 1, instance.activationCount);
-            assertTrue("real activation time", instance.activationTime > 0);
-            assertSame("instance received message", message.message, instance.messages.get(0));
-            assertEquals("message count", 1, instance.messages.size());
-            assertTrue("activated before first message", instance.activationTime < instance.firstMessageTime);
+            assertEquals(1, instance.activationCount, "instance activated");
+            assertTrue(instance.activationTime > 0, "real activation time");
+            assertSame(message.message, instance.messages.get(0), "instance received message");
+            assertEquals(1, instance.messages.size(), "message count");
+            assertTrue(instance.activationTime < instance.firstMessageTime, "activated before first message");
 
             final long activationTime = instance.activationTime;
             final long firstMessageTime = instance.firstMessageTime;
 
             // here is where the queue would have been advanced again ... but there is no queue anymore.
-            assertTrue("activation time didn't change", activationTime == instance.activationTime);
-            assertTrue("message time didn't change", firstMessageTime == instance.firstMessageTime);
-            assertEquals("message count didn't change", 1, instance.messages.size());
+            assertTrue(activationTime == instance.activationTime, "activation time didn't change");
+            assertTrue(firstMessageTime == instance.firstMessageTime, "message time didn't change");
+            assertEquals(1, instance.messages.size(), "message count didn't change");
         }
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testFailureNullMessage() throws Exception {
         final CombinedMP prototype = new CombinedMP();
         try(final LockingContainer manager = setupContainer(new MessageProcessor<CombinedMP>(prototype));) {
-            manager.getInstanceForKey(null, null);
+            assertThrows(NullPointerException.class, () -> manager.getInstanceForKey(null, null));
         }
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testFailureNoKeyMethod() throws Exception {
         try(final LockingContainer dispatcher = setupContainer(new MessageProcessor<NullKeyTestMP>(new NullKeyTestMP()));) {
             final KeyedMessageWithType message = km(new MessageWithNullKey());
-            dispatcher.getInstanceForKey(message.key, message.message);
+            assertThrows(NullPointerException.class, () -> dispatcher.getInstanceForKey(message.key, message.message));
         }
     }
 

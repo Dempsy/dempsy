@@ -16,12 +16,12 @@
 
 package net.dempsy.lifecycle.annotations;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.DempsyException;
 import net.dempsy.lifecycle.annotation.MessageProcessor;
@@ -150,16 +150,18 @@ public class MessageProcessorTest {
         assertFalse(mp.passivateCalled);
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testMethodHandleNoKey() throws Throwable {
-        final MessageProcessor<TestMpNoKey> helper = new MessageProcessor<TestMpNoKey>(new TestMpNoKey());
-        final TestMpNoKey mp = helper.newInstance();
-        assertFalse(mp.activated);
-        helper.activate(mp, "activate", new Object());
-        assertFalse(mp.activated);
-        assertFalse(mp.passivateCalled);
-        helper.passivate(mp);
-        assertFalse(mp.passivateCalled);
+        assertThrows(IllegalStateException.class, () -> {
+            final MessageProcessor<TestMpNoKey> helper = new MessageProcessor<TestMpNoKey>(new TestMpNoKey());
+            final TestMpNoKey mp = helper.newInstance();
+            assertFalse(mp.activated);
+            helper.activate(mp, "activate", new Object());
+            assertFalse(mp.activated);
+            assertFalse(mp.passivateCalled);
+            helper.passivate(mp);
+            assertFalse(mp.passivateCalled);
+        });
     }
 
     @Test

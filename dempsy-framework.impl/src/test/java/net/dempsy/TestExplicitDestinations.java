@@ -2,8 +2,8 @@ package net.dempsy;
 
 import static net.dempsy.util.Functional.uncheck;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.Serializable;
 import java.util.HashSet;
@@ -11,10 +11,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
@@ -25,17 +25,16 @@ import net.dempsy.lifecycle.annotation.MessageType;
 import net.dempsy.lifecycle.annotation.Mp;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
-import net.dempsy.threading.ThreadingModel;
+
 
 // TODO: Fix explicit destinations
-@Ignore
+@Disabled
 public class TestExplicitDestinations extends DempsyBaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(TestExplicitDestinations.class);
     public static final int NUM_MESSAGES = 100;
 
-    public TestExplicitDestinations(final String routerId, final String containerId, final String sessCtx, final String tpCtx, final String serType,
-        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
-        super(LOGGER, routerId, containerId, sessCtx, tpCtx, serType, threadingModelDescription, threadingModelSource);
+    {
+        super.LOGGER = TestExplicitDestinations.LOGGER;
     }
 
     @MessageType
@@ -125,8 +124,11 @@ public class TestExplicitDestinations extends DempsyBaseTest {
     }
 
     @SuppressWarnings("resource")
-    @Test
-    public void testSeparateNodes() throws Exception {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testSeparateNodes(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Exception {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
 
         final String[][] oneNodePath = new String[][] {
             {"explicit-destinations/adaptor.xml",

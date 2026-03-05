@@ -21,10 +21,10 @@ import static net.dempsy.AccessUtil.getRouter;
 import static net.dempsy.util.Functional.recheck;
 import static net.dempsy.util.Functional.uncheck;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,13 +42,15 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+
+
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import net.dempsy.DempsyException;
@@ -88,7 +90,6 @@ import net.dempsy.util.SystemPropertyManager;
 // messages on an output queue; the important part is the wiring
 // in TestMPContainer.xml
 //
-@RunWith(Parameterized.class)
 public class TestContainer {
     public static String[] ctx = {
         "classpath:/spring/container/test-container.xml",
@@ -96,15 +97,14 @@ public class TestContainer {
         "classpath:/spring/container/test-adaptor.xml"
     };
 
-    @Parameters(name = "{index}: container type={0}")
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-            {LockingContainer.class.getPackage().getName()},
+    public static Stream<Arguments> data() {
+        return Stream.of(
+            Arguments.of(LockingContainer.class.getPackage().getName()),
             // the NonLockingContainer is broken
-            // {NonLockingContainer.class.getPackage().getName()},
-            {NonLockingAltContainer.class.getPackage().getName()},
-            {SimpleContainer.class.getPackage().getName()},
-        });
+            // Arguments.of(NonLockingContainer.class.getPackage().getName()),
+            Arguments.of(NonLockingAltContainer.class.getPackage().getName()),
+            Arguments.of(SimpleContainer.class.getPackage().getName())
+        );
     }
 
     private Container container = null;
@@ -115,24 +115,20 @@ public class TestContainer {
     private ClusterStatsCollector statsCollector;
 
     private final List<AutoCloseable> toClose = new ArrayList<>();
-    private final String containerId;
+    private String containerId;
 
     public static Map<String, TestProcessor> cache = null;
     public static Set<OutputMessage> outputMessages = null;
     public static RuntimeException justThrowMe = null;
     public static RuntimeException throwMeInActivation = null;
 
-    public TestContainer(final String containerId) {
-        this.containerId = containerId;
-    }
-
     private <T extends AutoCloseable> T track(final T o) {
         toClose.add(o);
         return o;
     }
 
-    @Before
-    public void setUp() throws Exception {
+    public void setUp(final String containerId) throws Exception {
+        this.containerId = containerId;
         justThrowMe = null;
         throwMeInActivation = null;
         track(new SystemPropertyManager()).set("container-type", containerId);
@@ -148,7 +144,7 @@ public class TestContainer {
         assertTrue(poll(manager, m -> m.isReady()));
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         cache = null;
         outputMessages = null;
@@ -210,14 +206,14 @@ public class TestContainer {
 
         assertTrue(poll(o -> container.getProcessorCount() > 0));
         Thread.sleep(100);
-        assertEquals("did not create MP", 1, container.getProcessorCount());
+        assertEquals(1, container.getProcessorCount(), "did not create MP");
 
         assertTrue(poll(cache, c -> c.get(foo) != null));
         final TestProcessor mp = cache.get(foo);
 
-        assertNotNull("MP not associated with expected key", mp);
-        assertEquals("activation count, 1st message", 1, mp.activationCount);
-        assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+        assertNotNull(mp, "MP not associated with expected key");
+        assertEquals(1, mp.activationCount, "activation count, 1st message");
+        assertEquals(1, mp.invocationCount, "invocation count, 1st message");
 
         return mp;
     }
@@ -360,16 +356,20 @@ public class TestContainer {
 
     public void doNothing() {}
 
-    @Test
-    public void testWrongTypeMessage() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testWrongTypeMessage(final String containerId) throws Exception {
+        setUp(containerId);
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         final KeyedMessageWithType kmwt = ke.extract(new MyMessage("YO")).get(0);
         container.dispatch(new KeyedMessage(kmwt.key, new Object()), Operation.handle, true);
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
     }
 
-    @Test
-    public void testMpActivationFails() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testMpActivationFails(final String containerId) throws Exception {
+        setUp(containerId);
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         throwMeInActivation = new RuntimeException("JustThrowMeDAMMIT!");
@@ -380,8 +380,10 @@ public class TestContainer {
 
     }
 
-    @Test
-    public void testMpThrowsDempsyException() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testMpThrowsDempsyException(final String containerId) throws Exception {
+        setUp(containerId);
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new DempsyException("JustThrowMe!");
@@ -391,8 +393,10 @@ public class TestContainer {
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
 
-    @Test
-    public void testMpThrowsException() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testMpThrowsException(final String containerId) throws Exception {
+        setUp(containerId);
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getMessageFailedCount());
         assertEquals(0, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
         justThrowMe = new RuntimeException("JustThrowMe!");
@@ -402,10 +406,12 @@ public class TestContainer {
         assertEquals(1, ((ClusterMetricGetters)container.statCollector).getDispatchedMessageCount());
     }
 
-    @Test
-    public void testConfiguration() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testConfiguration(final String containerId) throws Exception {
+        setUp(containerId);
         // this assertion is superfluous, since we deref container in setUp()
-        assertNotNull("did not create container", container);
+        assertNotNull(container, "did not create container");
         assertEquals(new ClusterId("test-app", "test-cluster"), container.getClusterId());
 
         final TestProcessor prototype = context.getBean(TestProcessor.class);
@@ -414,8 +420,10 @@ public class TestContainer {
         assertNotNull(prototype.clusterId);
     }
 
-    @Test
-    public void testFeedbackLoop() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testFeedbackLoop(final String containerId) throws Exception {
+        setUp(containerId);
         cache = new ConcurrentHashMap<>();
         final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
         assertNotNull(adaptor.dispatcher);
@@ -424,26 +432,28 @@ public class TestContainer {
 
         assertTrue(poll(o -> container.getProcessorCount() > 0));
         Thread.sleep(100);
-        assertEquals("did not create MP", 1, container.getProcessorCount());
+        assertEquals(1, container.getProcessorCount(), "did not create MP");
 
         assertTrue(poll(cache, c -> c.get("foo") != null));
         final TestProcessor mp = cache.get("foo");
-        assertNotNull("MP not associated with expected key", mp);
+        assertNotNull(mp, "MP not associated with expected key");
 
         assertTrue(poll(mp, o -> o.invocationCount > 1));
-        assertEquals("activation count, 1st message", 1, mp.activationCount);
-        assertEquals("invocation count, 1st message", 2, mp.invocationCount);
+        assertEquals(1, mp.activationCount, "activation count, 1st message");
+        assertEquals(2, mp.invocationCount, "invocation count, 1st message");
 
         adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
         assertTrue(poll(mp, o -> o.invocationCount > 2));
         Thread.sleep(100);
 
-        assertEquals("activation count, 2nd message", 1, mp.activationCount);
-        assertEquals("invocation count, 2nd message", 3, mp.invocationCount);
+        assertEquals(1, mp.activationCount, "activation count, 2nd message");
+        assertEquals(3, mp.invocationCount, "invocation count, 2nd message");
     }
 
-    @Test
-    public void testMessageDispatch() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testMessageDispatch(final String containerId) throws Exception {
+        setUp(containerId);
         cache = new ConcurrentHashMap<>();
         final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
         assertNotNull(adaptor.dispatcher);
@@ -452,24 +462,26 @@ public class TestContainer {
 
         assertTrue(poll(o -> container.getProcessorCount() > 0));
         Thread.sleep(100);
-        assertEquals("did not create MP", 1, container.getProcessorCount());
+        assertEquals(1, container.getProcessorCount(), "did not create MP");
 
         assertTrue(poll(cache, c -> c.get("foo") != null));
         final TestProcessor mp = cache.get("foo");
-        assertNotNull("MP not associated with expected key", mp);
-        assertEquals("activation count, 1st message", 1, mp.activationCount);
-        assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+        assertNotNull(mp, "MP not associated with expected key");
+        assertEquals(1, mp.activationCount, "activation count, 1st message");
+        assertEquals(1, mp.invocationCount, "invocation count, 1st message");
 
         adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
         assertTrue(poll(mp, o -> o.invocationCount > 1));
         Thread.sleep(100);
 
-        assertEquals("activation count, 2nd message", 1, mp.activationCount);
-        assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
+        assertEquals(1, mp.activationCount, "activation count, 2nd message");
+        assertEquals(2, mp.invocationCount, "invocation count, 2nd message");
     }
 
-    @Test
-    public void testInvokeOutput() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testInvokeOutput(final String containerId) throws Exception {
+        setUp(containerId);
         outputMessages = Collections.newSetFromMap(new ConcurrentHashMap<>());
         cache = new ConcurrentHashMap<>();
 
@@ -481,14 +493,14 @@ public class TestContainer {
         assertTrue(poll(container, c -> (c.getProcessorCount() + ((ClusterMetricGetters)c.statCollector).getMessageDiscardedCount()) > 1));
         Thread.sleep(100);
 
-        assertEquals("number of MP instances", 2, container.getProcessorCount());
+        assertEquals(2, container.getProcessorCount(), "number of MP instances");
 
         try(NodeManager nman = addOutputCatchStage();) {
 
             final TestProcessor mp = cache.get("foo");
             assertTrue(poll(mp, m -> mp.invocationCount > 0));
             Thread.sleep(100);
-            assertEquals("invocation count, 1st message", 1, mp.invocationCount);
+            assertEquals(1, mp.invocationCount, "invocation count, 1st message");
 
             // because the sessionFactory is shared and the appname is the same, we should be in the same app
             container.outputPass();
@@ -498,12 +510,12 @@ public class TestContainer {
             assertEquals(2, outputMessages.size());
 
             // no new mps created in the first one
-            assertEquals("did not create MP", 2, container.getProcessorCount());
+            assertEquals(2, container.getProcessorCount(), "did not create MP");
 
             // but the invocation count should have increased since the output cycles feeds messages back to this cluster
             assertTrue(poll(mp, m -> mp.invocationCount > 1));
             Thread.sleep(100);
-            assertEquals("invocation count, 1st message", 2, mp.invocationCount);
+            assertEquals(2, mp.invocationCount, "invocation count, 1st message");
 
             // // order of messages is not guaranteed, so we need to aggregate keys
             final HashSet<String> messageKeys = new HashSet<String>();
@@ -511,13 +523,15 @@ public class TestContainer {
             final Iterator<OutputMessage> iter = outputMessages.iterator();
             messageKeys.add(iter.next().getKey());
             messageKeys.add(iter.next().getKey());
-            assertTrue("first MP sent output", messageKeys.contains("foo"));
-            assertTrue("second MP sent output", messageKeys.contains("bar"));
+            assertTrue(messageKeys.contains("foo"), "first MP sent output");
+            assertTrue(messageKeys.contains("bar"), "second MP sent output");
         }
     }
 
-    @Test
-    public void testMtInvokeOutput() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testMtInvokeOutput(final String containerId) throws Exception {
+        setUp(containerId);
         outputMessages = Collections.newSetFromMap(new ConcurrentHashMap<>());
         final int numInstances = 20;
 
@@ -531,7 +545,7 @@ public class TestContainer {
         assertTrue(poll(container, c -> (c.getProcessorCount() + ((ClusterMetricGetters)c.statCollector).getMessageDiscardedCount()) > 19));
         Thread.sleep(100);
         final long messagesDiscarded = ((ClusterMetricGetters)container.statCollector).getMessageDiscardedCount();
-        assertEquals("number of MP instances", 20, container.getProcessorCount() + messagesDiscarded);
+        assertEquals(20, container.getProcessorCount() + messagesDiscarded, "number of MP instances");
 
         try(NodeManager nman = addOutputCatchStage();) {
             container.outputPass();
@@ -541,8 +555,10 @@ public class TestContainer {
         }
     }
 
-    @Test
-    public void testEvictable() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testEvictable(final String containerId) throws Exception {
+        setUp(containerId);
         final TestProcessor mp = createAndGet("foo");
 
         final TestProcessor prototype = context.getBean(TestProcessor.class);
@@ -555,11 +571,13 @@ public class TestContainer {
         adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
         assertTrue(poll(o -> prototype.cloneCount.intValue() > tmpCloneCount));
         Thread.sleep(1000);
-        assertEquals("Clone count, 2nd message", tmpCloneCount + 1, prototype.cloneCount.intValue());
+        assertEquals(tmpCloneCount + 1, prototype.cloneCount.intValue(), "Clone count, 2nd message");
     }
 
-    @Test
-    public void testEvictableWithPassivateException() throws Exception {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testEvictableWithPassivateException(final String containerId) throws Exception {
+        setUp(containerId);
         final TestProcessor mp = createAndGet("foo");
         mp.throwPassivateException.set(true);
 
@@ -570,17 +588,19 @@ public class TestContainer {
         container.evict();
         assertTrue(poll(o -> mp.passivateExceptionCount.get() > 0));
         Thread.sleep(100);
-        assertEquals("Passivate Exception Thrown", 1, mp.passivateExceptionCount.get());
+        assertEquals(1, mp.passivateExceptionCount.get(), "Passivate Exception Thrown");
 
         final TestAdaptor adaptor = context.getBean(TestAdaptor.class);
         adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
         assertTrue(poll(o -> prototype.cloneCount.intValue() > tmpCloneCount));
         Thread.sleep(1000);
-        assertEquals("Clone count, 2nd message", tmpCloneCount + 1, prototype.cloneCount.intValue());
+        assertEquals(tmpCloneCount + 1, prototype.cloneCount.intValue(), "Clone count, 2nd message");
     }
 
-    @Test
-    public void testEvictableWithBusyMp() throws Throwable {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testEvictableWithBusyMp(final String containerId) throws Throwable {
+        setUp(containerId);
         final TestProcessor mp = createAndGet("foo");
 
         // now we're going to cause the processing to be held up.
@@ -620,17 +640,19 @@ public class TestContainer {
         // wait until the eviction completes
         assertTrue(poll(evictIsComplete, o -> o.get()));
         Thread.sleep(100);
-        assertEquals("activation count, 2nd message", 1, mp.activationCount);
-        assertEquals("invocation count, 2nd message", 2, mp.invocationCount);
+        assertEquals(1, mp.activationCount, "activation count, 2nd message");
+        assertEquals(2, mp.invocationCount, "invocation count, 2nd message");
 
         adaptor.dispatcher.dispatchAnnotated(new ContainerTestMessage("foo"));
         assertTrue(poll(o -> prototype.cloneCount.intValue() > tmpCloneCount));
         Thread.sleep(1000);
-        assertEquals("Clone count, 2nd message", tmpCloneCount + 1, prototype.cloneCount.intValue());
+        assertEquals(tmpCloneCount + 1, prototype.cloneCount.intValue(), "Clone count, 2nd message");
     }
 
-    @Test
-    public void testEvictCollisionWithBlocking() throws Throwable {
+    @ParameterizedTest(name = "{index}: container type={0}")
+    @MethodSource("data")
+    public void testEvictCollisionWithBlocking(final String containerId) throws Throwable {
+        setUp(containerId);
 //        if(!container.containerIsThreadSafe())
 //            return; // we can't run this test unless the container is thread safe.
         boolean countedDown = false;
@@ -682,7 +704,7 @@ public class TestContainer {
             // Once the poll finishes a new Mp is instantiated and handling messages.
             assertTrue(poll(cache, c -> c.get("foo") != null));
             final TestProcessor mp2 = cache.get("foo");
-            assertNotNull("MP not associated with expected key", mp);
+            assertNotNull(mp, "MP not associated with expected key");
 
             // invocationCount should be 1 from the initial invocation that caused the clone, and no more
             assertEquals(1, mp.invocationCount);

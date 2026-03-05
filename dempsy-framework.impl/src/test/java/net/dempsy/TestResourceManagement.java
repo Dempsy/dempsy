@@ -1,9 +1,9 @@
 package net.dempsy;
 
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -16,13 +16,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.io.IOUtils;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
@@ -41,11 +41,14 @@ import net.dempsy.lifecycle.annotation.utils.KeyExtractor;
 import net.dempsy.messages.Adaptor;
 import net.dempsy.messages.Dispatcher;
 import net.dempsy.messages.ResourceManager;
-import net.dempsy.threading.ThreadingModel;
 import net.dempsy.util.SystemPropertyManager;
 
 public class TestResourceManagement extends DempsyBaseTest {
     private static Logger LOGGER = LoggerFactory.getLogger(TestResourceManagement.class);
+
+    {
+        super.LOGGER = TestResourceManagement.LOGGER;
+    }
 
     public static final String wordResource = "word-count/AV1611Bible.txt.gz";
 
@@ -56,17 +59,12 @@ public class TestResourceManagement extends DempsyBaseTest {
         return writer.toString();
     }
 
-    public TestResourceManagement(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
-        final String threadingModelDescription, final Function<String, ThreadingModel> threadingModelSource) {
-        super(LOGGER, routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
-    }
-
-    @Before
+    @BeforeEach
     public void setup() {
         WordProducer.latch = new CountDownLatch(0);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         WordProducer.strings = null;
         LOGGER.debug("cleaned up");
@@ -261,22 +259,31 @@ public class TestResourceManagement extends DempsyBaseTest {
         WordCount.allWordCounts.clear();
     }
 
-    @Test
-    public void testSimlpeWordCount() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testSimlpeWordCount(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         WordProducer.useResourceManager = true;
 
         runSimlpeWordCount("testSimlpeWordCount");
     }
 
-    @Test
-    public void testSimlpeWordCountSeparateNodes() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testSimlpeWordCountSeparateNodes(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         WordProducer.useResourceManager = true;
 
         runSimlpeWordCountSeparateNodes("testSimlpeWordCountSeparateNodes");
     }
 
-    @Test
-    public void testSimlpeWordCountNoResourceManager() throws Throwable {
+    @ParameterizedTest(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
+    @MethodSource("combos")
+    public void testSimlpeWordCountNoResourceManager(final String routerId, final String containerId, final String sessCtx, final String tpid, final String serType,
+        final String threadingModelDescription, final Object threadingModelSource) throws Throwable {
+        initParams(routerId, containerId, sessCtx, tpid, serType, threadingModelDescription, threadingModelSource);
         WordProducer.useResourceManager = false;
 
         runSimlpeWordCount("testSimlpeWordCountNoResourceManager");

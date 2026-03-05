@@ -2,16 +2,16 @@ package net.dempsy.router.simple;
 
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Collection;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.Infrastructure;
 import net.dempsy.Manager;
@@ -37,7 +37,7 @@ public class TestSimpleRoutingStrategy {
         return new TestInfrastructure(session, sched);
     }
 
-    @Before
+    @BeforeEach
     public void setup() {
         sessFact = new LocalClusterSessionFactory();
         session = sessFact.createSession();
@@ -46,7 +46,7 @@ public class TestSimpleRoutingStrategy {
         infra = makeInfra(session, sched);
     }
 
-    @After
+    @AfterEach
     public void after() {
         if (session != null)
             session.close();

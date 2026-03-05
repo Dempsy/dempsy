@@ -4,13 +4,11 @@ import static net.dempsy.transport.tcp.nio.internal.NioUtils.dontInterrupt;
 import static net.dempsy.util.Functional.chain;
 import static net.dempsy.util.Functional.uncheck;
 import static net.dempsy.utils.test.ConditionPoll.poll;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.Inet4Address;
 import java.net.NetworkInterface;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -22,11 +20,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,31 +49,20 @@ import net.dempsy.transport.tcp.nio.NioReceiver;
 import net.dempsy.transport.tcp.nio.NioSenderFactory;
 import net.dempsy.util.TestInfrastructure;
 
-@RunWith(Parameterized.class)
 public class TcpTransportTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(TcpTransportTest.class);
 
-    private final Supplier<SenderFactory> senderFactory;
-
-    private final Supplier<AbstractTcpReceiver<?, ?>> receiver;
-
-    public TcpTransportTest(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
-        final Supplier<AbstractTcpReceiver<?, ?>> receiver) {
-        this.senderFactory = senderFactory;
-        this.receiver = receiver;
-    }
-
-    @Parameters(name = "{index}: senderfactory={0}, receiver={2}")
-    public static Collection<Object[]> combos() {
+    public static Stream<Arguments> combos() {
         final Supplier<Receiver> nior = () -> new NioReceiver<>(new JsonSerializer());
-        return Arrays.asList(new Object[][] {
-            {"nio",(Supplier<SenderFactory>)() -> new NioSenderFactory(),"nio",nior},
-        });
-
+        return Stream.of(
+            Arguments.of("nio",(Supplier<SenderFactory>)() -> new NioSenderFactory(),"nio",nior)
+        );
     }
 
-    @Test
-    public void testReceiverStart() throws Exception {
+    @ParameterizedTest(name = "{index}: senderfactory={0}, receiver={2}")
+    @MethodSource("combos")
+    public void testReceiverStart(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
+        final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
         final AtomicBoolean resolverCalled = new AtomicBoolean(false);
         try(ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
@@ -91,8 +81,10 @@ public class TcpTransportTest {
         }
     }
 
-    @Test
-    public void testReceiverStartOnSpecifiedIf() throws Exception {
+    @ParameterizedTest(name = "{index}: senderfactory={0}, receiver={2}")
+    @MethodSource("combos")
+    public void testReceiverStartOnSpecifiedIf(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
+        final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
         final List<NetworkInterface> ifs = Collections.list(TcpUtils.getInterfaces(null)).stream()
             .filter(nif -> !uncheck(() -> nif.isLoopback()))
             .filter(nif -> nif.inetAddresses()
@@ -139,8 +131,10 @@ public class TcpTransportTest {
         }
     }
 
-    @Test
-    public void testMessage() throws Exception {
+    @ParameterizedTest(name = "{index}: senderfactory={0}, receiver={2}")
+    @MethodSource("combos")
+    public void testMessage(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
+        final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
         try(ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .numHandlers(2)
@@ -172,8 +166,10 @@ public class TcpTransportTest {
         }
     }
 
-    @Test
-    public void testLargeMessage() throws Exception {
+    @ParameterizedTest(name = "{index}: senderfactory={0}, receiver={2}")
+    @MethodSource("combos")
+    public void testLargeMessage(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
+        final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
         final String huge = TestWordCount.readBible();
         try(final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
@@ -206,7 +202,7 @@ public class TcpTransportTest {
     private static final String NUM_SENDER_THREADS = "2";
 
     private void runMultiMessage(final String testName, final int numThreads, final int numMessagePerThread, final String message,
-        final Serializer serializer) throws Exception {
+        final Serializer serializer, final Supplier<SenderFactory> senderFactory, final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
         try(final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .numHandlers(2)
@@ -274,21 +270,27 @@ public class TcpTransportTest {
         }
     }
 
-    @Test
-    public void testMultiMessage() throws Exception {
-        runMultiMessage("testMultiMessage", 10, 10000, "Hello", new KryoSerializer());
+    @ParameterizedTest(name = "{index}: senderfactory={0}, receiver={2}")
+    @MethodSource("combos")
+    public void testMultiMessage(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
+        final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
+        runMultiMessage("testMultiMessage", 10, 10000, "Hello", new KryoSerializer(), senderFactory, receiver);
     }
 
     AtomicLong messageNum = new AtomicLong();
 
-    @Test
-    public void testMultiHugeMessage() throws Exception {
+    @ParameterizedTest(name = "{index}: senderfactory={0}, receiver={2}")
+    @MethodSource("combos")
+    public void testMultiHugeMessage(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
+        final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
         runMultiMessage("testMultiHugeMessage", 5, 100, "" + messageNum.incrementAndGet() + TestWordCount.readBible() + messageNum.incrementAndGet(),
-            new JsonSerializer());
+            new JsonSerializer(), senderFactory, receiver);
     }
 
-    @Test
-    public void testConnectionRecovery() throws Exception {
+    @ParameterizedTest(name = "{index}: senderfactory={0}, receiver={2}")
+    @MethodSource("combos")
+    public void testConnectionRecovery(final String senderFactoryName, final Supplier<SenderFactory> senderFactory, final String receiverName,
+        final Supplier<AbstractTcpReceiver<?, ?>> receiver) throws Exception {
         try(final ServiceTracker tr = new ServiceTracker();) {
             final AbstractTcpReceiver<?, ?> r = tr.track(receiver.get())
                 .numHandlers(2)

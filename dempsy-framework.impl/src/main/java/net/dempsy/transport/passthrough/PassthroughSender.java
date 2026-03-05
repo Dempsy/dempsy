@@ -31,7 +31,7 @@ public class PassthroughSender implements Sender {
         }
 
         try {
-            reciever.listener.propogateMessageToNode((RoutedMessage)message, false, null);
+            reciever.listener.propogateMessageToNode((RoutedMessage)message, true, null);
         } catch(final RuntimeException rte) {
             LOGGER.error("Unexpected excpetion!", rte);
             throw rte;

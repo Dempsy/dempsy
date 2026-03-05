@@ -16,15 +16,16 @@
 
 package net.dempsy.config;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import net.dempsy.lifecycle.annotation.Evictable;
 import net.dempsy.lifecycle.annotation.MessageHandler;
@@ -251,70 +252,86 @@ public class TestConfig {
         assertEquals(appScf, app.getClusterStatsCollectorFactoryId());
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testFailNoPrototypeOrAdaptor() throws Throwable {
-        final Node app = new Node("test");
-        final Cluster cd = new Cluster("test-slot1");
-        app.addClusters(cd); // no prototype or adaptor
-        app.validate();
+        assertThrows(IllegalStateException.class, () -> {
+            final Node app = new Node("test");
+            final Cluster cd = new Cluster("test-slot1");
+            app.addClusters(cd); // no prototype or adaptor
+            app.validate();
+        });
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testFailNoPrototypeOrAdaptorBuilder() throws Throwable {
-        final Node node = new Node.Builder("test")
-            .cluster("test-slot1").build();
-        node.validate();
+        assertThrows(IllegalStateException.class, () -> {
+            final Node node = new Node.Builder("test")
+                .cluster("test-slot1").build();
+            node.validate();
+        });
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testFailBothPrototypeAndAdaptor() throws Throwable {
-        final Cluster cd = new Cluster("test-slot1");
-        cd.setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
-        cd.setAdaptor(new GoodAdaptor());
+        assertThrows(IllegalStateException.class, () -> {
+            final Cluster cd = new Cluster("test-slot1");
+            cd.setMessageProcessor(new MessageProcessor<GoodTestMp>(new GoodTestMp()));
+            cd.setAdaptor(new GoodAdaptor());
+        });
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testFailBothPrototypeAndAdaptorBuilder() throws Throwable {
-        new Node.Builder("test")
-            .cluster("test-slot1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())).adaptor(new GoodAdaptor()).build();
+        assertThrows(IllegalStateException.class, () -> {
+            new Node.Builder("test")
+                .cluster("test-slot1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())).adaptor(new GoodAdaptor()).build();
+        });
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testFailNullClusterDefinition() throws Throwable {
-        new Node.Builder("test")
-            .clusters(new Cluster("test-slot1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
-                null,
-                new Cluster("test-slot2").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
+        assertThrows(IllegalArgumentException.class, () -> {
+            new Node.Builder("test")
+                .clusters(new Cluster("test-slot1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+                    null,
+                    new Cluster("test-slot2").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
+        });
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testFailNoClusterDefinition() throws Throwable {
-        final Node node = new Node("test");
-        node.addClusters();
+        assertThrows(IllegalArgumentException.class, () -> {
+            final Node node = new Node("test");
+            node.addClusters();
+        });
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testDupCluster() throws Throwable {
-        final Node app = new Node("test-tooMuchWine-needMore").defaultRoutingStrategyId("");
-        app.clusters(
-            new Cluster("notTheSame").adaptor(new GoodAdaptor()),
-            new Cluster("mp-stage1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
-            new Cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
-            new Cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
-            new Cluster("mp-stage3").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
-        app.validate();
+        assertThrows(IllegalStateException.class, () -> {
+            final Node app = new Node("test-tooMuchWine-needMore").defaultRoutingStrategyId("");
+            app.clusters(
+                new Cluster("notTheSame").adaptor(new GoodAdaptor()),
+                new Cluster("mp-stage1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+                new Cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+                new Cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())),
+                new Cluster("mp-stage3").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp())));
+            app.validate();
+        });
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testDupClusterBuilder() throws Throwable {
-        new Node.Builder("test-tooMuchWine-needMore").defaultRoutingStrategyId("")
-            .cluster("notTheSame").adaptor(new GoodAdaptor())
-            .cluster("mp-stage1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
-            .cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
-            .cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
-            .cluster("mp-stage3").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
-            .build()
-            .validate();
+        assertThrows(IllegalStateException.class, () -> {
+            new Node.Builder("test-tooMuchWine-needMore").defaultRoutingStrategyId("")
+                .cluster("notTheSame").adaptor(new GoodAdaptor())
+                .cluster("mp-stage1").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
+                .cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
+                .cluster("mp-stage2-dupped").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
+                .cluster("mp-stage3").mp(new MessageProcessor<GoodTestMp>(new GoodTestMp()))
+                .build()
+                .validate();
+        });
     }
 
     @Test
@@ -346,33 +363,12 @@ public class TestConfig {
         node.validate();
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testConfigAdaptorWithKeyStore() throws Throwable {
-        final Node app = new Node.Builder("test").defaultRoutingStrategyId("").build();
-        final Cluster cd = new Cluster("test-slot");
-        cd.adaptor(new Adaptor() {
-            @Override
-            public void stop() {}
-
-            @Override
-            public void start() {}
-
-            @Override
-            public void setDispatcher(final Dispatcher dispatcher) {}
-        }).setKeySource(new KeySource<Object>() {
-            @Override
-            public Iterable<Object> getAllPossibleKeys() {
-                return null;
-            }
-        });
-        app.addClusters(cd);
-        app.validate();
-    }
-
-    @Test(expected = IllegalStateException.class)
-    public void testConfigAdaptorWithKeyStoreBuilder() throws Throwable {
-        final Node node = new Node.Builder("test").defaultRoutingStrategyId("")
-            .cluster("test-slot").adaptor(new Adaptor() {
+        assertThrows(IllegalStateException.class, () -> {
+            final Node app = new Node.Builder("test").defaultRoutingStrategyId("").build();
+            final Cluster cd = new Cluster("test-slot");
+            cd.adaptor(new Adaptor() {
                 @Override
                 public void stop() {}
 
@@ -381,14 +377,39 @@ public class TestConfig {
 
                 @Override
                 public void setDispatcher(final Dispatcher dispatcher) {}
-            }).keySource(new KeySource<Object>() {
+            }).setKeySource(new KeySource<Object>() {
                 @Override
                 public Iterable<Object> getAllPossibleKeys() {
                     return null;
                 }
-            })
-            .build();
-        node.validate();
+            });
+            app.addClusters(cd);
+            app.validate();
+        });
+    }
+
+    @Test
+    public void testConfigAdaptorWithKeyStoreBuilder() throws Throwable {
+        assertThrows(IllegalStateException.class, () -> {
+            final Node node = new Node.Builder("test").defaultRoutingStrategyId("")
+                .cluster("test-slot").adaptor(new Adaptor() {
+                    @Override
+                    public void stop() {}
+
+                    @Override
+                    public void start() {}
+
+                    @Override
+                    public void setDispatcher(final Dispatcher dispatcher) {}
+                }).keySource(new KeySource<Object>() {
+                    @Override
+                    public Iterable<Object> getAllPossibleKeys() {
+                        return null;
+                    }
+                })
+                .build();
+            node.validate();
+        });
     }
 
     @Test
@@ -442,7 +463,7 @@ public class TestConfig {
         app.validate();
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testConfigMpWithGoodWith2KeysButMpFailsToPickOne() throws Throwable {
         final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
 
@@ -466,12 +487,10 @@ public class TestConfig {
         }
 
         final Cluster cd1 = new Cluster("test-slot-1");
-        cd1.setMessageProcessor(new MessageProcessor<mp1>(new mp1()));
-        app.addClusters(cd1);
-        app.validate();
+        assertThrows(IllegalStateException.class, () -> new MessageProcessor<mp1>(new mp1()));
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testConfigMpWithGoodButMpSelects() throws Throwable {
         final Node app = new Node.Builder("test").defaultRoutingStrategyId("").receiver(() -> {}).build();
 
@@ -495,9 +514,7 @@ public class TestConfig {
         }
 
         final Cluster cd1 = new Cluster("test-slot-1");
-        cd1.setMessageProcessor(new MessageProcessor<mp1>(new mp1()));
-        app.addClusters(cd1);
-        app.validate();
+        assertThrows(IllegalStateException.class, () -> new MessageProcessor<mp1>(new mp1()));
     }
 
     @Test

@@ -1,24 +1,17 @@
 package net.dempsy;
 
-import static net.dempsy.util.Functional.ignore;
-import static net.dempsy.util.Functional.reverseRange;
-import static net.dempsy.util.Functional.uncheck;
-import static net.dempsy.utils.test.ConditionPoll.poll;
-import static net.dempsy.utils.test.ConditionPoll.qpoll;
-import static org.junit.Assert.assertTrue;
-
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import org.junit.ClassRule;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.AfterAll;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.provider.Arguments;
 import org.slf4j.Logger;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
@@ -32,21 +25,48 @@ import net.dempsy.threading.OrderedPerContainerThreadingModel;
 import net.dempsy.threading.OrderedPerContainerThreadingModelAlt;
 import net.dempsy.threading.ThreadingModel;
 import net.dempsy.transport.blockingqueue.BlockingQueueAddress;
+import static net.dempsy.util.Functional.ignore;
+import static net.dempsy.util.Functional.reverseRange;
+import static net.dempsy.util.Functional.uncheck;
 import net.dempsy.util.SystemPropertyManager;
-import net.dempsy.utils.test.CloseableRule;
+import static net.dempsy.utils.test.ConditionPoll.poll;
+import static net.dempsy.utils.test.ConditionPoll.qpoll;
 
-@RunWith(Parameterized.class)
 public abstract class DempsyBaseTest {
 
     public static final long TEN_SECONDS = 10000;
 
-    @ClassRule public static CloseableRule props = new CloseableRule(new SystemPropertyManager().set("org.quartz.threadPool.threadCount", "1"));
+    private static SystemPropertyManager props;
+
+    @BeforeAll
+    public static void setupBaseProps() {
+        props = new SystemPropertyManager().set("org.quartz.threadPool.threadCount", "1");
+    }
+
+    @AfterAll
+    public static void cleanupBaseProps() {
+        if(props != null) {
+            props.close();
+            props = null;
+        }
+    }
 
     /**
      * Setting 'hardcore' to true causes EVERY SINGLE IMPLEMENTATION COMBINATION to be used in
      * every runCombos call. This can make tests run for a loooooong time.
      */
     public static boolean hardcore = Boolean.parseBoolean(System.getProperty("hardcore", "false"));
+
+    /**
+     * Setting 'production' to true causes test combinations of selected infrastructure meant for production to be used in
+     * every runCombos call. This can make tests run for a quite a while time.
+     */
+    public static boolean production = Boolean.parseBoolean(System.getProperty("production", "false"));
+
+    /**
+     * Setting 'fast' to true causes test the fastest andminimal combinations of infrastructure.
+     */
+    public static boolean fast = Boolean.parseBoolean(System.getProperty("fast", "false"));
 
     /**
      * If this is set to <code>true</code> then the serializers will be rotated through but
@@ -82,13 +102,13 @@ public abstract class DempsyBaseTest {
      */
     protected static String nodeCtx = "classpath:/td/node.xml";
 
-    protected final String routerId;
-    protected final String containerId;
-    protected final String sessionType;
-    protected final String transportType;
-    protected final String serializerType;
-    protected final String threadingModelDescription;
-    protected final Function<String, ThreadingModel> threadingModelSource;
+    protected String routerId;
+    protected String containerId;
+    protected String sessionType;
+    protected String transportType;
+    protected String serializerType;
+    protected String threadingModelDescription;
+    protected Function<String, ThreadingModel> threadingModelSource;
 
     protected static final String ROUTER_ID_PREFIX = "net.dempsy.router.";
     protected static final String CONTAINER_ID_PREFIX = "net.dempsy.container.";
@@ -100,16 +120,16 @@ public abstract class DempsyBaseTest {
     protected static final String SERIALIZER_CTX_SUFFIX = ".xml";
     protected static final int NUM_MICROSHARDS = 16;
 
-    protected DempsyBaseTest(final Logger logger, final String routerId, final String containerId, final String sessionType,
+    @SuppressWarnings("unchecked")
+    protected void initParams(final String routerId, final String containerId, final String sessionType,
         final String transportType, final String serializerType, final String threadingModelDescription,
-        final Function<String, ThreadingModel> threadingModelSource) {
-        this.LOGGER = logger;
+        final Object threadingModelSource) {
         this.routerId = routerId;
         this.containerId = containerId;
         this.sessionType = sessionType;
         this.transportType = transportType;
         this.serializerType = serializerType;
-        this.threadingModelSource = threadingModelSource;
+        this.threadingModelSource = (Function<String, ThreadingModel>) threadingModelSource;
         this.threadingModelDescription = threadingModelDescription;
     }
 
@@ -189,6 +209,23 @@ public abstract class DempsyBaseTest {
             });
     }
 
+    public static Combos fast() {
+        return new Combos(
+            new String[] {"managed"},
+            new String[] {"altnonlockingbulk"},
+            new String[] {"local"},
+            new String[] {"passthrough"},
+            new String[] {"kryo"},
+            new Object[][] {
+                {"unbounded",(Function<String, ThreadingModel>)(testName) -> new DefaultThreadingModel(testName)
+                    .setAdditionalThreads(TM_ADDITIONAL_THREADS)
+                    .setCoresFactor(TM_CORES_FACTOR)
+                    .setBlocking(false)
+                    .setMaxNumberOfQueuedLimitedTasks(-1)
+                }
+            });
+    }
+
     public static Combos production() {
         return new Combos(
             new String[] {"managed","group"},
@@ -215,6 +252,8 @@ public abstract class DempsyBaseTest {
                 },
             });
     }
+
+    public static Combos DEFAULT_COMBO = fast();
 
     public static boolean requiresSerialization(final String transport) {
         return transportsThatRequireSerializer.contains(transport);
@@ -244,9 +283,8 @@ public abstract class DempsyBaseTest {
         return containersThatArentThreadSafe.contains(containerId);
     }
 
-    @Parameters(name = "{index}: routerId={0}, container={1}, cluster={2}, threading={5}, transport={3}/{4}")
-    public static Collection<Object[]> combos() {
-        final Combos combos = (hardcore) ? hardcore() : production();
+    public static Stream<Arguments> combos() {
+        final Combos combos = fast ? fast() : (hardcore ? hardcore() : ( production ? production() : DEFAULT_COMBO));
 
         // since serialization is orthogonal to the transport we wont test every transport
         // with every serializer. Instead we'll rotate the serializers if that's requested.
@@ -284,7 +322,7 @@ public abstract class DempsyBaseTest {
                 }
             }
         }
-        return ret;
+        return ret.stream().map(arr -> Arguments.of(arr));
     }
 
     public static class NodeManagerWithContext implements AutoCloseable {
