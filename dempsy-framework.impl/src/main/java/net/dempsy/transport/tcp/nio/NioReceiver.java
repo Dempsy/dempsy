@@ -479,7 +479,12 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                                     continue;
 
                                 if(key.isReadable()) {
-                                    ((Client<?>)key.attachment()).read(key);
+                                    try {
+                                        ((Client<?>)key.attachment()).read(key);
+                                    } catch(final IOException cioe) {
+                                        LOGGER.warn(thisNode + " connection reset from client, closing: " + cioe.getMessage());
+                                        ((Client<?>)key.attachment()).closeup((SocketChannel)key.channel(), key);
+                                    }
                                 } else // this shouldn't be possible
                                     LOGGER.info(thisNode + " reciever got an unexpexted selection key " + key);
                             }
