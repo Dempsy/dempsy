@@ -132,10 +132,13 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         if(binding == null)
             getAddress(infra); // sets binding via side affect.
 
+        final long clientLossTimeoutMs = Long.parseLong(
+            infra.getConfigValue(NioReceiver.class, CONFIG_KEY_CLIENT_LOSS_TIMEOUT_MS, DEFAULT_CLIENT_LOSS_TIMEOUT_MS));
+
         // before starting the acceptor, make sure we have Readers created.
         try {
             for(int i = 0; i < readers.length; i++)
-                readers[i] = new Reader<T>(isRunning, address, (Listener<T>)listener, serializer, maxMessageSize, thePlug);
+                readers[i] = new Reader<T>(isRunning, address, (Listener<T>)listener, serializer, maxMessageSize, thePlug, clientLossTimeoutMs);
         } catch(final IOException ioe) {
             LOGGER.error(address.toString() + " failed to start up readers", ioe);
             throw new MessageTransportException(address.toString() + " failed to start up readers", ioe);
@@ -438,6 +441,16 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         }
     }
 
+    /**
+     * How long (in milliseconds) a reader will wait after losing all clients before
+     * pulling the plug. This gives senders time to reconnect after a transient
+     * network disruption. If no clients reconnect within this window the node is
+     * considered orphaned and the JVM is shut down so that the orchestrator (e.g.
+     * Kubernetes) can restart it.
+     */
+    public static final String CONFIG_KEY_CLIENT_LOSS_TIMEOUT_MS = "client_loss_timeout_ms";
+    public static final String DEFAULT_CLIENT_LOSS_TIMEOUT_MS = "30000";
+
     public static class Reader<T> implements Runnable {
         private final AtomicReference<SocketChannel> landing = new AtomicReference<SocketChannel>(null);
         private final Selector selector;
@@ -450,8 +463,19 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
         private final AtomicReference<CloseCommand> clientToClose = new AtomicReference<CloseCommand>(null);
         private final ThePlug thePlug;
 
+        // --- idle / orphan detection ---
+        private boolean hadClients = false;
+        private long allClientsLostTime = 0; // 0 means "not in lost state"
+        private final long clientLossTimeoutMs;
+
         public Reader(final AtomicBoolean isRunning, final NioAddress thisNode, final Listener<T> typedListener, final Serializer serializer,
             final int maxMessageSize, final ThePlug thePlug) throws IOException {
+            this(isRunning, thisNode, typedListener, serializer, maxMessageSize, thePlug,
+                Long.parseLong(DEFAULT_CLIENT_LOSS_TIMEOUT_MS));
+        }
+
+        public Reader(final AtomicBoolean isRunning, final NioAddress thisNode, final Listener<T> typedListener, final Serializer serializer,
+            final int maxMessageSize, final ThePlug thePlug, final long clientLossTimeoutMs) throws IOException {
             selector = Selector.open();
             this.isRunning = isRunning;
             this.thisNode = thisNode;
@@ -459,6 +483,7 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             this.serializer = serializer;
             this.maxMessageSize = maxMessageSize;
             this.thePlug = thePlug;
+            this.clientLossTimeoutMs = clientLossTimeoutMs;
         }
 
         @Override
@@ -466,7 +491,9 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
             try {
                 while(isRunning.get()) {
                     try {
-                        final int numKeysSelected = selector.select();
+                        // Use a bounded select so the orphan-detection check below runs
+                        // even when there are no registered keys and no wakeup signal.
+                        final int numKeysSelected = selector.select(5000);
 
                         if(numKeysSelected > 0) {
                             final Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
@@ -519,6 +546,25 @@ public class NioReceiver<T> extends AbstractTcpReceiver<NioAddress, NioReceiver<
                                     clientToClose.set(null);
                             }
                         }
+                        // --- orphan detection: all clients lost after having had some ---
+                        final int numClients = selector.keys().size();
+                        if(numClients > 0) {
+                            hadClients = true;
+                            allClientsLostTime = 0; // reset; we have live clients
+                        } else if(hadClients) {
+                            // we previously had clients but now have none
+                            if(allClientsLostTime == 0) {
+                                allClientsLostTime = System.currentTimeMillis();
+                                LOGGER.warn(thisNode + " all client connections lost. Will pull the plug if no clients reconnect within "
+                                    + clientLossTimeoutMs + " ms.");
+                            } else if((System.currentTimeMillis() - allClientsLostTime) >= clientLossTimeoutMs) {
+                                LOGGER.error(thisNode + " no clients reconnected within " + clientLossTimeoutMs
+                                    + " ms after losing all connections. Pulling the plug to trigger container restart.");
+                                Optional.ofNullable(thePlug).ifPresent(p -> p.pull());
+                                return; // exit reader loop
+                            }
+                        }
+
                     } catch(final IOException ioe) {
                         LOGGER.error("Failed during reader loop.", ioe);
                     } catch(final RuntimeException rte) {
