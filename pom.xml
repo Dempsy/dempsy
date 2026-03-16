@@ -31,7 +31,7 @@
 
   <properties>
     <dempsy-commons-bom.version>3.0.0-SNAPSHOT</dempsy-commons-bom.version>
-    <spring.version>6.2.3</spring.version>
+    <spring.version>6.2.7</spring.version>
     <micrometer.version>1.14.4</micrometer.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <quartz.version>2.3.2</quartz.version>
